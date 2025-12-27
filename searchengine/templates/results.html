@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ query }} - Search</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: Arial, sans-serif;
+            font-size: 14px;
+            color: #202124;
+            background: #fff;
+        }
+        
+        a {
+            text-decoration: none;
+        }
+        
+        /* ==================== HEADER ==================== */
+        .header {
+            position: sticky;
+            top: 0;
+            background: #fff;
+            z-index: 100;
+            border-bottom: 1px solid #ebebeb;
+        }
+        
+        .header-top {
+            display: flex;
+            align-items: center;
+            padding: 16px 20px 10px 20px;
+        }
+        
+        .logo {
+            margin-right: 28px;
+            flex-shrink: 0;
+        }
+        
+        .logo a {
+            font-size: 22px;
+            font-weight: bold;
+            display: flex;
+        }
+        
+        .logo .letter-a { color: #4285f4; }
+        .logo .letter-f { color: #ea4335; }
+        .logo .letter-r { color: #fbbc05; }
+        .logo .letter-o { color: #4285f4; }
+        .logo .letter-t { color: #34a853; }
+        .logo .letter-o2 { color: #ea4335; }
+        
+        /* Search Box */
+        .search-wrapper {
+            flex: 1;
+            max-width: 690px;
+        }
+        
+        .search-box {
+            display: flex;
+            align-items: center;
+            border: 1px solid #dfe1e5;
+            border-radius: 24px;
+            padding: 0 8px 0 16px;
+            height: 44px;
+            background: #fff;
+            box-shadow: none;
+            transition: box-shadow 0.2s;
+        }
+        
+        .search-box:hover,
+        .search-box:focus-within {
+            box-shadow: 0 1px 6px rgba(32,33,36,0.28);
+            border-color: rgba(223,225,229,0);
+        }
+        
+        .search-input {
+            flex: 1;
+            border: none;
+            outline: none;
+            font-size: 16px;
+            color: #202124;
+            background: transparent;
+        }
+        
+        .search-actions {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        
+        .search-action-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 8px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #70757a;
+        }
+        
+        .search-action-btn:hover {
+            background: #f1f3f4;
+        }
+        
+        .search-action-btn.clear-btn {
+            color: #70757a;
+            font-size: 18px;
+        }
+        
+        .search-divider {
+            width: 1px;
+            height: 28px;
+            background: #dadce0;
+            margin: 0 4px;
+        }
+        
+        .search-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 8px;
+            border-radius: 50%;
+            color: #4285f4;
+        }
+        
+        .search-btn:hover {
+            background: #f1f3f4;
+        }
+        
+        /* Navigation Tabs */
+        .nav-tabs {
+            display: flex;
+            align-items: center;
+            padding-left: 150px;
+            border-bottom: none;
+        }
+        
+        .nav-tab {
+            color: #5f6368;
+            font-size: 13px;
+            padding: 14px 16px 11px 16px;
+            border-bottom: 3px solid transparent;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        
+        .nav-tab:hover {
+            color: #1a73e8;
+        }
+        
+        .nav-tab.active {
+            color: #1a73e8;
+            border-bottom-color: #1a73e8;
+        }
+        
+        .nav-tab svg {
+            width: 16px;
+            height: 16px;
+        }
+        
+        /* ==================== MAIN CONTENT ==================== */
+        .main-content {
+            display: flex;
+            max-width: 1400px;
+        }
+        
+        .results-area {
+            flex: 1;
+            padding: 0 0 20px 150px;
+            max-width: 700px;
+        }
+        
+        /* Results Stats */
+        .results-stats {
+            color: #70757a;
+            font-size: 14px;
+            padding: 12px 0 8px 0;
+        }
+        
+        /* ==================== SPELLING CORRECTION ==================== */
+        .spelling-correction {
+            padding: 10px 0 16px 0;
+        }
+        
+        .including-results {
+            font-size: 15px;
+            color: #202124;
+            margin-bottom: 2px;
+        }
+        
+        .including-results .label {
+            color: #70757a;
+        }
+        
+        .including-results .corrected-link {
+            color: #1a0dab;
+            font-weight: 600;
+            font-style: italic;
+        }
+        
+        .including-results .corrected-link:hover {
+            text-decoration: underline;
+        }
+        
+        .search-instead {
+            font-size: 14px;
+            color: #70757a;
+        }
+        
+        .search-instead a {
+            color: #1a0dab;
+        }
+        
+        .search-instead a:hover {
+            text-decoration: underline;
+        }
+        
+        /* ==================== SEARCH RESULTS ==================== */
+        .result-item {
+            margin-bottom: 28px;
+            max-width: 600px;
+        }
+        
+        .result-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 4px;
+        }
+        
+        .result-favicon {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: #f1f3f4;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 12px;
+            font-size: 12px;
+            color: #5f6368;
+            font-weight: 500;
+            overflow: hidden;
+        }
+        
+        .result-favicon img {
+            width: 18px;
+            height: 18px;
+        }
+        
+        .result-site-info {
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+        }
+        
+        .result-site-name {
+            font-size: 14px;
+            color: #202124;
+            line-height: 20px;
+        }
+        
+        .result-url {
+            font-size: 12px;
+            color: #4d5156;
+            line-height: 18px;
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        
+        .result-url-part {
+            display: flex;
+            align-items: center;
+        }
+        
+        .result-url-part::after {
+            content: '›';
+            margin: 0 4px;
+            color: #70757a;
+        }
+        
+        .result-url-part:last-child::after {
+            display: none;
+        }
+        
+        .result-title {
+            font-size: 20px;
+            line-height: 26px;
+            margin-bottom: 4px;
+        }
+        
+        .result-title a {
+            color: #1a0dab;
+        }
+        
+        .result-title a:hover {
+            text-decoration: underline;
+        }
+        
+        .result-title a:visited {
+            color: #681da8;
+        }
+        
+        .result-snippet {
+            font-size: 14px;
+            line-height: 22px;
+            color: #4d5156;
+            word-wrap: break-word;
+        }
+        
+        .result-snippet em,
+        .result-snippet b,
+        .result-snippet strong {
+            color: #5f6368;
+            font-weight: 600;
+            font-style: normal;
+        }
+        
+        .result-date {
+            color: #70757a;
+        }
+        
+        /* ==================== NO RESULTS ==================== */
+        .no-results {
+            padding: 20px 0;
+        }
+        
+        .no-results h2 {
+            font-size: 18px;
+            font-weight: 400;
+            color: #202124;
+            margin-bottom: 20px;
+        }
+        
+        .no-results p {
+            color: #4d5156;
+            margin-bottom: 8px;
+        }
+        
+        .no-results ul {
+            margin-left: 20px;
+            color: #4d5156;
+        }
+        
+        .no-results li {
+            margin-bottom: 6px;
+            line-height: 1.5;
+        }
+        
+        /* ==================== SIDEBAR (optional) ==================== */
+        .sidebar {
+            width: 366px;
+            padding: 20px;
+            flex-shrink: 0;
+        }
+        
+        .knowledge-panel {
+            border: 1px solid #dadce0;
+            border-radius: 8px;
+            padding: 16px;
+        }
+        
+        .knowledge-panel-title {
+            font-size: 18px;
+            color: #202124;
+            margin-bottom: 12px;
+        }
+        
+        /* ==================== FOOTER ==================== */
+        .footer {
+            background: #f2f2f2;
+            padding: 15px 20px;
+            border-top: 1px solid #dadce0;
+            margin-top: 40px;
+        }
+        
+        .footer-location {
+            color: #70757a;
+            font-size: 14px;
+            padding: 15px 150px;
+            border-bottom: 1px solid #dadce0;
+        }
+        
+        .footer-links {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 150px;
+        }
+        
+        .footer-links a {
+            color: #70757a;
+            font-size: 14px;
+        }
+        
+        .footer-links a:hover {
+            text-decoration: underline;
+        }
+        
+        /* ==================== RESPONSIVE ==================== */
+        @media (max-width: 1024px) {
+            .sidebar {
+                display: none;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            .header-top {
+                padding: 12px 16px;
+            }
+            
+            .logo {
+                margin-right: 16px;
+            }
+            
+            .nav-tabs {
+                padding-left: 16px;
+                overflow-x: auto;
+            }
+            
+            .results-area {
+                padding: 0 16px 20px 16px;
+            }
+            
+            .result-title {
+                font-size: 18px;
+            }
+            
+            .footer-location,
+            .footer-links {
+                padding: 15px 16px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="header-top">
+            <div class="logo">
+                <a href="/">
+                    <span class="letter-a">A</span><span class="letter-f">f</span><span class="letter-r">r</span><span class="letter-o">o</span><span class="letter-t">T</span><span class="letter-o2">o</span><span class="letter-o">d</span><span class="letter-f">o</span>
+                </a>
+            </div>
+            
+            <div class="search-wrapper">
+                <form action="/search" method="GET" id="search-form">
+                    <div class="search-box">
+                        <input type="text" name="query" class="search-input" value="{{ query }}" autocomplete="off">
+                        <input type="hidden" name="session_id" value="{{ session_id }}">
+                        
+                        <div class="search-actions">
+                            <button type="button" class="search-action-btn clear-btn" onclick="clearSearch()" title="Clear">
+                                ✕
+                            </button>
+                            
+                            <span class="search-divider"></span>
+                            
+                            <button type="submit" class="search-btn" title="Search">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        <nav class="nav-tabs">
+            <a href="/search?q={{ query|urlencode }}&session_id={{ session_id }}" class="nav-tab active">
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+                All
+            </a>
+            <a href="#" class="nav-tab">
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14zm-5-7l-3 3.72L9 13l-3 4h12l-4-5z"/></svg>
+                Images
+            </a>
+            <a href="#" class="nav-tab">
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M18 4l2 4h-3l-2-4h-2l2 4h-3l-2-4H8l2 4H7L5 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V4h-4z"/></svg>
+                Videos
+            </a>
+            <a href="#" class="nav-tab">
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z"/></svg>
+                News
+            </a>
+            <a href="#" class="nav-tab">
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>
+                Maps
+            </a>
+            <a href="#" class="nav-tab">More</a>
+            <a href="#" class="nav-tab">Tools</a>
+        </nav>
+    </header>
+    
+    <div class="main-content">
+        <div class="results-area">
+            <!-- Results Stats -->
+            <div class="results-stats">
+                <!-- About {{ total_results|default:"0" }} results ({{ search_time|default:"0.00" }} seconds) -->
+                 About {{ total_results|default:"0" }} results 
+            </div>
+            
+            <!-- Spelling Correction -->
+            {% if was_corrected %}
+            <div class="spelling-correction">
+                <div class="including-results">
+                    <span class="label">Including results for </span>
+                    <a href="/search?query={{ corrected_query|urlencode }}&session_id={{ session_id }}" class="corrected-link">{{ corrected_query }}</a>
+                </div>
+                <div class="search-instead">
+                    Search only for <a href="/search?query={{ query|urlencode }}&session_id={{ session_id }}&no_correct=1">{{ query }}</a>
+                </div>
+            </div>
+            {% endif %}
+            
+            <!-- Search Results -->
+            {% if has_results %}
+                {% for item in results %}
+                <article class="result-item">
+                    <div class="result-header">
+                        <div class="result-favicon">
+                            {% if item.favicon %}
+                                <img src="{{ item.favicon }}" alt="">
+                            {% else %}
+                                {{ item.site_name|default:item.source|default:"W"|slice:":1"|upper }}
+                            {% endif %}
+                        </div>
+                        <div class="result-site-info">
+                            <span class="result-site-name">{{ item.site_name|default:item.source|default:"Website" }}</span>
+                            <div class="result-url">
+                                {% if item.url_parts %}
+                                    {% for part in item.url_parts %}
+                                        <span class="result-url-part">{{ part }}</span>
+                                    {% endfor %}
+                                {% else %}
+                                    <span class="result-url-part">{{ item.url|default:"#" }}</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <h3 class="result-title">
+                        <a href="{{ item.url|default:'#' }}">{{ item.title|default:"Untitled" }}</a>
+                    </h3>
+                    
+                    <p class="result-snippet">
+                        {% if item.date %}<span class="result-date">{{ item.date }} — </span>{% endif %}
+                        {{ item.summary_highlighted|default:item.summary|default:"No description available."|safe }}
+                    </p>
+                </article>
+                {% endfor %}
+            {% else %}
+                <!-- No Results -->
+                <div class="no-results">
+                    <h2>Your search - <b>{{ query }}</b> - did not match any documents.</h2>
+                    <p>Suggestions:</p>
+                    <ul>
+                        <li>Make sure all words are spelled correctly.</li>
+                        <li>Try different keywords.</li>
+                        <li>Try more general keywords.</li>
+                        <li>Try fewer keywords.</li>
+                    </ul>
+                </div>
+            {% endif %}
+        </div>
+        
+        <!-- Optional Sidebar for Knowledge Panel -->
+        {% if knowledge_panel %}
+        <aside class="sidebar">
+            <div class="knowledge-panel">
+                <h2 class="knowledge-panel-title">{{ knowledge_panel.title }}</h2>
+                <!-- Add knowledge panel content here -->
+            </div>
+        </aside>
+        {% endif %}
+    </div>
+    
+    <footer class="footer">
+        <div class="footer-location">United States</div>
+        <div class="footer-links">
+            <div>
+                <a href="#">Help</a>
+                <a href="#" style="margin-left: 20px;">Send feedback</a>
+                <a href="#" style="margin-left: 20px;">Privacy</a>
+                <a href="#" style="margin-left: 20px;">Terms</a>
+            </div>
+        </div>
+    </footer>
+    
+    <script>
+        function clearSearch() {
+            const input = document.querySelector('.search-input');
+            input.value = '';
+            input.focus();
+        }
+        
+        // Submit form on Enter
+        document.querySelector('.search-input').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                document.getElementById('search-form').submit();
+            }
+        });
+    </script>
+</body>
+</html>
