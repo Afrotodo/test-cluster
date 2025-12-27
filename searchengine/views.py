@@ -17,14 +17,37 @@ from django.db import connection
 from django.http import JsonResponse
 from django.views import View
 from .searchapi import get_autocomplete
+from decouple import config
 
 def home(request):
-    return render(request, 'home.html')
+    return render(request, 'home2.html')
 
 
 
-#########################   this is the code for the redis api. 
+# #########################   this is the code for the redis api. 
 
+
+# def search_suggestions(request):
+#     query = request.GET.get('q', '').strip()
+    
+#     if not query or len(query) < 2:
+#         return JsonResponse({'suggestions': []})
+    
+#     # Get autocomplete results from Redis
+#     results = get_autocomplete(prefix=query, limit=8)
+    
+#     # Transform to match frontend expected format
+#     suggestions = []
+#     for item in results:
+#         suggestions.append({
+#             'text': item['term'],
+#             'display_text': item['display'],
+#             'source_field': item.get('entity_type', ''),
+#             # 'data_type': item.get('category', ''),
+#             'category': item.get('category', ''),  # Add this line
+#         })
+    
+#     return JsonResponse({'suggestions': suggestions})
 
 def search_suggestions(request):
     query = request.GET.get('q', '').strip()
@@ -32,18 +55,15 @@ def search_suggestions(request):
     if not query or len(query) < 2:
         return JsonResponse({'suggestions': []})
     
-    # Get autocomplete results from Redis
     results = get_autocomplete(prefix=query, limit=8)
     
-    # Transform to match frontend expected format
+    # Only send display and description
     suggestions = []
     for item in results:
         suggestions.append({
             'text': item['term'],
-            'display_text': item['display'],
-            'source_field': item.get('entity_type', ''),
-            # 'data_type': item.get('category', ''),
-            'category': item.get('category', ''),  # Add this line
+            'display': item['display'],
+            'description': item.get('description', ''),
         })
     
     return JsonResponse({'suggestions': suggestions})

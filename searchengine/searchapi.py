@@ -16,16 +16,16 @@ from pyxdameraulevenshtein import damerau_levenshtein_distance
 import redis
 from django.conf import settings
 from typing import Optional, Dict, List, Any
-
-# Your Redis configuration
-REDIS_LOCATION='redis-10542.fcrce172.us-east-1-1.ec2.redns.redis-cloud.com'
-REDIS_DATABASE='cache-M5A1ND6N'
-REDIS_PORT= 10542
-REDIS_PASSWORD='Uipz870TD2x4x8P3oggrqWSDH9UuWdhi'
-REDIS_USERNAME='default'
-REDIS_DB = 0
+from decouple import config
 
 
+
+REDIS_LOCATION=config('REDIS_LOCATION')
+REDIS_DATABASE=config('REDIS_DATABASE')
+REDIS_PORT=config('REDIS_PORT')
+REDIS_PASSWORD=config('REDIS_PASSWORD')
+REDIS_USERNAME=config('REDIS_USERNAME')
+REDIS_DB=config('REDIS_DB')
 
 
 # class RedisLookupTable:
@@ -1155,20 +1155,20 @@ REDIS_DB = 0
 #     """Shorthand for spell checking a single word"""
 #     return validate_word(word)
 
-"""
-redis_lookup.py
-Redis-based lookup table for search preprocessing with tiered suggestions.
-"""
+# """
+# redis_lookup.py
+# Redis-based lookup table for search preprocessing with tiered suggestions.
+# """
 
-import redis
-import json
-import string
-from typing import Dict, List, Optional, Any, Set
+# import redis
+# import json
+# import string
+# from typing import Dict, List, Optional, Any, Set
 
-from pyxdameraulevenshtein import damerau_levenshtein_distance
+# from pyxdameraulevenshtein import damerau_levenshtein_distance
 
-# Import your Redis config (adjust as needed)
-from django.conf import settings
+# # Import your Redis config (adjust as needed)
+# from django.conf import settings
 
 
 # =============================================================================
@@ -4083,21 +4083,988 @@ from django.conf import settings
 
 
 
+
+
+
+
+
 # =============================================================================
-# REDIS CLIENT
+# REDIS CLIENT working fine code
+# =============================================================================
+
+# import redis
+# import json
+# import string
+# from typing import Optional, Dict, Any, List, Set
+
+
+# # Placeholder config - replace with your actual config
+
+
+
+# class RedisLookupTable:
+#     """Redis-based lookup table for search preprocessing"""
+    
+#     _client = None
+    
+#     @classmethod
+#     def get_client(cls) -> Optional[redis.Redis]:
+#         """Get or create Redis client connection"""
+#         if cls._client is not None:
+#             try:
+#                 cls._client.ping()
+#                 return cls._client
+#             except (redis.ConnectionError, redis.TimeoutError):
+#                 cls._client = None
+        
+#         try:
+#             if not REDIS_LOCATION:
+#                 print("ERROR: REDIS_LOCATION is empty or not set")
+#                 return None
+            
+#             redis_config = {
+#                 'host': REDIS_LOCATION,
+#                 'port': REDIS_PORT,
+#                 'db': REDIS_DB,
+#                 'decode_responses': True,
+#                 'socket_connect_timeout': 5,
+#                 'socket_timeout': 5,
+#             }
+            
+#             if REDIS_PASSWORD:
+#                 redis_config['password'] = REDIS_PASSWORD
+#             if REDIS_USERNAME:
+#                 redis_config['username'] = REDIS_USERNAME
+            
+#             cls._client = redis.Redis(**redis_config)
+#             cls._client.ping()
+#             return cls._client
+            
+#         except Exception as e:
+#             print(f"Redis connection error: {e}")
+#             return None
+
+
+# # =============================================================================
+# # SORTED SET CONFIGURATION
+# # =============================================================================
+
+# # All sorted sets to search (in priority order)
+# SORTED_SETS = [
+#     'autocomplete:continent',
+#     'autocomplete:country',
+#     'autocomplete:us_state',
+#     'autocomplete:state',
+#     'autocomplete:us_city',
+#     'autocomplete:city',
+#     'autocomplete:word'
+# ]
+
+# # Category suffixes used in keys - FIXED to match SORTED_SETS
+# CATEGORY_SUFFIXES = [
+#     'continent', 'country', 'us_state', 'state', 
+#     'us_city', 'city', 'word'
+# ]
+
+
+# # =============================================================================
+# # HELPER FUNCTIONS FOR KEY STRUCTURE
+# # =============================================================================
+
+# def extract_base_term(member: str) -> str:
+#     """
+#     Extract the base term from a member key.
+    
+#     Examples:
+#         'africa:continent' -> 'africa'
+#         'paris:city:fr' -> 'paris'
+#         'new york:us_city:ny' -> 'new york'
+#         'happy:word' -> 'happy'
+#     """
+#     if ':' not in member:
+#         return member
+    
+#     parts = member.split(':')
+    
+#     # Find where the category suffix starts
+#     for i, part in enumerate(parts):
+#         if part in CATEGORY_SUFFIXES:
+#             # Return everything before this part
+#             return ':'.join(parts[:i]) if i > 0 else parts[0]
+    
+#     # If no category suffix found, return first part
+#     return parts[0]
+
+
+# def get_hash_key(member: str) -> str:
+#     """
+#     Get the hash key for a sorted set member.
+    
+#     Example: 'africa:continent' -> 'term:africa:continent'
+#     """
+#     return f'term:{member}'
+
+
+# # =============================================================================
+# # SMART CANDIDATE GENERATION
+# # =============================================================================
+
+# def generate_candidates_smart(word: str, max_candidates: int = 100) -> Set[str]:
+#     """
+#     Generate spelling candidates based on common typo patterns.
+#     """
+#     candidates = set()
+#     word_lower = word.lower()
+#     length = len(word_lower)
+    
+#     if length < 2:
+#         return candidates
+    
+#     alphabet = string.ascii_lowercase
+#     vowels = 'aeiou'
+
+#     keyboard_proximity = {
+#         'q': 'wa', 'w': 'qeas', 'e': 'wrds', 'r': 'etdf', 't': 'ryfg',
+#         'y': 'tugh', 'u': 'yihj', 'i': 'uojk', 'o': 'ipkl', 'p': 'ol',
+#         'a': 'qwsz', 's': 'awedxz', 'd': 'serfcx', 'f': 'drtgvc', 'g': 'ftyhbv',
+#         'h': 'gyujnb', 'j': 'huikmn', 'k': 'jiolm', 'l': 'kop',
+#         'z': 'asx', 'x': 'zsdc', 'c': 'xdfv', 'v': 'cfgb', 'b': 'vghn',
+#         'n': 'bhjm', 'm': 'njk'
+#     }
+    
+#     letter_confusions = {
+#         'a': 'eo', 'e': 'ai', 'i': 'ey', 'o': 'au', 'u': 'o',
+#         'c': 'ks', 's': 'cz', 'k': 'c', 'z': 's',
+#         'f': 'ph', 'j': 'g', 'g': 'j',
+#     }
+
+#     # 1. Keyboard proximity substitutions
+#     for i in range(length):
+#         char = word_lower[i]
+#         if char in keyboard_proximity:
+#             for nearby_char in keyboard_proximity[char]:
+#                 candidate = word_lower[:i] + nearby_char + word_lower[i+1:]
+#                 candidates.add(candidate)
+
+#     # 2. Single character transposition
+#     for i in range(length - 1):
+#         candidate = word_lower[:i] + word_lower[i+1] + word_lower[i] + word_lower[i+2:]
+#         candidates.add(candidate)
+
+#     # 3. Double transposition
+#     for i in range(length - 1):
+#         first_swap = word_lower[:i] + word_lower[i+1] + word_lower[i] + word_lower[i+2:]
+#         for j in range(len(first_swap) - 1):
+#             if j != i and j != i - 1:
+#                 candidate = first_swap[:j] + first_swap[j+1] + first_swap[j] + first_swap[j+2:]
+#                 candidates.add(candidate)
+#                 if len(candidates) >= max_candidates:
+#                     break
+#         if len(candidates) >= max_candidates:
+#             break
+
+#     # 4. Single character deletion
+#     for i in range(length):
+#         candidate = word_lower[:i] + word_lower[i+1:]
+#         if candidate:
+#             candidates.add(candidate)
+
+#     # 5. Double letter removal
+#     for i in range(length - 1):
+#         if word_lower[i] == word_lower[i+1]:
+#             candidate = word_lower[:i] + word_lower[i+1:]
+#             candidates.add(candidate)
+
+#     # 6. Vowel substitution
+#     for i in range(length):
+#         if word_lower[i] in vowels:
+#             for v in vowels:
+#                 if v != word_lower[i]:
+#                     candidate = word_lower[:i] + v + word_lower[i+1:]
+#                     candidates.add(candidate)
+
+#     # 7. Common letter confusion substitutions
+#     for i in range(length):
+#         char = word_lower[i]
+#         if char in letter_confusions:
+#             for confused_char in letter_confusions[char]:
+#                 candidate = word_lower[:i] + confused_char + word_lower[i+1:]
+#                 candidates.add(candidate)
+
+#     # 8. Single character insertion (limited)
+#     if len(candidates) < max_candidates // 2:
+#         for i in range(length + 1):
+#             for char in alphabet:
+#                 candidate = word_lower[:i] + char + word_lower[i:]
+#                 candidates.add(candidate)
+#                 if len(candidates) >= max_candidates:
+#                     break
+#             if len(candidates) >= max_candidates:
+#                 break
+
+#     # 9. Missing double letter
+#     if len(candidates) < max_candidates:
+#         for i in range(length):
+#             candidate = word_lower[:i] + word_lower[i] + word_lower[i:]
+#             candidates.add(candidate)
+
+#     return set(list(candidates)[:max_candidates])
+
+
+# # =============================================================================
+# # SCORING FUNCTION
+# # =============================================================================
+
+# def calculate_score(distance: int, rank: int, max_rank: int = 10000000) -> float:
+#     """
+#     Calculate a combined score based on edit distance and word rank.
+#     Lower score = better match.
+#     """
+#     rank_bonus = min(rank, max_rank) / max_rank
+#     return distance - rank_bonus
+
+
+# # =============================================================================
+# # DAMERAU-LEVENSHTEIN DISTANCE
+# # =============================================================================
+
+# def damerau_levenshtein_distance(s1: str, s2: str) -> int:
+#     """
+#     Calculate the Damerau-Levenshtein distance between two strings.
+#     """
+#     len1, len2 = len(s1), len(s2)
+    
+#     # Create distance matrix
+#     d = [[0] * (len2 + 1) for _ in range(len1 + 1)]
+    
+#     # Initialize base cases
+#     for i in range(len1 + 1):
+#         d[i][0] = i
+#     for j in range(len2 + 1):
+#         d[0][j] = j
+    
+#     # Fill in the rest of the matrix
+#     for i in range(1, len1 + 1):
+#         for j in range(1, len2 + 1):
+#             cost = 0 if s1[i-1] == s2[j-1] else 1
+            
+#             d[i][j] = min(
+#                 d[i-1][j] + 1,      # deletion
+#                 d[i][j-1] + 1,      # insertion
+#                 d[i-1][j-1] + cost  # substitution
+#             )
+            
+#             # Transposition
+#             if i > 1 and j > 1 and s1[i-1] == s2[j-2] and s1[i-2] == s2[j-1]:
+#                 d[i][j] = min(d[i][j], d[i-2][j-2] + cost)
+    
+#     return d[len1][len2]
+
+
+# # =============================================================================
+# # CORE FUNCTIONS
+# # =============================================================================
+
+# def get_term_metadata(member: str) -> Optional[Dict[str, Any]]:
+#     """
+#     Get metadata for a term from Redis hash - O(1)
+    
+#     Args:
+#         member: The full member key (e.g., 'africa:continent')
+#     """
+#     client = RedisLookupTable.get_client()
+#     if not client:
+#         return None
+    
+#     try:
+#         hash_key = get_hash_key(member)
+#         metadata = client.hgetall(hash_key)
+        
+#         if metadata:
+#             base_term = extract_base_term(member)
+#             return {
+#                 'member': member,
+#                 'term': base_term,
+#                 'exists': True,
+#                 'display': metadata.get('display', base_term),
+#                 'pos': metadata.get('pos', 'unknown'),
+#                 'category': metadata.get('category', ''),
+#                 'description': metadata.get('description', ''),
+#                 'entity_type': metadata.get('entity_type', ''),
+#                 'rank': int(metadata.get('rank', 0)),
+#             }
+#         return None
+        
+#     except Exception as e:
+#         print(f"Error getting term metadata: {e}")
+#         return None
+
+
+# def get_exact_term_matches(term: str) -> List[str]:
+#     """
+#     Find all members in sorted sets that match the exact term.
+#     Uses ZRANGEBYLEX for exact prefix match.
+#     """
+#     client = RedisLookupTable.get_client()
+#     if not client:
+#         return []
+    
+#     matches = []
+#     term_lower = term.lower()
+    
+#     for ss in SORTED_SETS:
+#         try:
+#             # Exact match: look for term or term:* pattern
+#             # First check exact term
+#             score = client.zscore(ss, term_lower)
+#             if score is not None:
+#                 matches.append(term_lower)
+            
+#             # Then check term:suffix patterns (if using compound keys)
+#             members = client.zrangebylex(ss, f'[{term_lower}:', f'[{term_lower}:\xff')
+#             matches.extend(members)
+            
+#         except Exception as e:
+#             continue
+    
+#     # Remove duplicates while preserving order
+#     seen = set()
+#     unique_matches = []
+#     for m in matches:
+#         if m not in seen:
+#             seen.add(m)
+#             unique_matches.append(m)
+    
+#     return unique_matches
+
+
+# def get_prefix_matches(prefix: str, limit: int = 50) -> List[str]:
+#     """
+#     Get members from all sorted sets that start with the given prefix.
+#     Uses ZRANGEBYLEX (fast) - works because all scores = 0
+#     """
+#     client = RedisLookupTable.get_client()
+#     if not client or not prefix:
+#         return []
+    
+#     try:
+#         matches = []
+#         per_set_limit = max(limit // len(SORTED_SETS), 15)
+        
+#         for ss in SORTED_SETS:
+#             try:
+#                 # ZRANGEBYLEX works fast when all scores = 0
+#                 members = client.zrangebylex(
+#                     ss,
+#                     f'[{prefix.lower()}',
+#                     f'[{prefix.lower()}\xff',
+#                     start=0,
+#                     num=per_set_limit
+#                 )
+#                 matches.extend(members)
+#             except Exception as e:
+#                 continue
+        
+#         return matches[:limit * 2]  # Return more, we'll sort and trim later
+        
+#     except Exception as e:
+#         print(f"Prefix match error: {e}")
+#         return []
+
+
+# def get_prefix_matches_with_rank(prefix: str, limit: int = 10) -> List[Dict[str, Any]]:
+#     """
+#     Get prefix matches and fetch rank from hash, then sort by rank.
+#     This is the main function for autocomplete.
+    
+#     Flow:
+#     1. ZRANGEBYLEX prefix search (fast, ~2ms)
+#     2. Pipeline fetch metadata from hash (~3ms)
+#     3. Sort by rank (in memory, <1ms)
+    
+#     Total: ~5-10ms
+#     """
+#     client = RedisLookupTable.get_client()
+#     if not client or not prefix:
+#         return []
+    
+#     try:
+#         # Step 1: Get prefix matches from sorted sets
+#         matches = get_prefix_matches(prefix, limit=limit * 5)
+        
+#         if not matches:
+#             return []
+        
+#         # Step 2: Batch fetch metadata from hash
+#         pipeline = client.pipeline()
+#         for member in matches:
+#             pipeline.hgetall(get_hash_key(member))
+        
+#         metadata_list = pipeline.execute()
+        
+#         # Step 3: Build results with rank
+#         results = []
+#         for member, metadata in zip(matches, metadata_list):
+#             if metadata:
+#                 try:
+#                     rank = int(float(metadata.get('rank', 0)))
+#                 except (ValueError, TypeError):
+#                     rank = 0
+                
+#                 base_term = extract_base_term(member)
+#                 results.append({
+#                     'member': member,
+#                     'term': base_term,
+#                     'display': metadata.get('display', base_term),
+#                     'pos': metadata.get('pos', ''),
+#                     'category': metadata.get('category', ''),
+#                     'entity_type': metadata.get('entity_type', ''),
+#                     'description': metadata.get('description', ''),
+#                     'rank': rank
+#                 })
+        
+#         # Step 4: Sort by rank (highest first)
+#         results.sort(key=lambda x: x['rank'], reverse=True)
+        
+#         return results[:limit]
+        
+#     except Exception as e:
+#         print(f"Prefix match with rank error: {e}")
+#         return []
+
+
+# def get_top_words_by_rank(limit: int = 200) -> List[Dict[str, Any]]:
+#     """
+#     Get top words by rank from hash data.
+#     Since sorted set scores are 0, we fetch from hash and sort.
+#     """
+#     client = RedisLookupTable.get_client()
+#     if not client:
+#         return []
+    
+#     try:
+#         results = []
+#         per_set_limit = max(limit // len(SORTED_SETS), 30)
+        
+#         for ss in SORTED_SETS:
+#             try:
+#                 # Get some members
+#                 members = client.zrange(ss, 0, per_set_limit - 1)
+                
+#                 # Fetch their ranks from hash
+#                 if members:
+#                     pipeline = client.pipeline()
+#                     for member in members:
+#                         pipeline.hget(get_hash_key(member), 'rank')
+                    
+#                     ranks = pipeline.execute()
+                    
+#                     for member, rank in zip(members, ranks):
+#                         try:
+#                             rank_val = int(float(rank)) if rank else 0
+#                         except:
+#                             rank_val = 0
+                        
+#                         results.append({
+#                             'member': member,
+#                             'term': extract_base_term(member),
+#                             'rank': rank_val
+#                         })
+#             except:
+#                 continue
+        
+#         # Sort by rank descending
+#         results.sort(key=lambda x: x['rank'], reverse=True)
+#         return results[:limit]
+        
+#     except Exception as e:
+#         print(f"Error getting top words: {e}")
+#         return []
+
+
+# def batch_check_candidates(candidates: Set[str]) -> List[Dict[str, Any]]:
+#     """
+#     Batch check if candidates exist in Redis - O(k)
+    
+#     Updated to search across all sorted sets for each candidate.
+#     """
+#     client = RedisLookupTable.get_client()
+#     if not client or not candidates:
+#         return []
+    
+#     try:
+#         found = []
+        
+#         for candidate in candidates:
+#             # Find all matches for this candidate across sorted sets
+#             matches = get_exact_term_matches(candidate)
+            
+#             if matches:
+#                 # Get metadata for matches
+#                 pipeline = client.pipeline()
+#                 for member in matches:
+#                     pipeline.hgetall(get_hash_key(member))
+                
+#                 metadata_list = pipeline.execute()
+                
+#                 for member, metadata in zip(matches, metadata_list):
+#                     if metadata:
+#                         base_term = extract_base_term(member)
+#                         found.append({
+#                             'member': member,
+#                             'term': base_term,
+#                             'display': metadata.get('display', base_term),
+#                             'pos': metadata.get('pos', 'unknown'),
+#                             'category': metadata.get('category', ''),
+#                             'entity_type': metadata.get('entity_type', ''),
+#                             'rank': int(metadata.get('rank', 0)),
+#                         })
+        
+#         return found
+        
+#     except Exception as e:
+#         print(f"Batch check error: {e}")
+#         return []
+
+
+# # =============================================================================
+# # TIERED SUGGESTION SYSTEM
+# # =============================================================================
+
+# def get_suggestions(
+#     input_text: str,
+#     limit: int = 10,
+#     max_distance: int = 2,
+#     fallback_pool_size: int = 200
+# ) -> Dict[str, Any]:
+#     """
+#     Unified suggestion function - UPDATED for score=0 sorted sets.
+#     Rank comes from hash, not sorted set score.
+#     """
+#     client = RedisLookupTable.get_client()
+    
+#     response = {
+#         'success': True,
+#         'input': input_text,
+#         'suggestions': [],
+#         'exact_match': False,
+#         'tier_used': None,
+#         'error': None
+#     }
+    
+#     if not client:
+#         response['success'] = False
+#         response['error'] = 'Redis connection failed'
+#         return response
+    
+#     if not input_text or not input_text.strip():
+#         response['success'] = False
+#         response['error'] = 'Empty input'
+#         return response
+    
+#     input_lower = input_text.lower().strip()
+    
+#     try:
+#         # === TIER 1: EXACT MATCH ===
+#         exact_matches = get_exact_term_matches(input_lower)
+        
+#         if exact_matches:
+#             response['exact_match'] = True
+#             response['tier_used'] = 'exact'
+            
+#             pipeline = client.pipeline()
+#             for member in exact_matches:
+#                 pipeline.hgetall(get_hash_key(member))
+            
+#             metadata_list = pipeline.execute()
+            
+#             results = []
+#             for member, metadata in zip(exact_matches, metadata_list):
+#                 if metadata:
+#                     try:
+#                         rank = int(float(metadata.get('rank', 0)))
+#                     except:
+#                         rank = 0
+                    
+#                     base_term = extract_base_term(member)
+#                     results.append({
+#                         'member': member,
+#                         'term': base_term,
+#                         'display': metadata.get('display', base_term),
+#                         'pos': metadata.get('pos', ''),
+#                         'category': metadata.get('category', ''),
+#                         'entity_type': metadata.get('entity_type', ''),
+#                         'rank': rank,
+#                         'distance': 0,
+#                         'score': -rank  # Lower score = better (negative rank)
+#                     })
+            
+#             if results:
+#                 results.sort(key=lambda x: x['rank'], reverse=True)
+#                 response['suggestions'] = results[:limit]
+#                 return response
+        
+#         # === TIER 2: PREFIX MATCH (FAST with score=0) ===
+#         prefix_results = get_prefix_matches_with_rank(input_lower, limit=limit * 3)
+        
+#         if prefix_results:
+#             response['tier_used'] = 'prefix'
+            
+#             results = []
+#             for item in prefix_results:
+#                 distance = damerau_levenshtein_distance(input_lower, item['term'])
+#                 score = calculate_score(distance, item['rank'])
+                
+#                 results.append({
+#                     **item,
+#                     'distance': distance,
+#                     'score': score
+#                 })
+            
+#             # Sort by score (lower is better)
+#             results.sort(key=lambda x: x['score'])
+#             response['suggestions'] = results[:limit]
+#             return response
+        
+#         # === TIER 3: SMART CANDIDATES ===
+#         candidates = generate_candidates_smart(input_lower, max_candidates=100)
+        
+#         if candidates:
+#             response['tier_used'] = 'smart_candidates'
+            
+#             results = []
+            
+#             for candidate in candidates:
+#                 # Find all sorted set matches for this candidate
+#                 matches = get_exact_term_matches(candidate)
+                
+#                 if matches:
+#                     # Fetch metadata for all matches
+#                     pipeline = client.pipeline()
+#                     for member in matches:
+#                         pipeline.hgetall(get_hash_key(member))
+                    
+#                     metadata_list = pipeline.execute()
+                    
+#                     for member, metadata in zip(matches, metadata_list):
+#                         if metadata:
+#                             distance = damerau_levenshtein_distance(input_lower, candidate)
+#                             if distance <= max_distance:
+#                                 try:
+#                                     rank = int(float(metadata.get('rank', 0)))
+#                                 except:
+#                                     rank = 0
+                                
+#                                 score = calculate_score(distance, rank)
+#                                 base_term = extract_base_term(member)
+                                
+#                                 results.append({
+#                                     'member': member,
+#                                     'term': base_term,
+#                                     'display': metadata.get('display', base_term),
+#                                     'pos': metadata.get('pos', ''),
+#                                     'category': metadata.get('category', ''),
+#                                     'entity_type': metadata.get('entity_type', ''),
+#                                     'rank': rank,
+#                                     'distance': distance,
+#                                     'score': score
+#                                 })
+            
+#             if results:
+#                 # Remove duplicates based on member
+#                 seen = set()
+#                 unique_results = []
+#                 for r in results:
+#                     if r['member'] not in seen:
+#                         seen.add(r['member'])
+#                         unique_results.append(r)
+                
+#                 unique_results.sort(key=lambda x: x['score'])
+#                 response['suggestions'] = unique_results[:limit]
+#                 return response
+        
+#         # === TIER 4: PREFIX FUZZY ===
+#         for prefix_len in [3, 2]:
+#             if len(input_lower) >= prefix_len:
+#                 fuzzy_prefix = input_lower[:prefix_len]
+#                 fuzzy_results = get_prefix_matches_with_rank(fuzzy_prefix, limit=100)
+                
+#                 if fuzzy_results:
+#                     response['tier_used'] = f'prefix_fuzzy_{prefix_len}'
+                    
+#                     results = []
+#                     for item in fuzzy_results:
+#                         distance = damerau_levenshtein_distance(input_lower, item['term'])
+#                         if distance <= max_distance:
+#                             score = calculate_score(distance, item['rank'])
+#                             results.append({
+#                                 **item,
+#                                 'distance': distance,
+#                                 'score': score
+#                             })
+                    
+#                     if results:
+#                         results.sort(key=lambda x: x['score'])
+#                         response['suggestions'] = results[:limit]
+#                         return response
+        
+#         # === TIER 5: FALLBACK ===
+#         response['tier_used'] = 'fallback'
+#         response['suggestions'] = []
+#         return response
+        
+#     except Exception as e:
+#         response['success'] = False
+#         response['error'] = str(e)
+#         return response
+
+
+# def get_autocomplete(prefix: str, limit: int = 10) -> List[Dict[str, Any]]:
+#     """
+#     Get autocomplete suggestions for a prefix.
+#     """
+#     result = get_suggestions(prefix, limit=limit)
+#     return result.get('suggestions', [])
+
+
+# def validate_word(word: str) -> Dict[str, Any]:
+#     """
+#     Validate a single word and return correction if needed.
+#     """
+#     client = RedisLookupTable.get_client()
+    
+#     if not client:
+#         return {
+#             'word': word,
+#             'is_valid': False,
+#             'suggestion': None,
+#             'error': 'Redis connection failed'
+#         }
+    
+#     word_lower = word.lower().strip()
+    
+#     # Check for exact matches with new key structure
+#     exact_matches = get_exact_term_matches(word_lower)
+    
+#     if exact_matches:
+#         member = exact_matches[0]
+#         metadata = client.hgetall(get_hash_key(member))
+        
+#         if metadata:
+#             base_term = extract_base_term(member)
+#             return {
+#                 'word': word,
+#                 'is_valid': True,
+#                 'suggestion': None,
+#                 'metadata': {
+#                     'display': metadata.get('display', base_term),
+#                     'pos': metadata.get('pos', 'unknown'),
+#                     'category': metadata.get('category', ''),
+#                     'rank': int(metadata.get('rank', 0)),
+#                 }
+#             }
+    
+#     # Word not found - get suggestion
+#     result = get_suggestions(word_lower, limit=1, max_distance=2)
+    
+#     if result['suggestions']:
+#         best = result['suggestions'][0]
+#         return {
+#             'word': word,
+#             'is_valid': False,
+#             'suggestion': best['term'],
+#             'distance': best['distance'],
+#             'score': best.get('score', 0),
+#             'tier_used': result['tier_used'],
+#             'metadata': {
+#                 'display': best['display'],
+#                 'pos': best.get('pos', 'unknown'),
+#                 'category': best['category'],
+#                 'rank': best['rank'],
+#             }
+#         }
+    
+#     return {
+#         'word': word,
+#         'is_valid': False,
+#         'suggestion': None
+#     }
+
+
+# # =============================================================================
+# # CACHE FUNCTIONS
+# # =============================================================================
+
+# def check_cache(query: str) -> Optional[Dict[str, Any]]:
+#     """Check if query results exist in cache"""
+#     client = RedisLookupTable.get_client()
+    
+#     if not client:
+#         return None
+    
+#     try:
+#         normalized_query = query.lower().strip()
+#         cache_key = f"query_cache:{normalized_query}"
+        
+#         cached_results = client.get(cache_key)
+        
+#         if cached_results:
+#             return json.loads(cached_results)
+#         return None
+        
+#     except Exception as e:
+#         print(f"Cache check error: {e}")
+#         return None
+
+
+# def save_to_cache(query: str, results: Dict[str, Any], ttl: int = 3600) -> bool:
+#     """Save query results to cache with TTL"""
+#     client = RedisLookupTable.get_client()
+    
+#     if not client:
+#         return False
+    
+#     try:
+#         normalized_query = query.lower().strip()
+#         cache_key = f"query_cache:{normalized_query}"
+        
+#         client.setex(cache_key, ttl, json.dumps(results))
+#         return True
+        
+#     except Exception as e:
+#         print(f"Cache save error: {e}")
+#         return False
+
+
+# # =============================================================================
+# # MAIN API FUNCTION
+# # =============================================================================
+
+# def lookup_table(
+#     query: str,
+#     check_cache_first: bool = True,
+#     include_suggestions: bool = True,
+#     autocomplete_prefix: Optional[str] = None,
+#     autocomplete_limit: int = 10
+# ) -> Dict[str, Any]:
+#     """
+#     Main API endpoint function for Redis-based search preprocessing.
+#     """
+#     response = {
+#         'success': True,
+#         'query': query,
+#         'normalized_query': '',
+#         'terms': [],
+#         'cache_hit': False,
+#         'autocomplete': [],
+#         'error': None
+#     }
+    
+#     try:
+#         if autocomplete_prefix:
+#             response['autocomplete'] = get_autocomplete(
+#                 autocomplete_prefix, 
+#                 limit=autocomplete_limit
+#             )
+#             return response
+        
+#         if not query or not query.strip():
+#             response['error'] = 'Empty query'
+#             response['success'] = False
+#             return response
+        
+#         if check_cache_first:
+#             cached = check_cache(query)
+#             if cached:
+#                 response['cache_hit'] = True
+#                 response['terms'] = cached.get('terms', [])
+#                 response['normalized_query'] = cached.get('normalized_query', '')
+#                 return response
+        
+#         words = query.lower().split()
+#         terms = []
+#         normalized_words = []
+        
+#         for word in words:
+#             word = word.strip()
+#             if not word:
+#                 continue
+            
+#             validation = validate_word(word)
+            
+#             if validation['is_valid']:
+#                 terms.append({
+#                     'word': word,
+#                     'exists': True,
+#                     'display': validation['metadata']['display'],
+#                     'pos': validation['metadata']['pos'],
+#                     'category': validation['metadata']['category'],
+#                     'rank': validation['metadata']['rank'],
+#                 })
+#                 normalized_words.append(word)
+#             else:
+#                 terms.append({
+#                     'word': word,
+#                     'exists': False,
+#                     'suggestion': validation.get('suggestion'),
+#                     'distance': validation.get('distance'),
+#                     'score': validation.get('score'),
+#                     'tier_used': validation.get('tier_used'),
+#                 })
+                
+#                 if include_suggestions and validation.get('suggestion'):
+#                     normalized_words.append(validation['suggestion'])
+        
+#         response['terms'] = terms
+#         response['normalized_query'] = ' '.join(normalized_words)
+        
+#         cache_data = {
+#             'terms': terms,
+#             'normalized_query': response['normalized_query']
+#         }
+#         save_to_cache(query, cache_data)
+        
+#         return response
+        
+#     except Exception as e:
+#         response['success'] = False
+#         response['error'] = str(e)
+#         return response
+
+
+# # =============================================================================
+# # CONVENIENCE FUNCTIONS
+# # =============================================================================
+
+# def lookup(query: str) -> Dict[str, Any]:
+#     """Shorthand for lookup_table with default settings"""
+#     return lookup_table(query)
+
+
+# def autocomplete(prefix: str, limit: int = 10) -> List[Dict[str, Any]]:
+#     """Shorthand for autocomplete lookups"""
+#     return get_autocomplete(prefix, limit)
+
+
+# def spell_check(word: str) -> Dict[str, Any]:
+#     """Shorthand for spell checking a single word"""
+#     return validate_word(word)
+
+
+# =============================================================================
+# REDIS CLIENT - OPTIMIZED VERSION
+# =============================================================================
+# Backwards compatible with all existing function signatures
+# New features:
+#   - Batch operations via Redis pipelines (single round-trip)
+#   - Pre-validated data passthrough to avoid duplicate lookups
+#   - O(1) lookups via hash-based caching
 # =============================================================================
 
 import redis
 import json
 import string
-from typing import Optional, Dict, Any, List, Set
-
-# Your existing config imports would go here
-# from django.conf import settings
-# REDIS_LOCATION = settings.REDIS_LOCATION
-# etc.
-
-# Placeholder config - replace with your actual config
+from typing import Optional, Dict, Any, List, Set, Tuple
 
 
 
@@ -4148,7 +5115,6 @@ class RedisLookupTable:
 # SORTED SET CONFIGURATION
 # =============================================================================
 
-# All sorted sets to search (in priority order)
 SORTED_SETS = [
     'autocomplete:continent',
     'autocomplete:country',
@@ -4159,11 +5125,13 @@ SORTED_SETS = [
     'autocomplete:word'
 ]
 
-# Category suffixes used in keys - FIXED to match SORTED_SETS
 CATEGORY_SUFFIXES = [
     'continent', 'country', 'us_state', 'state', 
     'us_city', 'city', 'word'
 ]
+
+# O(1) lookup set for category suffixes
+CATEGORY_SUFFIXES_SET: frozenset = frozenset(CATEGORY_SUFFIXES)
 
 
 # =============================================================================
@@ -4172,35 +5140,22 @@ CATEGORY_SUFFIXES = [
 
 def extract_base_term(member: str) -> str:
     """
-    Extract the base term from a member key.
-    
-    Examples:
-        'africa:continent' -> 'africa'
-        'paris:city:fr' -> 'paris'
-        'new york:us_city:ny' -> 'new york'
-        'happy:word' -> 'happy'
+    Extract the base term from a member key. O(p) where p = parts count (small)
     """
     if ':' not in member:
         return member
     
     parts = member.split(':')
     
-    # Find where the category suffix starts
     for i, part in enumerate(parts):
-        if part in CATEGORY_SUFFIXES:
-            # Return everything before this part
+        if part in CATEGORY_SUFFIXES_SET:  # O(1) lookup
             return ':'.join(parts[:i]) if i > 0 else parts[0]
     
-    # If no category suffix found, return first part
     return parts[0]
 
 
 def get_hash_key(member: str) -> str:
-    """
-    Get the hash key for a sorted set member.
-    
-    Example: 'africa:continent' -> 'term:africa:continent'
-    """
+    """Get the hash key for a sorted set member. O(1)"""
     return f'term:{member}'
 
 
@@ -4211,6 +5166,7 @@ def get_hash_key(member: str) -> str:
 def generate_candidates_smart(word: str, max_candidates: int = 100) -> Set[str]:
     """
     Generate spelling candidates based on common typo patterns.
+    O(L²) where L = word length, but L is typically small (< 20)
     """
     candidates = set()
     word_lower = word.lower()
@@ -4250,7 +5206,7 @@ def generate_candidates_smart(word: str, max_candidates: int = 100) -> Set[str]:
         candidate = word_lower[:i] + word_lower[i+1] + word_lower[i] + word_lower[i+2:]
         candidates.add(candidate)
 
-    # 3. Double transposition
+    # 3. Double transposition (limited)
     for i in range(length - 1):
         first_swap = word_lower[:i] + word_lower[i+1] + word_lower[i] + word_lower[i+2:]
         for j in range(len(first_swap) - 1):
@@ -4315,10 +5271,7 @@ def generate_candidates_smart(word: str, max_candidates: int = 100) -> Set[str]:
 # =============================================================================
 
 def calculate_score(distance: int, rank: int, max_rank: int = 10000000) -> float:
-    """
-    Calculate a combined score based on edit distance and word rank.
-    Lower score = better match.
-    """
+    """Calculate combined score. O(1)"""
     rank_bonus = min(rank, max_rank) / max_rank
     return distance - rank_bonus
 
@@ -4329,31 +5282,27 @@ def calculate_score(distance: int, rank: int, max_rank: int = 10000000) -> float
 
 def damerau_levenshtein_distance(s1: str, s2: str) -> int:
     """
-    Calculate the Damerau-Levenshtein distance between two strings.
+    Calculate the Damerau-Levenshtein distance. O(m*n) where m,n = string lengths
     """
     len1, len2 = len(s1), len(s2)
     
-    # Create distance matrix
     d = [[0] * (len2 + 1) for _ in range(len1 + 1)]
     
-    # Initialize base cases
     for i in range(len1 + 1):
         d[i][0] = i
     for j in range(len2 + 1):
         d[0][j] = j
     
-    # Fill in the rest of the matrix
     for i in range(1, len1 + 1):
         for j in range(1, len2 + 1):
             cost = 0 if s1[i-1] == s2[j-1] else 1
             
             d[i][j] = min(
-                d[i-1][j] + 1,      # deletion
-                d[i][j-1] + 1,      # insertion
-                d[i-1][j-1] + cost  # substitution
+                d[i-1][j] + 1,
+                d[i][j-1] + 1,
+                d[i-1][j-1] + cost
             )
             
-            # Transposition
             if i > 1 and j > 1 and s1[i-1] == s2[j-2] and s1[i-2] == s2[j-1]:
                 d[i][j] = min(d[i][j], d[i-2][j-2] + cost)
     
@@ -4361,15 +5310,13 @@ def damerau_levenshtein_distance(s1: str, s2: str) -> int:
 
 
 # =============================================================================
-# CORE FUNCTIONS
+# CORE FUNCTIONS - SINGLE ITEM (BACKWARDS COMPATIBLE)
 # =============================================================================
 
 def get_term_metadata(member: str) -> Optional[Dict[str, Any]]:
     """
     Get metadata for a term from Redis hash - O(1)
-    
-    Args:
-        member: The full member key (e.g., 'africa:continent')
+    BACKWARDS COMPATIBLE: Same signature as original
     """
     client = RedisLookupTable.get_client()
     if not client:
@@ -4402,7 +5349,8 @@ def get_term_metadata(member: str) -> Optional[Dict[str, Any]]:
 def get_exact_term_matches(term: str) -> List[str]:
     """
     Find all members in sorted sets that match the exact term.
-    Uses ZRANGEBYLEX for exact prefix match.
+    O(k * log m) where k = number of sorted sets, m = set size
+    BACKWARDS COMPATIBLE: Same signature as original
     """
     client = RedisLookupTable.get_client()
     if not client:
@@ -4413,20 +5361,16 @@ def get_exact_term_matches(term: str) -> List[str]:
     
     for ss in SORTED_SETS:
         try:
-            # Exact match: look for term or term:* pattern
-            # First check exact term
             score = client.zscore(ss, term_lower)
             if score is not None:
                 matches.append(term_lower)
             
-            # Then check term:suffix patterns (if using compound keys)
             members = client.zrangebylex(ss, f'[{term_lower}:', f'[{term_lower}:\xff')
             matches.extend(members)
             
-        except Exception as e:
+        except Exception:
             continue
     
-    # Remove duplicates while preserving order
     seen = set()
     unique_matches = []
     for m in matches:
@@ -4440,7 +5384,8 @@ def get_exact_term_matches(term: str) -> List[str]:
 def get_prefix_matches(prefix: str, limit: int = 50) -> List[str]:
     """
     Get members from all sorted sets that start with the given prefix.
-    Uses ZRANGEBYLEX (fast) - works because all scores = 0
+    O(k * log m) using ZRANGEBYLEX
+    BACKWARDS COMPATIBLE: Same signature as original
     """
     client = RedisLookupTable.get_client()
     if not client or not prefix:
@@ -4452,7 +5397,6 @@ def get_prefix_matches(prefix: str, limit: int = 50) -> List[str]:
         
         for ss in SORTED_SETS:
             try:
-                # ZRANGEBYLEX works fast when all scores = 0
                 members = client.zrangebylex(
                     ss,
                     f'[{prefix.lower()}',
@@ -4461,10 +5405,10 @@ def get_prefix_matches(prefix: str, limit: int = 50) -> List[str]:
                     num=per_set_limit
                 )
                 matches.extend(members)
-            except Exception as e:
+            except Exception:
                 continue
         
-        return matches[:limit * 2]  # Return more, we'll sort and trim later
+        return matches[:limit * 2]
         
     except Exception as e:
         print(f"Prefix match error: {e}")
@@ -4474,34 +5418,24 @@ def get_prefix_matches(prefix: str, limit: int = 50) -> List[str]:
 def get_prefix_matches_with_rank(prefix: str, limit: int = 10) -> List[Dict[str, Any]]:
     """
     Get prefix matches and fetch rank from hash, then sort by rank.
-    This is the main function for autocomplete.
-    
-    Flow:
-    1. ZRANGEBYLEX prefix search (fast, ~2ms)
-    2. Pipeline fetch metadata from hash (~3ms)
-    3. Sort by rank (in memory, <1ms)
-    
-    Total: ~5-10ms
+    BACKWARDS COMPATIBLE: Same signature as original
     """
     client = RedisLookupTable.get_client()
     if not client or not prefix:
         return []
     
     try:
-        # Step 1: Get prefix matches from sorted sets
         matches = get_prefix_matches(prefix, limit=limit * 5)
         
         if not matches:
             return []
         
-        # Step 2: Batch fetch metadata from hash
         pipeline = client.pipeline()
         for member in matches:
             pipeline.hgetall(get_hash_key(member))
         
         metadata_list = pipeline.execute()
         
-        # Step 3: Build results with rank
         results = []
         for member, metadata in zip(matches, metadata_list):
             if metadata:
@@ -4522,7 +5456,6 @@ def get_prefix_matches_with_rank(prefix: str, limit: int = 10) -> List[Dict[str,
                     'rank': rank
                 })
         
-        # Step 4: Sort by rank (highest first)
         results.sort(key=lambda x: x['rank'], reverse=True)
         
         return results[:limit]
@@ -4532,102 +5465,334 @@ def get_prefix_matches_with_rank(prefix: str, limit: int = 10) -> List[Dict[str,
         return []
 
 
-def get_top_words_by_rank(limit: int = 200) -> List[Dict[str, Any]]:
+# =============================================================================
+# NEW: BATCHED OPERATIONS - O(1) per item after single Redis round-trip
+# =============================================================================
+
+def batch_get_exact_term_matches(terms: List[str]) -> Dict[str, List[str]]:
     """
-    Get top words by rank from hash data.
-    Since sorted set scores are 0, we fetch from hash and sort.
+    Batch find all members for multiple terms in a SINGLE Redis pipeline.
+    
+    Complexity: O(k) Redis round-trips reduced to O(1)
+    
+    Args:
+        terms: List of terms to look up
+    
+    Returns:
+        Dict mapping term -> list of matching members
     """
     client = RedisLookupTable.get_client()
-    if not client:
-        return []
+    if not client or not terms:
+        return {}
     
     try:
-        results = []
-        per_set_limit = max(limit // len(SORTED_SETS), 30)
+        pipeline = client.pipeline()
         
-        for ss in SORTED_SETS:
-            try:
-                # Get some members
-                members = client.zrange(ss, 0, per_set_limit - 1)
-                
-                # Fetch their ranks from hash
-                if members:
-                    pipeline = client.pipeline()
-                    for member in members:
-                        pipeline.hget(get_hash_key(member), 'rank')
-                    
-                    ranks = pipeline.execute()
-                    
-                    for member, rank in zip(members, ranks):
-                        try:
-                            rank_val = int(float(rank)) if rank else 0
-                        except:
-                            rank_val = 0
-                        
-                        results.append({
-                            'member': member,
-                            'term': extract_base_term(member),
-                            'rank': rank_val
-                        })
-            except:
-                continue
+        # Queue all operations
+        ops = []  # Track (term, sorted_set, op_type)
+        for term in terms:
+            term_lower = term.lower()
+            for ss in SORTED_SETS:
+                pipeline.zscore(ss, term_lower)
+                ops.append((term_lower, ss, 'zscore'))
+                pipeline.zrangebylex(ss, f'[{term_lower}:', f'[{term_lower}:\xff')
+                ops.append((term_lower, ss, 'zrangebylex'))
         
-        # Sort by rank descending
-        results.sort(key=lambda x: x['rank'], reverse=True)
-        return results[:limit]
+        # Single round-trip
+        results = pipeline.execute()
+        
+        # Process results
+        term_matches: Dict[str, Set[str]] = {t.lower(): set() for t in terms}
+        
+        for i, result in enumerate(results):
+            term, ss, op_type = ops[i]
+            
+            if op_type == 'zscore' and result is not None:
+                term_matches[term].add(term)
+            elif op_type == 'zrangebylex' and result:
+                term_matches[term].update(result)
+        
+        # Convert sets to lists
+        return {term: list(matches) for term, matches in term_matches.items()}
         
     except Exception as e:
-        print(f"Error getting top words: {e}")
-        return []
+        print(f"Batch exact match error: {e}")
+        return {}
+
+
+def batch_get_term_metadata(members: List[str]) -> Dict[str, Dict[str, Any]]:
+    """
+    Batch get metadata for multiple members in a SINGLE Redis pipeline.
+    
+    Complexity: O(n) Redis calls reduced to O(1)
+    
+    Args:
+        members: List of member keys to look up
+    
+    Returns:
+        Dict mapping member -> metadata dict
+    """
+    client = RedisLookupTable.get_client()
+    if not client or not members:
+        return {}
+    
+    try:
+        pipeline = client.pipeline()
+        
+        for member in members:
+            pipeline.hgetall(get_hash_key(member))
+        
+        # Single round-trip
+        results = pipeline.execute()
+        
+        # Process results
+        metadata_dict = {}
+        for member, metadata in zip(members, results):
+            if metadata:
+                base_term = extract_base_term(member)
+                metadata_dict[member] = {
+                    'member': member,
+                    'term': base_term,
+                    'exists': True,
+                    'display': metadata.get('display', base_term),
+                    'pos': metadata.get('pos', 'unknown'),
+                    'category': metadata.get('category', ''),
+                    'description': metadata.get('description', ''),
+                    'entity_type': metadata.get('entity_type', ''),
+                    'rank': int(metadata.get('rank', 0)),
+                }
+        
+        return metadata_dict
+        
+    except Exception as e:
+        print(f"Batch metadata error: {e}")
+        return {}
+
+
+def batch_validate_words_redis(words: List[str]) -> Dict[str, Dict[str, Any]]:
+    """
+    Validate multiple words in minimal Redis round-trips.
+    
+    Complexity: 
+        OLD: O(n * k * log m) - n words, k sorted sets each
+        NEW: O(2) Redis round-trips regardless of n
+    
+    Args:
+        words: List of words to validate
+    
+    Returns:
+        Dict mapping word -> validation result with metadata
+    """
+    if not words:
+        return {}
+    
+    # Step 1: Batch get all exact matches (1 pipeline call)
+    term_matches = batch_get_exact_term_matches(words)
+    
+    # Collect all members that need metadata
+    all_members = set()
+    for matches in term_matches.values():
+        all_members.update(matches)
+    
+    # Step 2: Batch get all metadata (1 pipeline call)
+    all_metadata = batch_get_term_metadata(list(all_members))
+    
+    # Step 3: Build results (in-memory, O(n))
+    results = {}
+    for word in words:
+        word_lower = word.lower()
+        matches = term_matches.get(word_lower, [])
+        
+        if matches:
+            # Get metadata for first match (highest priority)
+            member = matches[0]
+            metadata = all_metadata.get(member, {})
+            
+            results[word_lower] = {
+                'is_valid': True,
+                'word': word_lower,
+                'member': member,
+                'matches': matches,  # All matches for this word
+                'metadata': metadata
+            }
+        else:
+            results[word_lower] = {
+                'is_valid': False,
+                'word': word_lower,
+                'member': None,
+                'matches': [],
+                'metadata': {}
+            }
+    
+    return results
 
 
 def batch_check_candidates(candidates: Set[str]) -> List[Dict[str, Any]]:
     """
-    Batch check if candidates exist in Redis - O(k)
+    Batch check if candidates exist in Redis.
+    BACKWARDS COMPATIBLE but now uses batched operations internally.
     
-    Updated to search across all sorted sets for each candidate.
+    Complexity:
+        OLD: O(c * k * log m) - c candidates, k sets each
+        NEW: O(2) Redis round-trips
     """
-    client = RedisLookupTable.get_client()
-    if not client or not candidates:
+    if not candidates:
         return []
     
-    try:
-        found = []
-        
-        for candidate in candidates:
-            # Find all matches for this candidate across sorted sets
-            matches = get_exact_term_matches(candidate)
-            
-            if matches:
-                # Get metadata for matches
-                pipeline = client.pipeline()
-                for member in matches:
-                    pipeline.hgetall(get_hash_key(member))
-                
-                metadata_list = pipeline.execute()
-                
-                for member, metadata in zip(matches, metadata_list):
-                    if metadata:
-                        base_term = extract_base_term(member)
-                        found.append({
-                            'member': member,
-                            'term': base_term,
-                            'display': metadata.get('display', base_term),
-                            'pos': metadata.get('pos', 'unknown'),
-                            'category': metadata.get('category', ''),
-                            'entity_type': metadata.get('entity_type', ''),
-                            'rank': int(metadata.get('rank', 0)),
-                        })
-        
-        return found
-        
-    except Exception as e:
-        print(f"Batch check error: {e}")
-        return []
+    # Use batch validation
+    validation_results = batch_validate_words_redis(list(candidates))
+    
+    # Extract valid results with metadata
+    found = []
+    for word, result in validation_results.items():
+        if result['is_valid'] and result['metadata']:
+            metadata = result['metadata']
+            found.append({
+                'member': result['member'],
+                'term': metadata.get('term', word),
+                'display': metadata.get('display', word),
+                'pos': metadata.get('pos', 'unknown'),
+                'category': metadata.get('category', ''),
+                'entity_type': metadata.get('entity_type', ''),
+                'rank': metadata.get('rank', 0),
+            })
+    
+    return found
+
+
+def batch_check_bigrams(word_pairs: List[Tuple[str, str]]) -> Dict[str, Dict[str, Any]]:
+    """
+    Batch check multiple bigrams in a SINGLE Redis pipeline.
+    
+    Complexity:
+        OLD: O(n) - one call per bigram
+        NEW: O(2) Redis round-trips for all bigrams
+    
+    Args:
+        word_pairs: List of (word1, word2) tuples
+    
+    Returns:
+        Dict mapping "word1 word2" -> metadata (or empty if not found)
+    """
+    if not word_pairs:
+        return {}
+    
+    # Build bigram strings
+    bigrams = [f"{w1.lower()} {w2.lower()}" for w1, w2 in word_pairs]
+    
+    # Use batch validation
+    validation_results = batch_validate_words_redis(bigrams)
+    
+    # Extract results
+    results = {}
+    for bigram, result in validation_results.items():
+        if result['is_valid'] and result['metadata']:
+            results[bigram] = result['metadata']
+    
+    return results
 
 
 # =============================================================================
-# TIERED SUGGESTION SYSTEM
+# VALIDATE WORD - BACKWARDS COMPATIBLE WITH OPTIMIZATION HOOKS
+# =============================================================================
+
+def validate_word(
+    word: str,
+    _pre_validated: Optional[Dict[str, Dict[str, Any]]] = None
+) -> Dict[str, Any]:
+    """
+    Validate a single word and return correction if needed.
+    
+    BACKWARDS COMPATIBLE: Same signature as original (extra param has default)
+    
+    NEW: If _pre_validated dict is passed, uses O(1) lookup instead of Redis call
+    
+    Args:
+        word: The word to validate
+        _pre_validated: Optional pre-computed validation results (internal use)
+    
+    Returns:
+        Validation result dict
+    """
+    word_lower = word.lower().strip()
+    
+    # O(1) lookup if pre-validated data available
+    if _pre_validated is not None and word_lower in _pre_validated:
+        pre = _pre_validated[word_lower]
+        if pre.get('is_valid'):
+            metadata = pre.get('metadata', {})
+            return {
+                'word': word,
+                'is_valid': True,
+                'suggestion': None,
+                'metadata': {
+                    'display': metadata.get('display', word_lower),
+                    'pos': metadata.get('pos', 'unknown'),
+                    'category': metadata.get('category', ''),
+                    'rank': metadata.get('rank', 0),
+                }
+            }
+    
+    # Original Redis lookup path
+    client = RedisLookupTable.get_client()
+    
+    if not client:
+        return {
+            'word': word,
+            'is_valid': False,
+            'suggestion': None,
+            'error': 'Redis connection failed'
+        }
+    
+    exact_matches = get_exact_term_matches(word_lower)
+    
+    if exact_matches:
+        member = exact_matches[0]
+        metadata = client.hgetall(get_hash_key(member))
+        
+        if metadata:
+            base_term = extract_base_term(member)
+            return {
+                'word': word,
+                'is_valid': True,
+                'suggestion': None,
+                'metadata': {
+                    'display': metadata.get('display', base_term),
+                    'pos': metadata.get('pos', 'unknown'),
+                    'category': metadata.get('category', ''),
+                    'rank': int(metadata.get('rank', 0)),
+                }
+            }
+    
+    # Word not found - get suggestion
+    result = get_suggestions(word_lower, limit=1, max_distance=2)
+    
+    if result['suggestions']:
+        best = result['suggestions'][0]
+        return {
+            'word': word,
+            'is_valid': False,
+            'suggestion': best['term'],
+            'distance': best['distance'],
+            'score': best.get('score', 0),
+            'tier_used': result['tier_used'],
+            'metadata': {
+                'display': best['display'],
+                'pos': best.get('pos', 'unknown'),
+                'category': best['category'],
+                'rank': best['rank'],
+            }
+        }
+    
+    return {
+        'word': word,
+        'is_valid': False,
+        'suggestion': None
+    }
+
+
+# =============================================================================
+# GET SUGGESTIONS - BACKWARDS COMPATIBLE
 # =============================================================================
 
 def get_suggestions(
@@ -4637,8 +5802,8 @@ def get_suggestions(
     fallback_pool_size: int = 200
 ) -> Dict[str, Any]:
     """
-    Unified suggestion function - UPDATED for score=0 sorted sets.
-    Rank comes from hash, not sorted set score.
+    Unified suggestion function.
+    BACKWARDS COMPATIBLE: Same signature as original
     """
     client = RedisLookupTable.get_client()
     
@@ -4695,7 +5860,7 @@ def get_suggestions(
                         'entity_type': metadata.get('entity_type', ''),
                         'rank': rank,
                         'distance': 0,
-                        'score': -rank  # Lower score = better (negative rank)
+                        'score': -rank
                     })
             
             if results:
@@ -4703,7 +5868,7 @@ def get_suggestions(
                 response['suggestions'] = results[:limit]
                 return response
         
-        # === TIER 2: PREFIX MATCH (FAST with score=0) ===
+        # === TIER 2: PREFIX MATCH ===
         prefix_results = get_prefix_matches_with_rank(input_lower, limit=limit * 3)
         
         if prefix_results:
@@ -4720,57 +5885,33 @@ def get_suggestions(
                     'score': score
                 })
             
-            # Sort by score (lower is better)
             results.sort(key=lambda x: x['score'])
             response['suggestions'] = results[:limit]
             return response
         
-        # === TIER 3: SMART CANDIDATES ===
+        # === TIER 3: SMART CANDIDATES (now batched) ===
         candidates = generate_candidates_smart(input_lower, max_candidates=100)
         
         if candidates:
             response['tier_used'] = 'smart_candidates'
             
-            results = []
+            # Batch check all candidates at once
+            found = batch_check_candidates(candidates)
             
-            for candidate in candidates:
-                # Find all sorted set matches for this candidate
-                matches = get_exact_term_matches(candidate)
+            results = []
+            for item in found:
+                term = item.get('term', '')
+                distance = damerau_levenshtein_distance(input_lower, term)
                 
-                if matches:
-                    # Fetch metadata for all matches
-                    pipeline = client.pipeline()
-                    for member in matches:
-                        pipeline.hgetall(get_hash_key(member))
-                    
-                    metadata_list = pipeline.execute()
-                    
-                    for member, metadata in zip(matches, metadata_list):
-                        if metadata:
-                            distance = damerau_levenshtein_distance(input_lower, candidate)
-                            if distance <= max_distance:
-                                try:
-                                    rank = int(float(metadata.get('rank', 0)))
-                                except:
-                                    rank = 0
-                                
-                                score = calculate_score(distance, rank)
-                                base_term = extract_base_term(member)
-                                
-                                results.append({
-                                    'member': member,
-                                    'term': base_term,
-                                    'display': metadata.get('display', base_term),
-                                    'pos': metadata.get('pos', ''),
-                                    'category': metadata.get('category', ''),
-                                    'entity_type': metadata.get('entity_type', ''),
-                                    'rank': rank,
-                                    'distance': distance,
-                                    'score': score
-                                })
+                if distance <= max_distance:
+                    score = calculate_score(distance, item.get('rank', 0))
+                    results.append({
+                        **item,
+                        'distance': distance,
+                        'score': score
+                    })
             
             if results:
-                # Remove duplicates based on member
                 seen = set()
                 unique_results = []
                 for r in results:
@@ -4819,83 +5960,60 @@ def get_suggestions(
 
 
 def get_autocomplete(prefix: str, limit: int = 10) -> List[Dict[str, Any]]:
-    """
-    Get autocomplete suggestions for a prefix.
-    """
+    """Get autocomplete suggestions. BACKWARDS COMPATIBLE."""
     result = get_suggestions(prefix, limit=limit)
     return result.get('suggestions', [])
 
 
-def validate_word(word: str) -> Dict[str, Any]:
-    """
-    Validate a single word and return correction if needed.
-    """
+def get_top_words_by_rank(limit: int = 200) -> List[Dict[str, Any]]:
+    """Get top words by rank. BACKWARDS COMPATIBLE."""
     client = RedisLookupTable.get_client()
-    
     if not client:
-        return {
-            'word': word,
-            'is_valid': False,
-            'suggestion': None,
-            'error': 'Redis connection failed'
-        }
+        return []
     
-    word_lower = word.lower().strip()
-    
-    # Check for exact matches with new key structure
-    exact_matches = get_exact_term_matches(word_lower)
-    
-    if exact_matches:
-        member = exact_matches[0]
-        metadata = client.hgetall(get_hash_key(member))
+    try:
+        results = []
+        per_set_limit = max(limit // len(SORTED_SETS), 30)
         
-        if metadata:
-            base_term = extract_base_term(member)
-            return {
-                'word': word,
-                'is_valid': True,
-                'suggestion': None,
-                'metadata': {
-                    'display': metadata.get('display', base_term),
-                    'pos': metadata.get('pos', 'unknown'),
-                    'category': metadata.get('category', ''),
-                    'rank': int(metadata.get('rank', 0)),
-                }
-            }
-    
-    # Word not found - get suggestion
-    result = get_suggestions(word_lower, limit=1, max_distance=2)
-    
-    if result['suggestions']:
-        best = result['suggestions'][0]
-        return {
-            'word': word,
-            'is_valid': False,
-            'suggestion': best['term'],
-            'distance': best['distance'],
-            'score': best.get('score', 0),
-            'tier_used': result['tier_used'],
-            'metadata': {
-                'display': best['display'],
-                'pos': best.get('pos', 'unknown'),
-                'category': best['category'],
-                'rank': best['rank'],
-            }
-        }
-    
-    return {
-        'word': word,
-        'is_valid': False,
-        'suggestion': None
-    }
+        for ss in SORTED_SETS:
+            try:
+                members = client.zrange(ss, 0, per_set_limit - 1)
+                
+                if members:
+                    pipeline = client.pipeline()
+                    for member in members:
+                        pipeline.hget(get_hash_key(member), 'rank')
+                    
+                    ranks = pipeline.execute()
+                    
+                    for member, rank in zip(members, ranks):
+                        try:
+                            rank_val = int(float(rank)) if rank else 0
+                        except:
+                            rank_val = 0
+                        
+                        results.append({
+                            'member': member,
+                            'term': extract_base_term(member),
+                            'rank': rank_val
+                        })
+            except:
+                continue
+        
+        results.sort(key=lambda x: x['rank'], reverse=True)
+        return results[:limit]
+        
+    except Exception as e:
+        print(f"Error getting top words: {e}")
+        return []
 
 
 # =============================================================================
-# CACHE FUNCTIONS
+# CACHE FUNCTIONS - BACKWARDS COMPATIBLE
 # =============================================================================
 
 def check_cache(query: str) -> Optional[Dict[str, Any]]:
-    """Check if query results exist in cache"""
+    """Check if query results exist in cache. BACKWARDS COMPATIBLE."""
     client = RedisLookupTable.get_client()
     
     if not client:
@@ -4917,7 +6035,7 @@ def check_cache(query: str) -> Optional[Dict[str, Any]]:
 
 
 def save_to_cache(query: str, results: Dict[str, Any], ttl: int = 3600) -> bool:
-    """Save query results to cache with TTL"""
+    """Save query results to cache. BACKWARDS COMPATIBLE."""
     client = RedisLookupTable.get_client()
     
     if not client:
@@ -4936,7 +6054,7 @@ def save_to_cache(query: str, results: Dict[str, Any], ttl: int = 3600) -> bool:
 
 
 # =============================================================================
-# MAIN API FUNCTION
+# MAIN API FUNCTION - BACKWARDS COMPATIBLE WITH NEW BATCH SUPPORT
 # =============================================================================
 
 def lookup_table(
@@ -4944,10 +6062,17 @@ def lookup_table(
     check_cache_first: bool = True,
     include_suggestions: bool = True,
     autocomplete_prefix: Optional[str] = None,
-    autocomplete_limit: int = 10
+    autocomplete_limit: int = 10,
+    # NEW optional parameter for downstream passthrough
+    return_validation_cache: bool = False
 ) -> Dict[str, Any]:
     """
     Main API endpoint function for Redis-based search preprocessing.
+    
+    BACKWARDS COMPATIBLE: All original parameters work the same.
+    
+    NEW: return_validation_cache=True adds '_validation_cache' to response
+         for efficient passthrough to word_discovery.
     """
     response = {
         'success': True,
@@ -4981,34 +6106,43 @@ def lookup_table(
                 return response
         
         words = query.lower().split()
+        
+        # NEW: Batch validate all words at once (2 Redis round-trips)
+        validation_cache = batch_validate_words_redis(words)
+        
         terms = []
         normalized_words = []
         
-        for word in words:
+        for i, word in enumerate(words):
             word = word.strip()
             if not word:
                 continue
             
-            validation = validate_word(word)
+            # Use pre-validated data (O(1) lookup)
+            validation = validate_word(word, _pre_validated=validation_cache)
             
             if validation['is_valid']:
                 terms.append({
+                    'position': i + 1,  # NEW: Include position
                     'word': word,
                     'exists': True,
                     'display': validation['metadata']['display'],
                     'pos': validation['metadata']['pos'],
                     'category': validation['metadata']['category'],
                     'rank': validation['metadata']['rank'],
+                    'metadata': validation['metadata']  # NEW: Full metadata
                 })
                 normalized_words.append(word)
             else:
                 terms.append({
+                    'position': i + 1,  # NEW: Include position
                     'word': word,
                     'exists': False,
                     'suggestion': validation.get('suggestion'),
                     'distance': validation.get('distance'),
                     'score': validation.get('score'),
                     'tier_used': validation.get('tier_used'),
+                    'metadata': validation.get('metadata', {})
                 })
                 
                 if include_suggestions and validation.get('suggestion'):
@@ -5016,6 +6150,10 @@ def lookup_table(
         
         response['terms'] = terms
         response['normalized_query'] = ' '.join(normalized_words)
+        
+        # NEW: Include validation cache for downstream use
+        if return_validation_cache:
+            response['_validation_cache'] = validation_cache
         
         cache_data = {
             'terms': terms,
@@ -5032,19 +6170,19 @@ def lookup_table(
 
 
 # =============================================================================
-# CONVENIENCE FUNCTIONS
+# CONVENIENCE FUNCTIONS - BACKWARDS COMPATIBLE
 # =============================================================================
 
 def lookup(query: str) -> Dict[str, Any]:
-    """Shorthand for lookup_table with default settings"""
+    """Shorthand for lookup_table with default settings. BACKWARDS COMPATIBLE."""
     return lookup_table(query)
 
 
 def autocomplete(prefix: str, limit: int = 10) -> List[Dict[str, Any]]:
-    """Shorthand for autocomplete lookups"""
+    """Shorthand for autocomplete lookups. BACKWARDS COMPATIBLE."""
     return get_autocomplete(prefix, limit)
 
 
 def spell_check(word: str) -> Dict[str, Any]:
-    """Shorthand for spell checking a single word"""
+    """Shorthand for spell checking a single word. BACKWARDS COMPATIBLE."""
     return validate_word(word)

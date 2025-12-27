@@ -12,10 +12,7 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 
 from pathlib import Path
 import os
-from dotenv import load_dotenv
-
-
-load_dotenv('.env')
+from decouple import config
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -25,19 +22,14 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-r=fgi^t6n4u6%u_^9oz%z13ue$#h0v931max^kgjle9aa(*7j='
+
+SECRET_KEY = config('SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = False
 
 ALLOWED_HOSTS = []
 
-
-# POSTGRESQL 
-HOST = os.getenv('HOST')
-NAME = os.getenv('NAME')
-USER = os.getenv('USER')
-PASSWORD = os.getenv('PASSWORD')
 
 # Application definition
 
@@ -85,17 +77,19 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'afrotodosearch.wsgi.application'
 
-# DATABASES = {
-#     "default": {
-#         "ENGINE": "django.db.backends.postgresql",
-#         "NAME": 'afrotodo_db',
-#         'USER': 'frank',
-#         'PASSWORD': 'Medellin030485!!',
-#         'HOST':'database-1.cpey6iq2m2d2.us-east-1.rds.amazonaws.com',
-#         'PORT':'5432'
 
-#     }
-# }
+
+DATABASES = {
+    "default": {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME":config('NAME'),
+        'USER': config('USER'),
+        'PASSWORD': config('PASSWORD'),
+        'HOST':config('HOST'),
+        'PORT':config('PORT')
+
+    }
+}
 
 # Password validation
 # https://docs.djangoproject.com/en/6.0/ref/settings/#auth-password-validators

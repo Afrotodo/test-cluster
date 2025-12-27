@@ -1,0 +1,1306 @@
+<!DOCTYPE html>
+<html>
+<head>
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-75PTNSEVFH"></script>
+
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-75PTNSEVFH');
+</script>
+
+    <title>AfroTodo Search Engine</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <style>
+        /* Prevent zooming on inputs */
+        @viewport {
+            width: device-width;
+            zoom: 1.0;
+            user-zoom: fixed;
+        }
+        
+        @-ms-viewport {
+            width: device-width;
+            zoom: 1.0;
+            user-zoom: fixed;
+        }
+        
+        body, html {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            color: #333;
+            background-color: #f9f9f9;
+            overflow-x: hidden;
+            width: 100%;
+            position: relative;
+            -webkit-text-size-adjust: 100%;
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+
+        .afrogpt-text {
+            font-weight: 500;
+            background: linear-gradient(to right, #000000, #008000, #FFD700, #991111);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-fill-color: transparent;
+        }
+
+        .logo {
+            font-size: 32px;
+            font-weight: 600;
+            margin-bottom: 50px;
+            color: #333;
+            text-align: center;
+        }
+        
+        .logo-a { color: #000000; font-weight: 800; }
+        .logo-f { color: #008000; font-weight: 800; }
+        .logo-r { color: #FFD700; font-weight: 800; }
+        .logo-o { color: #f30b0b; font-weight: 800; }
+        
+        @keyframes blink {
+            0% { opacity: 1; }
+            50% { opacity: 0; }
+            100% { opacity: 1; }
+        }
+        
+        .cursor { display: none; }
+        
+        .container {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 0 20px;
+            box-sizing: border-box;
+            overflow-x: hidden;
+            min-height: 100vh;
+        }
+        
+        .sidebar {
+            position: fixed;
+            left: 0;
+            top: 0;
+            height: 100%;
+            width: 60px;
+            background-color: #f9f9f9;
+            border-right: 1px solid #eaeaea;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding-top: 20px;
+            z-index: 10;
+        }
+        
+        .sidebar-item {
+            width: 36px;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            cursor: pointer;
+            color: #666;
+            position: relative;
+        }
+        
+        .sidebar-item:hover { background-color: #f0f0f0; }
+        .sidebar-item.active { color: #111; background-color: #f0f0f0; }
+        .sidebar-icon { width: 20px; height: 20px; }
+        
+        .sidebar-item .tooltip {
+            visibility: hidden;
+            background-color: #333;
+            color: #fff;
+            text-align: center;
+            border-radius: 4px;
+            padding: 5px 8px;
+            position: absolute;
+            left: 48px;
+            white-space: nowrap;
+            opacity: 0;
+            transition: opacity 0.3s;
+            font-size: 12px;
+            z-index: 20;
+        }
+        
+        .sidebar-item:hover .tooltip { visibility: visible; opacity: 1; }
+        
+        .sidebar-item .tooltip::after {
+            content: "";
+            position: absolute;
+            top: 50%;
+            right: 100%;
+            margin-top: -5px;
+            border-width: 5px;
+            border-style: solid;
+            border-color: transparent #333 transparent transparent;
+        }
+        
+        .content {
+            margin-left: 60px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            padding-top: 15vh;
+            flex: 1;
+            width: calc(100% - 60px);
+            box-sizing: border-box;
+            overflow-x: hidden;
+        }
+        
+        .search-container {
+            width: 100%;
+            max-width: 600px;
+            position: relative;
+            box-sizing: border-box;
+            overflow: visible;
+            padding: 0;
+        }
+        
+        .search-box-wrapper {
+            position: relative;
+            border-radius: 12px;
+            border: 1px solid #eaeaea;
+            background-color: white;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+            transition: box-shadow 0.3s, border 0.3s;
+            display: flex;
+            align-items: center;
+            padding: 8px 16px;
+            z-index: 3;
+            max-width: 100%;
+            width: 100%;
+            box-sizing: border-box;
+            overflow: hidden;
+        }
+        
+        .search-box-wrapper:hover,
+        .search-box-wrapper:focus-within {
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+        
+        .search-box {
+            flex: 1;
+            height: 46px;
+            border: none;
+            outline: none;
+            font-size: 16px;
+            color: #333;
+            background: transparent;
+            padding: 0 8px;
+            width: 100%;
+            box-sizing: border-box;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            overflow: hidden;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+            border-radius: 0;
+        }
+        
+        .search-box::placeholder { color: #999; }
+        
+        .search-button {
+            background-color: transparent;
+            border: none;
+            padding: 0 8px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            transition: all 0.3s ease;
+        }
+        
+        .search-button:disabled { opacity: 0.6; cursor: not-allowed; }
+        .search-button svg { width: 20px; height: 20px; fill: #888; transition: fill 0.3s ease; }
+        .search-button:hover:not(:disabled) svg { fill: #555; }
+        
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+            margin-left: auto;
+            flex-shrink: 0;
+        }
+        
+        .action-button {
+            width: 32px;
+            height: 32px;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            background: transparent;
+            border: none;
+            color: #777;
+            flex-shrink: 0;
+            transition: background-color 0.3s ease;
+        }
+        
+        .action-button:hover { background-color: #f5f5f5; }
+        
+        .auth-area {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            z-index: 20;
+        }
+        
+        .welcome-message {
+            font-size: 14px;
+            font-weight: 500;
+            color: #333;
+            background-color: rgba(255, 255, 255, 0.9);
+            padding: 6px 12px;
+            border-radius: 20px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+        
+        .auth-button {
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            background-color: white;
+            border: 1px solid #eaeaea;
+            color: #666;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+            position: relative;
+            transition: all 0.3s ease;
+        }
+        
+        .auth-button:hover { background-color: #f5f5f5; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1); }
+        
+        .auth-button .tooltip {
+            visibility: hidden;
+            background-color: #333;
+            color: #fff;
+            text-align: center;
+            border-radius: 4px;
+            padding: 5px 8px;
+            position: absolute;
+            bottom: -32px;
+            left: 50%;
+            transform: translateX(-50%);
+            white-space: nowrap;
+            opacity: 0;
+            transition: opacity 0.3s;
+            font-size: 12px;
+            z-index: 20;
+        }
+        
+        .auth-button:hover .tooltip { visibility: visible; opacity: 1; }
+        
+        .research-button {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            background-color: #f5f5f5;
+            border: none;
+            border-radius: 8px;
+            padding: 6px 10px;
+            font-size: 14px;
+            color: #555;
+            cursor: pointer;
+            margin-right: 10px;
+            flex-shrink: 0;
+            transition: background-color 0.3s ease;
+        }
+        
+        .research-button:hover { background-color: #eaeaea; }
+        
+        .features {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            max-width: 700px;
+            margin-top: 40px;
+            gap: 10px;
+        }
+        
+        .feature-card {
+            flex: 1;
+            min-width: 220px;
+            max-width: 32%;
+            background-color: white;
+            border-radius: 12px;
+            border: 1px solid #eaeaea;
+            padding: 14px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .feature-card:hover { transform: translateY(-2px); box-shadow: 0 6px 12px rgba(0, 0, 0, 0.08); }
+        
+        .feature-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        
+        .feature-title {
+            font-size: 14px;
+            font-weight: 500;
+            color: #555;
+            margin: 0;
+            text-align: center;
+            flex: 1;
+        }
+        
+        .feature-icon {
+            width: 24px;
+            height: 24px;
+            background-color: #f0f0f0;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .feature-content {
+            font-size: 14px;
+            color: #333;
+            text-align: center;
+            margin: 0;
+        }
+        
+        /* ==================== SIMPLIFIED DROPDOWN STYLES ==================== */
+        .search-results {
+            position: absolute;
+            width: 100%;
+            background: white;
+            border-radius: 8px;
+            border: 1px solid #ddd;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+            margin-top: 4px;
+            display: none;
+            z-index: 100;
+            max-height: 300px;
+            overflow-y: auto;
+            box-sizing: border-box;
+            top: 100%;
+            left: 0;
+        }
+
+        .search-results .suggestion-item {
+            padding: 10px 14px;
+            cursor: pointer;
+            border-bottom: 1px solid #f0f0f0;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            transition: background-color 0.15s ease;
+        }
+
+        .search-results .suggestion-item:last-child {
+            border-bottom: none;
+        }
+
+        .search-results .suggestion-item:hover,
+        .search-results .suggestion-item.selected {
+            background: #f5f5f5;
+        }
+
+        .search-results .suggestion-item.no-results {
+            color: #888;
+            cursor: default;
+            text-align: center;
+            padding: 16px;
+        }
+
+        .search-results .suggestion-display {
+            font-weight: 500;
+            color: #333;
+        }
+
+        .search-results .suggestion-desc {
+            font-size: 12px;
+            color: #666;
+            line-height: 1.3;
+        }
+        /* ==================== END DROPDOWN STYLES ==================== */
+        
+        .footer {
+            display: flex;
+            justify-content: center;
+            padding: 20px 0;
+            margin-top: auto;
+            width: 100%;
+            font-size: 13px;
+            color: #888;
+            box-sizing: border-box;
+            padding-bottom: max(20px, env(safe-area-inset-bottom));
+        }
+        
+        .footer-links {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            grid-template-rows: repeat(2, auto);
+            gap: 15px 20px;
+            width: 100%;
+            max-width: 800px;
+            text-align: center;
+        }
+        
+        .footer a {
+            color: #888;
+            text-decoration: none;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            display: block;
+            font-size: 13px;
+            transition: color 0.3s ease;
+        }
+        
+        .footer a:hover { text-decoration: underline; color: #555; }
+
+        a#main-page-button { text-decoration: none; color: inherit; display: contents; }
+
+        .mobile-menu-toggle {
+            display: none;
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            width: 44px;
+            height: 44px;
+            background-color: white;
+            border: 1px solid #eaeaea;
+            border-radius: 8px;
+            cursor: pointer;
+            z-index: 1001;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            transition: background-color 0.3s ease;
+        }
+
+        .mobile-menu-toggle:hover { background-color: #f5f5f5; }
+
+        .mobile-sidebar-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .mobile-sidebar-overlay.show { display: block; opacity: 1; }
+
+        .mobile-sidebar {
+            position: fixed;
+            top: 0;
+            left: -280px;
+            width: 280px;
+            height: 100%;
+            background-color: white;
+            box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
+            z-index: 1001;
+            transition: left 0.3s ease;
+            overflow-y: auto;
+        }
+
+        .mobile-sidebar.open { left: 0; }
+
+        .mobile-sidebar-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px;
+            border-bottom: 1px solid #eaeaea;
+        }
+
+        .mobile-sidebar-title { font-size: 18px; font-weight: 600; color: #333; }
+
+        .mobile-sidebar-close {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 5px;
+            color: #666;
+            border-radius: 4px;
+            transition: background-color 0.3s ease;
+        }
+
+        .mobile-sidebar-close:hover { background-color: #f5f5f5; }
+        .mobile-sidebar-content { padding: 10px 0; }
+
+        .mobile-sidebar-item {
+            display: flex;
+            align-items: center;
+            padding: 15px 20px;
+            text-decoration: none;
+            color: #333;
+            transition: background-color 0.2s;
+        }
+
+        .mobile-sidebar-item:hover { background-color: #f5f5f5; }
+        .mobile-sidebar-icon { width: 24px; height: 24px; margin-right: 15px; color: #666; }
+        .mobile-sidebar-item span { font-size: 16px; font-weight: 500; }
+
+        /* Mobile-specific styles */
+        @media (max-width: 768px) {
+            input, select, textarea { font-size: 16px !important; }
+            body { position: relative; overflow-x: hidden; }
+            .container { padding: 0 15px; overflow-x: hidden; width: 100%; box-sizing: border-box; min-height: calc(100vh - env(safe-area-inset-bottom)); }
+            .content { margin-left: 0; padding-top: 8vh; align-items: center; justify-content: center; text-align: center; width: 100%; }
+            .sidebar { display: none; }
+            .mobile-menu-toggle { display: flex; top: max(20px, env(safe-area-inset-top)); left: 20px; }
+            .logo { font-size: 28px; margin-bottom: 30px; }
+            .search-container { width: 100%; max-width: none; padding: 0; box-sizing: border-box; }
+            .search-box { font-size: 16px !important; max-height: 40px; min-height: 44px; }
+            .search-box-wrapper { min-height: 44px; }
+            .feature-card { min-width: 100px; flex: 1; max-width: none; padding: 10px; margin: 0 5px; min-height: 44px; }
+            .features { flex-direction: row; width: 100%; gap: 8px; margin-top: 25px; justify-content: space-between; }
+            .feature-header { margin-bottom: 6px; }
+            .feature-title { font-size: 12px; }
+            .feature-icon { width: 20px; height: 20px; }
+            .feature-icon svg { width: 14px; height: 14px; }
+            .feature-content { font-size: 12px; line-height: 1.3; }
+            .auth-area { top: max(15px, env(safe-area-inset-top)); right: 15px; flex-direction: row; gap: 8px; align-items: center; }
+            .welcome-message { font-size: 12px; padding: 4px 8px; display: block; white-space: nowrap; max-width: 150px; overflow: hidden; text-overflow: ellipsis; }
+            .auth-button { width: auto; padding: 6px 12px; font-size: 12px; font-weight: 500; min-width: auto; justify-content: center; height: auto; border-radius: 20px; min-height: 36px; }
+            .auth-button svg { display: none; }
+            .auth-button::after { content: attr(data-text); display: block; }
+            .auth-button .tooltip { bottom: -40px; font-size: 11px; }
+            .footer-links { grid-template-columns: repeat(4, 1fr); gap: 10px 8px; max-width: 100%; padding: 0 10px; }
+            .footer a { font-size: 11px; min-height: 32px; display: flex; align-items: center; justify-content: center; }
+            .footer { padding: 15px 0; padding-bottom: max(20px, env(safe-area-inset-bottom)); margin-bottom: 40px; }
+            .cursor { display: none; }
+            .search-results { width: 100%; max-width: 100%; left: 0; right: auto; top: 100%; margin-top: 8px; max-height: 250px; font-size: 12px; box-sizing: border-box; background-color: white; border-width: 1px; }
+            .research-button { font-size: 12px; padding: 8px 12px; min-height: 36px; }
+            .search-button { min-width: 44px; min-height: 44px; }
+        }
+
+        @media (max-width: 480px) {
+            .logo { font-size: 24px; margin-bottom: 25px; }
+            .container { padding: 0 10px; }
+            .auth-area { top: max(10px, env(safe-area-inset-top)); right: 10px; }
+            .welcome-message { font-size: 11px; padding: 3px 6px; max-width: 120px; }
+            .auth-button { font-size: 11px; padding: 4px 8px; min-width: auto; height: auto; min-height: 32px; }
+            .search-box { font-size: 16px !important; }
+            .research-button { font-size: 11px; padding: 6px 10px; min-height: 32px; }
+            .action-buttons { gap: 5px; }
+            .search-results { width: 100%; margin-top: 8px; max-height: 200px; font-size: 11px; box-sizing: border-box; background-color: white; }
+            .footer-links { grid-template-columns: repeat(4, 1fr); gap: 8px 5px; }
+            .footer { margin-top: -25px; padding: 10px 0; margin-bottom: 40px; padding-bottom: max(15px, env(safe-area-inset-bottom)); }
+            .footer a { font-size: 9px; padding: 4px 2px; min-height: 28px; }
+            .mobile-menu-toggle { top: max(8px, env(safe-area-inset-top)); left: 8px; width: 40px; height: 40px; }
+        }
+
+        @media (max-width: 360px) {
+            .auth-area { top: max(8px, env(safe-area-inset-top)); right: 8px; }
+            .search-results { width: 100%; max-width: 100%; box-sizing: border-box; margin-left: 0; margin-right: 0; background-color: white; }
+            .welcome-message { font-size: 10px; padding: 2px 4px; max-width: 100px; }
+            .auth-button { font-size: 10px; padding: 4px 8px; min-width: 50px; min-height: 28px; }
+            .mobile-menu-toggle { top: max(8px, env(safe-area-inset-top)); left: 8px; width: 36px; height: 36px; }
+            .footer-links { grid-template-columns: repeat(4, 1fr); gap: 6px 3px; }
+            .footer { margin-top: -25px; padding: 8px 0; margin-bottom: 40px; padding-bottom: max(12px, env(safe-area-inset-bottom)); }
+            .footer a { font-size: 8px; padding: 2px 0; min-height: 24px; }
+        }
+
+        @media screen and (max-width: 768px) and (-webkit-min-device-pixel-ratio: 1) {
+            .container { padding-bottom: 30px; }
+        }
+
+        @supports (-webkit-touch-callout: none) {
+            .container { padding-bottom: max(30px, env(safe-area-inset-bottom)); }
+        }
+
+        .description {
+            text-align: center;
+            font-size: 12px;
+            font-weight: bold;
+            margin: 10px auto;
+            color: #333;
+            max-width: 600px;
+            line-height: 1.4;
+            margin-bottom: 25px;
+        }
+
+        .beta {
+            color: #87CEEB;
+            font-style: italic;
+            font-size: 0.7em;
+            vertical-align: super;
+            margin-left: 3px;
+        }
+
+        .sponsored-tag {
+            display: inline-block;
+            background-color: #f0f0f0;
+            color: #000;
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+            padding: 2px 6px;
+            border-radius: 3px;
+            margin-left: 8px;
+            vertical-align: middle;
+            border: 1px solid #ddd;
+        }
+
+        .ad-container {
+            margin-top: 25px;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            white-space: nowrap;
+            margin-left: 8px;
+        }
+
+        .ad-container .sponsored-tag { margin-left: 0; }
+        .ad-container a { text-decoration: none; color: #af3737; font-size: 14px; font-weight: bold; }
+        .ad-container a:hover { color: #cc0000; }
+    </style>
+    
+</head>
+<body>
+    <!-- Mobile hamburger menu -->
+    <div class="mobile-menu-toggle" id="mobile-menu-toggle">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M3 6H21V8H3V6ZM3 11H21V13H3V11ZM3 16H21V18H3V16Z" fill="currentColor"/>
+        </svg>
+    </div>
+
+    <!-- Mobile sidebar overlay -->
+    <div class="mobile-sidebar-overlay" id="mobile-sidebar-overlay"></div>
+    
+    <!-- Mobile sidebar -->
+    <div class="mobile-sidebar" id="mobile-sidebar">
+        <div class="mobile-sidebar-header">
+            <span class="mobile-sidebar-title">AfroTodo</span>
+            <button class="mobile-sidebar-close" id="mobile-sidebar-close">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+            </button>
+        </div>
+
+        <a href="/" class="mobile-sidebar-item">
+            <svg class="mobile-sidebar-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z" fill="currentColor"/>
+            </svg>
+            <span>Home</span>
+        </a>
+
+        <a href="" class="mobile-sidebar-item">
+            <svg class="mobile-sidebar-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" fill="currentColor"/>
+            </svg>
+            <span>Discover</span>
+        </a>
+
+        <a href="" class="mobile-sidebar-item">
+            <svg class="mobile-sidebar-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M21 5c-1.11-.35-2.33-.5-3.5-.5-1.95 0-4.05.4-5.5 1.5-1.45-1.1-3.55-1.5-5.5-1.5S2.45 4.9 1 6v14.65c0 .25.25.5.5.5.1 0 .15-.05.25-.05C3.1 20.45 5.05 20 6.5 20c1.95 0 4.05.4 5.5 1.5 1.35-.85 3.8-1.5 5.5-1.5 1.65 0 3.35.3 4.75 1.05.1.05.15.05.25.05.25 0 .5-.25.5-.5V6c-.6-.45-1.25-.75-2-1zm0 13.5c-1.1-.35-2.3-.5-3.5-.5-1.7 0-4.15.65-5.5 1.5V8c1.35-.85 3.8-1.5 5.5-1.5 1.2 0 2.4.15 3.5.5v11.5z" fill="currentColor"/>
+            </svg>
+            <span>Books</span>
+        </a> 
+
+        <a href="" class="mobile-sidebar-item">
+            <svg class="mobile-sidebar-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M7 14c-1.66 0-3 1.34-3 3 0 1.31-1.16 2-2 2 .92 1.22 2.49 2 4 2 2.21 0 4-1.79 4-4 0-1.66-1.34-3-3-3zm13.71-9.37l-1.34-1.34c-.39-.39-1.02-.39-1.41 0L9 12.25 11.75 15l8.96-8.96c.39-.39.39-1.02 0-1.41z" fill="currentColor"/>
+            </svg>
+            <span>Art</span>
+        </a>
+
+        <a href="" class="mobile-sidebar-item">
+            <svg class="mobile-sidebar-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M7 18c-1.1 0-1.99.9-1.99 2S5.9 22 7 22s2-.9 2-2-.9-2-2-2zM1 2v2h2l3.6 7.59-1.35 2.45c-.16.28-.25.61-.25.96 0 1.1.9 2 2 2h12v-2H7.42c-.14 0-.25-.11-.25-.25l.03-.12.9-1.63h7.45c.75 0 1.41-.41 1.75-1.03l3.58-6.49c.08-.14.12-.31.12-.48 0-.55-.45-1-1-1H5.21l-.94-2H1zm16 16c-1.1 0-1.99.9-1.99 2s.89 2 1.99 2 2-.9 2-2-.9-2-2-2z" fill="currentColor"/>
+            </svg>
+            <span>Shop</span>
+        </a>
+    </div>
+
+    
+    <div class="auth-area">
+        {% if user.is_authenticated %}
+        <div class="welcome-message">Welcome back, {{ user.username }}</div>
+        <a href="" style="text-decoration: none;">
+        <div class="auth-button" id="logout-button" data-text="Logout">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M17 7L15.6 8.4L18.2 11H8V13H18.2L15.6 15.6L17 17L22 12L17 7Z" fill="currentColor"/>
+                <path d="M4 19H12V21H4C2.9 21 2 20.1 2 19V5C2 3.9 2.9 3 4 3H12V5H4V19Z" fill="currentColor"/>
+            </svg>
+            <span class="tooltip">Logout</span>
+        </div></a>
+        {% else %}
+        <a href="" style="text-decoration: none;">
+        <div class="welcome-message">Register</div></a>
+        <a href="" style="text-decoration: none;">
+        <div class="welcome-messagen" id="login-button" >
+            <span class="welcome-message">Login</span>
+        </div></a>
+        {% endif %}
+    </div>
+
+    <div class="sidebar">
+        <a href="/">
+            <div class="sidebar-item">
+                <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z" fill="currentColor"/>
+                </svg>
+                <span class="tooltip">Home</span>
+            </div>
+        </a>
+
+        <a href="">
+            <div class="sidebar-item">
+                <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 10.9c-.61 0-1.1.49-1.1 1.1s.49 1.1 1.1 1.1c.61 0 1.1-.49 1.1-1.1s-.49-1.1-1.1-1.1zM12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm2.19 12.19L6 18l3.81-8.19L18 6l-3.81 8.19z" fill="currentColor"/>
+                </svg>
+                <span class="tooltip">Discover</span>
+            </div>
+        </a>
+
+        <a href="">
+            <div class="sidebar-item">
+                <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M21 5c-1.11-.35-2.33-.5-3.5-.5-1.95 0-4.05.4-5.5 1.5-1.45-1.1-3.55-1.5-5.5-1.5S2.45 4.9 1 6v14.65c0 .25.25.5.5.5.1 0 .15-.05.25-.05C3.1 20.45 5.05 20 6.5 20c1.95 0 4.05.4 5.5 1.5 1.35-.85 3.8-1.5 5.5-1.5 1.65 0 3.35.3 4.75 1.05.1.05.15.05.25.05.25 0 .5-.25.5-.5V6c-.6-.45-1.25-.75-2-1zm0 13.5c-1.1-.35-2.3-.5-3.5-.5-1.7 0-4.15.65-5.5 1.5V8c1.35-.85 3.8-1.5 5.5-1.5 1.2 0 2.4.15 3.5.5v11.5z" fill="currentColor"/>
+                </svg>
+                <span class="tooltip">Books</span>
+            </div>
+        </a>
+
+        <a href="">
+            <div class="sidebar-item">
+                <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M7 14c-1.66 0-3 1.34-3 3 0 1.31-1.16 2-2 2 .92 1.22 2.49 2 4 2 2.21 0 4-1.79 4-4 0-1.66-1.34-3-3-3zm13.71-9.37l-1.34-1.34c-.39-.39-1.02-.39-1.41 0L9 12.25 11.75 15l8.96-8.96c.39-.39.39-1.02 0-1.41z" fill="currentColor"/>
+                </svg>
+                <span class="tooltip">Art</span>
+            </div>
+        </a>
+
+        <a href="">
+            <div class="sidebar-item">
+                <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M7 18c-1.1 0-1.99.9-1.99 2S5.9 22 7 22s2-.9 2-2-.9-2-2-2zM1 2v2h2l3.6 7.59-1.35 2.45c-.16.28-.25.61-.25.96 0 1.1.9 2 2 2h12v-2H7.42c-.14 0-.25-.11-.25-.25l.03-.12.9-1.63h7.45c.75 0 1.41-.41 1.75-1.03l3.58-6.49c.08-.14.12-.31.12-.48 0-.55-.45-1-1-1H5.21l-.94-2H1zm16 16c-1.1 0-1.99.9-1.99 2s.89 2 1.99 2 2-.9 2-2-.9-2-2-2z" fill="currentColor"/>
+                </svg>
+                <span class="tooltip">Shop</span>
+            </div>
+        </a>
+    </div>
+
+    <div class="container">
+        <div class="content">
+            <div class="logo">
+                <span class="logo-a">A</span><span class="logo-f">f</span><span class="logo-r">r</span><span class="logo-o">o</span><span id="dynamic-text">Todo Search</span><span class="cursor"></span><span class="beta">beta</span>
+            </div>
+            <p class="description">Shop Black. Learn Black. Own the future.</p>
+            
+            <div class="search-container">
+                <form action="{% url 'searchengine:search' %}" method="get" id="search-form">
+                    <div class="search-box-wrapper">
+                        <input type="text" class="search-box" id="search-input" name="query" placeholder="Search or ask anything..." autocomplete="off">
+                        <input type="hidden" id="session-id-field" name="session_id" value="">
+                      
+                        <div class="action-buttons">
+                            <button type="submit" class="search-button" id="search-button">
+                                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M15.5 14H14.71L14.43 13.73C15.41 12.59 16 11.11 16 9.5C16 5.91 13.09 3 9.5 3C5.91 3 3 5.91 3 9.5C3 13.09 5.91 16 9.5 16C11.11 16 12.59 15.41 13.73 14.43L14 14.71V15.5L19 20.49L20.49 19L15.5 14ZM9.5 14C7.01 14 5 11.99 5 9.5C5 7.01 7.01 5 9.5 5C11.99 5 14 7.01 14 9.5C14 11.99 11.99 14 9.5 14Z" fill="currentColor"/>
+                                </svg>
+                            </button>
+                        </div> 
+                    </div>
+                    
+                    <div class="search-results" id="search-results"></div>
+                </form>
+            </div>
+
+            <div class="features">
+                <a href="" id="main-page-button">
+                    <div class="feature-card">
+                        <div class="feature-header">
+                            <h3 class="feature-title"> Business</h3>
+                            <div class="feature-icon">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M12 7V3H2V21H22V7H12ZM6 19H4V17H6V19ZM6 15H4V13H6V15ZM6 11H4V9H6V11ZM6 7H4V5H6V7ZM10 19H8V17H10V19ZM10 15H8V13H10V15ZM10 11H8V9H10V11ZM10 7H8V5H10V7ZM20 19H12V17H14V15H12V13H14V11H12V9H20V19ZM18 11H16V13H18V11ZM18 15H16V17H18V15Z" fill="#666"/>
+                                </svg>
+                            </div>
+                        </div>
+                        <div class="feature-content">Buy Black</div>
+                    </div>
+                </a>
+
+                <a href="" id="main-page-button">
+                    <div class="feature-card">
+                        <div class="feature-header">
+                            <h3 class="feature-title"> Culture</h3>
+                            <div class="feature-icon">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M12 2C17.5 2 22 6.5 22 12C22 13.8 21.2 15.4 20 16.5L18.3 14.8C19.3 14.1 20 12.6 20 12C20 7.6 16.4 4 12 4S4 7.6 4 12S7.6 20 12 20C12.6 20 14.1 19.3 14.8 18.3L16.5 20C15.4 21.2 13.8 22 12 22C6.5 22 2 17.5 2 12S6.5 2 12 2ZM7 9C8.1 9 9 8.1 9 7S8.1 5 7 5S5 5.9 5 7S5.9 9 7 9ZM12 6C13.1 6 14 5.1 14 4S13.1 2 12 2S10 2.9 10 4S10.9 6 12 6ZM17 9C18.1 9 19 8.1 19 7S18.1 5 17 5S15 5.9 15 7S15.9 9 17 9Z" fill="#666"/>
+                                </svg>
+                            </div>
+                        </div>
+                        <div class="feature-content">Heritage Lives</div>
+                    </div>
+                </a>
+
+                <a href="" id="main-page-button">
+                    <div class="feature-card">
+                        <div class="feature-header">
+                            <h3 class="feature-title"> Community</h3>
+                            <div class="feature-icon">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M16 4C18.21 4 20 5.79 20 8C20 10.21 18.21 12 16 12C13.79 12 12 10.21 12 8C12 5.79 13.79 4 16 4ZM9 6C10.66 6 12 7.34 12 9C12 10.66 10.66 12 9 12C7.34 12 6 10.66 6 9C6 7.34 7.34 6 9 6ZM16 14C18.67 14 24 15.33 24 18V20H8V18C8 15.33 13.33 14 16 14ZM9 14C9.22 14 9.47 14.01 9.75 14.03C8.65 14.79 8 15.79 8 17V20H0V18C0 15.33 5.33 14 9 14Z" fill="#666"/>
+                                </svg>
+                            </div>
+                        </div>
+                        <div class="feature-content">Unite Grow</div>
+                    </div>
+                </a>
+
+                <a href="" id="main-page-button">
+                    <div class="feature-card">
+                        <div class="feature-header">
+                            <h3 class="feature-title"> News</h3>
+                            <div class="feature-icon">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M3.5 18.49L9.5 12.48L13.5 16.48L22 6.92L20.59 5.51L13.5 13.48L9.5 9.48L2 16.99L3.5 18.49Z" fill="#666"/>
+                                </svg>
+                            </div>
+                        </div>
+                        <div class="feature-content">Our Stories</div>
+                    </div>
+                </a>
+
+                <a href="" id="main-page-button">
+                    <div class="feature-card">
+                        <div class="feature-header">
+                            <h3 class="feature-title"> Advocacy</h3>
+                            <div class="feature-icon">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M3 9V15H7L12 20V4L7 9H3ZM14 12C14 10.9 13.6 9.9 13 9.1V14.9C13.6 14.1 14 13.1 14 12ZM13 6.2V8.3C14.9 9.1 16 11 16 12S14.9 14.9 13 15.7V17.8C16 16.9 18 14.7 18 12S16 7.1 13 6.2Z" fill="#666"/>
+                                </svg>
+                            </div>
+                        </div>
+                        <div class="feature-content">Fight For Change</div>
+                    </div>
+                </a>
+
+                <a href="" id="main-page-button">
+                    <div class="feature-card">
+                        <div class="feature-header">
+                            <h3 class="feature-title"> Health</h3>
+                            <div class="feature-icon">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M12 21.35L10.55 20.03C5.4 15.36 2 12.27 2 8.5C2 5.41 4.42 3 7.5 3C9.24 3 10.91 3.81 12 5.08C13.09 3.81 14.76 3 16.5 3C19.58 3 22 5.41 22 8.5C22 12.27 18.6 15.36 13.45 20.03L12 21.35Z" fill="#666"/>
+                                </svg>
+                            </div>
+                        </div>
+                        <div class="feature-content">Heal & Grow</div>
+                    </div>
+                </a>
+            </div>
+        </div>
+
+        <div class="footer">
+            <div class="footer-links">
+            </div>
+        </div>
+    </div>
+
+<!-- Session Management Script -->
+<script>
+class SessionManager {
+    constructor() {
+        this.sessionId = null;
+        this.isInitialized = false;
+    }
+
+    initSession() {
+        if (this.isInitialized) return this.sessionId;
+
+        const existingSessionId = localStorage.getItem('sessionId');
+        
+        if (existingSessionId) {
+            this.sessionId = existingSessionId;
+            this.updateSessionActivity();
+        } else {
+            this.createNewSession();
+        }
+
+        this.isInitialized = true;
+        return this.sessionId;
+    }
+
+    createNewSession() {
+        this.sessionId = this.generateSessionId();
+        
+        const sessionData = {
+            session_id: this.sessionId,
+            device_type: this.getDeviceType(),
+            browser: navigator.userAgent,
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+            url: window.location.href,
+            referrer: document.referrer || 'direct',
+            created_at: new Date().toISOString(),
+            page_views: 1
+        };
+
+        localStorage.setItem('sessionId', this.sessionId);
+        localStorage.setItem('sessionData', JSON.stringify(sessionData));
+        this.sendSessionToServer(sessionData);
+    }
+
+    updateSessionActivity() {
+        const existingData = JSON.parse(localStorage.getItem('sessionData') || '{}');
+        const updateData = {
+            session_id: this.sessionId,
+            url: window.location.href,
+            referrer: document.referrer || 'direct',
+            last_activity: new Date().toISOString(),
+            page_views: (existingData.page_views || 0) + 1
+        };
+
+        const updatedSessionData = { ...existingData, ...updateData };
+        localStorage.setItem('sessionData', JSON.stringify(updatedSessionData));
+        this.sendSessionUpdate(updateData);
+    }
+
+    generateSessionId() {
+        if (self.crypto && self.crypto.randomUUID) {
+            return self.crypto.randomUUID();
+        }
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+            const r = Math.random() * 16 | 0;
+            const v = c == 'x' ? r : (r & 0x3 | 0x8);
+            return v.toString(16);
+        });
+    }
+
+    getDeviceType() {
+        if (/tablet|ipad/i.test(navigator.userAgent)) return 'tablet';
+        if (/mobile|android|iphone/i.test(navigator.userAgent)) return 'mobile';
+        return 'desktop';
+    }
+
+    async sendSessionToServer(sessionData) {
+        try {
+            await fetch('/api/cache-redis-session/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': this.getCsrfToken()
+                },
+                body: JSON.stringify(sessionData)
+            });
+        } catch (error) {
+            console.warn('Session creation error:', error);
+        }
+    }
+
+    async sendSessionUpdate(updateData) {
+        try {
+            await fetch('/api/update-session-activity/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': this.getCsrfToken()
+                },
+                body: JSON.stringify(updateData)
+            });
+        } catch (error) {
+            console.warn('Session update error:', error);
+        }
+    }
+
+    getCsrfToken() {
+        const match = document.cookie.match(/csrftoken=([^;]+)/);
+        return match ? match[1] : '';
+    }
+
+    getSessionId() { return this.sessionId; }
+    hasSession() { return !!this.sessionId; }
+    
+    clearSession() {
+        localStorage.removeItem('sessionId');
+        localStorage.removeItem('sessionData');
+        this.sessionId = null;
+        this.isInitialized = false;
+    }
+}
+
+const sessionManager = new SessionManager();
+
+document.addEventListener('DOMContentLoaded', function() {
+    const sessionId = sessionManager.initSession();
+    const sessionField = document.getElementById('session-id-field');
+    if (sessionField && sessionId) {
+        sessionField.value = sessionId;
+    }
+});
+
+window.sessionManager = sessionManager;
+</script>
+
+<!-- ==================== SIMPLIFIED SEARCH SCRIPT ==================== -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // ==================== TEXT ANIMATION ====================
+    const dynamicText = document.getElementById('dynamic-text');
+    const cursor = document.querySelector('.cursor');
+    const textSequence = ['Todo Search', ' Black Business', ' Culture', ' History'];
+    let currentText = 'Todo Search';
+    let sequenceIndex = 0;
+    let eraseTimer, typeTimer;
+
+    function changeText() {
+        if (cursor) cursor.style.display = 'inline-block';
+        let eraseIndex = currentText.length - 1;
+        
+        eraseTimer = setInterval(function() {
+            if (eraseIndex >= 0) {
+                currentText = currentText.substring(0, eraseIndex);
+                if (dynamicText) dynamicText.textContent = currentText;
+                eraseIndex--;
+            } else {
+                clearInterval(eraseTimer);
+                currentText = "";
+                let typeIndex = 0;
+                const nextText = textSequence[sequenceIndex];
+
+                typeTimer = setInterval(function() {
+                    if (typeIndex < nextText.length) {
+                        currentText += nextText.charAt(typeIndex);
+                        if (dynamicText) dynamicText.textContent = currentText;
+                        typeIndex++;
+                    } else {
+                        clearInterval(typeTimer);
+                        setTimeout(() => { if (cursor) cursor.style.display = 'none'; }, 1000);
+                        sequenceIndex = (sequenceIndex + 1) % textSequence.length;
+                        setTimeout(changeText, 5000);
+                    }
+                }, 100);
+            }
+        }, 80);
+    }
+
+    if (dynamicText) setTimeout(changeText, 1000);
+
+    // ==================== MOBILE SIDEBAR ====================
+    const mobileMenuToggle = document.getElementById('mobile-menu-toggle');
+    const mobileSidebar = document.getElementById('mobile-sidebar');
+    const mobileSidebarOverlay = document.getElementById('mobile-sidebar-overlay');
+    const mobileSidebarClose = document.getElementById('mobile-sidebar-close');
+
+    function openMobileSidebar() {
+        if (mobileSidebar) mobileSidebar.classList.add('open');
+        if (mobileSidebarOverlay) mobileSidebarOverlay.classList.add('show');
+        document.body.style.overflow = 'hidden';
+    }
+
+    function closeMobileSidebar() {
+        if (mobileSidebar) mobileSidebar.classList.remove('open');
+        if (mobileSidebarOverlay) mobileSidebarOverlay.classList.remove('show');
+        document.body.style.overflow = '';
+    }
+
+    if (mobileMenuToggle) mobileMenuToggle.addEventListener('click', openMobileSidebar);
+    if (mobileSidebarClose) mobileSidebarClose.addEventListener('click', closeMobileSidebar);
+    if (mobileSidebarOverlay) mobileSidebarOverlay.addEventListener('click', closeMobileSidebar);
+
+    document.querySelectorAll('.mobile-sidebar-item').forEach(item => {
+        item.addEventListener('click', closeMobileSidebar);
+    });
+
+    // ==================== LOGIN/LOGOUT ====================
+    const loginButton = document.getElementById('login-button');
+    const logoutButton = document.getElementById('logout-button');
+
+    if (loginButton) {
+        loginButton.addEventListener('click', function() {
+            window.location.href = "/login/";
+        });
+    }
+
+    if (logoutButton) {
+        logoutButton.addEventListener('click', function() {
+            window.location.href = "/logout/";
+        });
+    }
+
+    // ==================== SEARCH AUTOCOMPLETE ====================
+    const searchInput = document.getElementById('search-input');
+    const searchResults = document.getElementById('search-results');
+    const searchForm = document.getElementById('search-form');
+    
+    if (!searchInput || !searchResults || !searchForm) return;
+
+    let debounceTimer = null;
+    let selectedIndex = -1;
+    let currentSuggestions = [];
+
+    // Debounced input handler
+    searchInput.addEventListener('input', function() {
+        clearTimeout(debounceTimer);
+        const query = this.value.trim();
+        
+        if (query.length < 2) {
+            hideDropdown();
+            return;
+        }
+        
+        debounceTimer = setTimeout(() => fetchSuggestions(query), 150);
+    });
+
+    // Fetch suggestions from API
+    async function fetchSuggestions(query) {
+        try {
+            const response = await fetch(`/api/search/?q=${encodeURIComponent(query)}`);
+            if (!response.ok) throw new Error('Search failed');
+            
+            const data = await response.json();
+            currentSuggestions = data.suggestions || [];
+            renderDropdown(currentSuggestions);
+        } catch (error) {
+            console.error('Search error:', error);
+            hideDropdown();
+        }
+    }
+
+    // Render dropdown - simple and fast
+    function renderDropdown(suggestions) {
+        if (!suggestions.length) {
+            searchResults.innerHTML = '<div class="suggestion-item no-results">No results found</div>';
+            searchResults.style.display = 'block';
+            selectedIndex = -1;
+            return;
+        }
+
+        searchResults.innerHTML = suggestions.map((s, i) => `
+            <div class="suggestion-item" data-index="${i}">
+                <span class="suggestion-display">${escapeHtml(s.display)}</span>
+                ${s.description ? `<span class="suggestion-desc">${escapeHtml(s.description)}</span>` : ''}
+            </div>
+        `).join('');
+        
+        searchResults.style.display = 'block';
+        selectedIndex = -1;
+        
+        // Add click handlers
+        searchResults.querySelectorAll('.suggestion-item[data-index]').forEach(item => {
+            item.addEventListener('click', () => selectSuggestion(parseInt(item.dataset.index)));
+            item.addEventListener('mouseenter', function() {
+                clearSelection();
+                this.classList.add('selected');
+                selectedIndex = parseInt(this.dataset.index);
+            });
+        });
+    }
+
+    // Select a suggestion
+    function selectSuggestion(index) {
+        if (index >= 0 && index < currentSuggestions.length) {
+            searchInput.value = currentSuggestions[index].text;
+            hideDropdown();
+            searchForm.submit();
+        }
+    }
+
+    // Keyboard navigation
+    searchInput.addEventListener('keydown', function(e) {
+        const items = searchResults.querySelectorAll('.suggestion-item[data-index]');
+        if (!items.length || searchResults.style.display === 'none') return;
+
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            selectedIndex = (selectedIndex + 1) % items.length;
+            updateSelection(items);
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            selectedIndex = selectedIndex <= 0 ? items.length - 1 : selectedIndex - 1;
+            updateSelection(items);
+        } else if (e.key === 'Enter' && selectedIndex >= 0) {
+            e.preventDefault();
+            selectSuggestion(selectedIndex);
+        } else if (e.key === 'Escape') {
+            hideDropdown();
+        }
+    });
+
+    function updateSelection(items) {
+        clearSelection();
+        if (items[selectedIndex]) {
+            items[selectedIndex].classList.add('selected');
+            items[selectedIndex].scrollIntoView({ block: 'nearest' });
+        }
+    }
+
+    function clearSelection() {
+        searchResults.querySelectorAll('.suggestion-item').forEach(el => el.classList.remove('selected'));
+    }
+
+    function hideDropdown() {
+        searchResults.style.display = 'none';
+        selectedIndex = -1;
+        currentSuggestions = [];
+    }
+
+    function escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    // Hide on outside click
+    document.addEventListener('click', function(e) {
+        if (!searchResults.contains(e.target) && e.target !== searchInput) {
+            hideDropdown();
+        }
+    });
+
+    // Show on focus if has content
+    searchInput.addEventListener('focus', function() {
+        if (this.value.trim().length >= 2) {
+            fetchSuggestions(this.value.trim());
+        }
+    });
+
+    // Form submit validation
+    searchForm.addEventListener('submit', function(e) {
+        if (!searchInput.value.trim()) {
+            e.preventDefault();
+            return false;
+        }
+        hideDropdown();
+    });
+
+    // Cleanup on page unload
+    window.addEventListener('beforeunload', function() {
+        clearTimeout(debounceTimer);
+        clearInterval(eraseTimer);
+        clearInterval(typeTimer);
+    });
+});
+</script>
+
+</body>
+</html>

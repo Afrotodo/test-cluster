@@ -13,6 +13,7 @@ import typesense
 from typing import Dict, List, Tuple, Optional
 import re
 from datetime import datetime
+from decouple import config
 
 import re
 
@@ -219,13 +220,15 @@ def log_search_event(
 
 
 
+
+
 # === CLIENT SETUP  PART 1  ===
 client = typesense.Client({
-    'api_key': 'm07ecySfbgRSS6gF6p45K4jliMMwVoE7',
+    'api_key':config('TYPESENSE_API_KEY'),
     'nodes': [{
-        'host': 'gb890veru46kj7yfp-1.a1.typesense.net',
-        'port': '443',
-        'protocol': 'https'
+        'host': config('TYPESENSE_HOST'),
+        'port': config('TYPESENSE_PORT'),
+        'protocol': config('TYPESENSE_PROTOCOL')
     }],
     'connection_timeout_seconds': 5
 })
