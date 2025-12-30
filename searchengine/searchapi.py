@@ -10199,6 +10199,116 @@ def validate_word(
 # GET SUGGESTIONS (UNIFIED SEARCH)
 # =============================================================================
 
+# def get_suggestions(
+#     input_text: str,
+#     limit: int = 10,
+#     max_distance: int = 2,
+#     category: Optional[str] = None
+# ) -> Dict[str, Any]:
+#     """
+#     Unified suggestion function using RediSearch.
+#     Tries: Exact -> Prefix -> Fuzzy
+#     """
+#     client = RedisLookupTable.get_client()
+    
+#     response = {
+#         'success': True,
+#         'input': input_text,
+#         'suggestions': [],
+#         'exact_match': False,
+#         'tier_used': None,
+#         'error': None
+#     }
+    
+#     if not client:
+#         response['success'] = False
+#         response['error'] = 'Redis connection failed'
+#         return response
+    
+#     if not input_text or not input_text.strip():
+#         response['success'] = False
+#         response['error'] = 'Empty input'
+#         return response
+    
+#     input_lower = input_text.lower().strip()
+    
+#     try:
+#         # === TIER 1: EXACT MATCH ===
+#         exact_matches = get_exact_term_matches(input_lower)
+        
+#         if exact_matches:
+#             response['exact_match'] = True
+#             response['tier_used'] = 'exact'
+            
+#             for match in exact_matches[:limit]:
+#                 match['distance'] = 0
+#                 match['score'] = -match.get('rank', 0)
+            
+#             response['suggestions'] = exact_matches[:limit]
+#             return response
+        
+#         # === TIER 2: PREFIX MATCH ===
+#         prefix_results = get_prefix_matches(input_lower, limit=limit * 3)
+        
+#         if prefix_results:
+#             response['tier_used'] = 'prefix'
+            
+#             for item in prefix_results:
+#                 distance = damerau_levenshtein_distance(input_lower, item['term'].lower())
+#                 item['distance'] = distance
+#                 item['score'] = calculate_score(distance, item.get('rank', 0))
+            
+#             prefix_results.sort(key=lambda x: x['score'])
+#             response['suggestions'] = prefix_results[:limit]
+#             return response
+        
+#         # === TIER 3: FUZZY MATCH ===
+#         fuzzy_results = get_fuzzy_matches(input_lower, limit=limit * 2, max_distance=max_distance)
+        
+#         if fuzzy_results:
+#             response['tier_used'] = 'fuzzy'
+            
+#             filtered = []
+#             for item in fuzzy_results:
+#                 if item.get('distance', 99) <= max_distance:
+#                     item['score'] = calculate_score(item['distance'], item.get('rank', 0))
+#                     filtered.append(item)
+            
+#             filtered.sort(key=lambda x: x['score'])
+#             response['suggestions'] = filtered[:limit]
+#             return response
+        
+#         # === TIER 4: SHORTER PREFIX (fallback) ===
+#         for prefix_len in [3, 2]:
+#             if len(input_lower) >= prefix_len:
+#                 short_prefix = input_lower[:prefix_len]
+#                 short_results = get_prefix_matches(short_prefix, limit=50)
+                
+#                 if short_results:
+#                     response['tier_used'] = f'prefix_short_{prefix_len}'
+                    
+#                     filtered = []
+#                     for item in short_results:
+#                         distance = damerau_levenshtein_distance(input_lower, item['term'].lower())
+#                         if distance <= max_distance:
+#                             item['distance'] = distance
+#                             item['score'] = calculate_score(distance, item.get('rank', 0))
+#                             filtered.append(item)
+                    
+#                     if filtered:
+#                         filtered.sort(key=lambda x: x['score'])
+#                         response['suggestions'] = filtered[:limit]
+#                         return response
+        
+#         # === NO RESULTS ===
+#         response['tier_used'] = 'none'
+#         response['suggestions'] = []
+#         return response
+        
+#     except Exception as e:
+#         response['success'] = False
+#         response['error'] = str(e)
+#         return response
 def get_suggestions(
     input_text: str,
     limit: int = 10,
@@ -10207,7 +10317,8 @@ def get_suggestions(
 ) -> Dict[str, Any]:
     """
     Unified suggestion function using RediSearch.
-    Tries: Exact -> Prefix -> Fuzzy
+    Returns COMBINED results: Exact + Prefix + Fuzzy
+    Sorted by rank (highest first).
     """
     client = RedisLookupTable.get_client()
     
@@ -10233,82 +10344,88 @@ def get_suggestions(
     input_lower = input_text.lower().strip()
     
     try:
+        all_results = []
+        seen_terms = set()
+        tiers_used = []
+        
         # === TIER 1: EXACT MATCH ===
         exact_matches = get_exact_term_matches(input_lower)
         
         if exact_matches:
             response['exact_match'] = True
-            response['tier_used'] = 'exact'
+            tiers_used.append('exact')
             
-            for match in exact_matches[:limit]:
-                match['distance'] = 0
-                match['score'] = -match.get('rank', 0)
-            
-            response['suggestions'] = exact_matches[:limit]
-            return response
+            for match in exact_matches:
+                term_lower = match.get('term', '').lower()
+                if term_lower not in seen_terms:
+                    match['distance'] = 0
+                    match['score'] = -match.get('rank', 0)  # Negative so higher rank = lower score = better
+                    all_results.append(match)
+                    seen_terms.add(term_lower)
         
-        # === TIER 2: PREFIX MATCH ===
+        # === TIER 2: PREFIX MATCH (always run, don't stop at exact) ===
         prefix_results = get_prefix_matches(input_lower, limit=limit * 3)
         
         if prefix_results:
-            response['tier_used'] = 'prefix'
+            tiers_used.append('prefix')
             
             for item in prefix_results:
-                distance = damerau_levenshtein_distance(input_lower, item['term'].lower())
-                item['distance'] = distance
-                item['score'] = calculate_score(distance, item.get('rank', 0))
-            
-            prefix_results.sort(key=lambda x: x['score'])
-            response['suggestions'] = prefix_results[:limit]
-            return response
+                term_lower = item.get('term', '').lower()
+                if term_lower not in seen_terms:
+                    distance = damerau_levenshtein_distance(input_lower, term_lower)
+                    item['distance'] = distance
+                    item['score'] = calculate_score(distance, item.get('rank', 0))
+                    all_results.append(item)
+                    seen_terms.add(term_lower)
         
-        # === TIER 3: FUZZY MATCH ===
-        fuzzy_results = get_fuzzy_matches(input_lower, limit=limit * 2, max_distance=max_distance)
-        
-        if fuzzy_results:
-            response['tier_used'] = 'fuzzy'
+        # === TIER 3: FUZZY MATCH (only if we have few results) ===
+        if len(all_results) < limit:
+            fuzzy_results = get_fuzzy_matches(input_lower, limit=limit * 2, max_distance=max_distance)
             
-            filtered = []
-            for item in fuzzy_results:
-                if item.get('distance', 99) <= max_distance:
-                    item['score'] = calculate_score(item['distance'], item.get('rank', 0))
-                    filtered.append(item)
-            
-            filtered.sort(key=lambda x: x['score'])
-            response['suggestions'] = filtered[:limit]
-            return response
-        
-        # === TIER 4: SHORTER PREFIX (fallback) ===
-        for prefix_len in [3, 2]:
-            if len(input_lower) >= prefix_len:
-                short_prefix = input_lower[:prefix_len]
-                short_results = get_prefix_matches(short_prefix, limit=50)
+            if fuzzy_results:
+                tiers_used.append('fuzzy')
                 
-                if short_results:
-                    response['tier_used'] = f'prefix_short_{prefix_len}'
-                    
-                    filtered = []
-                    for item in short_results:
-                        distance = damerau_levenshtein_distance(input_lower, item['term'].lower())
-                        if distance <= max_distance:
-                            item['distance'] = distance
-                            item['score'] = calculate_score(distance, item.get('rank', 0))
-                            filtered.append(item)
-                    
-                    if filtered:
-                        filtered.sort(key=lambda x: x['score'])
-                        response['suggestions'] = filtered[:limit]
-                        return response
+                for item in fuzzy_results:
+                    term_lower = item.get('term', '').lower()
+                    if term_lower not in seen_terms:
+                        if item.get('distance', 99) <= max_distance:
+                            item['score'] = calculate_score(item['distance'], item.get('rank', 0))
+                            all_results.append(item)
+                            seen_terms.add(term_lower)
         
-        # === NO RESULTS ===
-        response['tier_used'] = 'none'
-        response['suggestions'] = []
+        # === SORT ALL RESULTS ===
+        # Sort by: rank (highest first), then distance (lowest first)
+        all_results.sort(key=lambda x: (-x.get('rank', 0), x.get('distance', 99)))
+        
+        response['suggestions'] = all_results[:limit]
+        response['tier_used'] = '+'.join(tiers_used) if tiers_used else 'none'
+        
         return response
         
     except Exception as e:
         response['success'] = False
         response['error'] = str(e)
         return response
+# ```
+
+# ## What Changed
+
+# | Before | After |
+# |--------|-------|
+# | Find exact → STOP | Find exact → CONTINUE |
+# | Returns only 1 result type | Combines exact + prefix + fuzzy |
+# | Sort by score (distance - rank) | Sort by rank first, then distance |
+# | Stops at first tier with results | Runs all tiers, deduplicates |
+
+# ## After Replacing
+
+# 1. Restart Django
+# 2. Type "africa" 
+# 3. Should now see: Africa, African, African American, etc. (sorted by rank)
+
+# **Note:** You still need to add "african" to Redis for it to appear:
+# ```
+# HSET term:african:dictionary_word term "african" display "African" category "Dictionary Word" description "" pos "['adjective']" entity_type "unigram" rank "1000000"
 
 
 # =============================================================================
