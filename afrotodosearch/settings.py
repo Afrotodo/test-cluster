@@ -131,12 +131,3 @@ STATIC_URL = 'static/'
 
 STATICFILES_DIRS = [os.path.join(BASE_DIR, 'main/static') ,]
 
-# CACHES = {
-#     "default": {
-#         "BACKEND": "django_redis.cache.RedisCache",
-#         "LOCATION": "redis://:Uipz870TD2x4x8P3oggrqWSDH9UuWdhi@redis-10542.fcrce172.us-east-1-1.ec2.redns.redis-cloud.com:10542/0",
-#         "OPTIONS": {
-#             "CLIENT_CLASS": "django_redis.client.DefaultClient",
-#         }
-#     }
-# }

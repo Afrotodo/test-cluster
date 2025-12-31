@@ -1,0 +1,1580 @@
+<!DOCTYPE html>
+<html>
+<head>
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-75PTNSEVFH"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-75PTNSEVFH');
+</script>
+
+    <title>AfroTodo - Discover Black Business, Culture & Community</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="description" content="Ask the community anything about Black business, culture & wellness. Discover Black-owned businesses, HBCU resources, health providers, and more.">
+    
+    <!-- Google Fonts - Distinctive Typography -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700;800&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            /* Pan-African inspired palette with warmth */
+            --black: #1a1a1a;
+            --green: #2d6a4f;
+            --green-light: #40916c;
+            --gold: #d4a03a;
+            --gold-light: #e9c46a;
+            --red: #bc4749;
+            --red-deep: #9b2226;
+            --cream: #faf8f5;
+            --warm-white: #fffef9;
+            --gray-100: #f5f3f0;
+            --gray-200: #e8e4df;
+            --gray-300: #d4cfc8;
+            --gray-500: #8a8279;
+            --gray-700: #4a4640;
+            
+            /* Typography */
+            --font-display: 'Playfair Display', Georgia, serif;
+            --font-body: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+            
+            /* Spacing */
+            --space-xs: 4px;
+            --space-sm: 8px;
+            --space-md: 16px;
+            --space-lg: 24px;
+            --space-xl: 32px;
+            --space-2xl: 48px;
+            --space-3xl: 64px;
+            
+            /* Transitions */
+            --transition-fast: 150ms ease;
+            --transition-base: 250ms ease;
+            --transition-slow: 400ms ease;
+        }
+
+        @viewport {
+            width: device-width;
+            zoom: 1.0;
+            user-zoom: fixed;
+        }
+
+        *, *::before, *::after {
+            box-sizing: border-box;
+        }
+
+        body, html {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            font-family: var(--font-body);
+            color: var(--black);
+            background-color: var(--cream);
+            overflow-x: hidden;
+            width: 100%;
+            position: relative;
+            -webkit-text-size-adjust: 100%;
+            line-height: 1.6;
+        }
+
+        /* Subtle background texture */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: 
+                radial-gradient(circle at 20% 80%, rgba(45, 106, 79, 0.03) 0%, transparent 50%),
+                radial-gradient(circle at 80% 20%, rgba(212, 160, 58, 0.03) 0%, transparent 50%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* ==================== LAYOUT ==================== */
+        .page-wrapper {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            z-index: 1;
+        }
+
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: var(--space-xl) var(--space-lg);
+            padding-top: 80px;
+            min-height: calc(100vh - 120px);
+        }
+
+        /* ==================== HEADER ==================== */
+        .header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: var(--space-md) var(--space-lg);
+            background: rgba(250, 248, 245, 0.9);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--gray-200);
+            z-index: 100;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: var(--space-md);
+        }
+
+        .menu-toggle {
+            display: none;
+            width: 40px;
+            height: 40px;
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            padding: var(--space-sm);
+            border-radius: 8px;
+            color: var(--gray-700);
+            transition: background var(--transition-fast);
+        }
+
+        .menu-toggle:hover {
+            background: var(--gray-100);
+        }
+
+        .header-logo {
+            font-family: var(--font-display);
+            font-size: 24px;
+            font-weight: 700;
+            text-decoration: none;
+            display: flex;
+            align-items: baseline;
+            gap: 2px;
+        }
+
+        .header-logo .logo-a { color: var(--black); }
+        .header-logo .logo-f { color: var(--green); }
+        .header-logo .logo-r { color: var(--gold); }
+        .header-logo .logo-o { color: var(--red); }
+        .header-logo .logo-text { color: var(--black); }
+
+        .header-nav {
+            display: flex;
+            gap: var(--space-xs);
+        }
+
+        .nav-link {
+            padding: var(--space-sm) var(--space-md);
+            text-decoration: none;
+            color: var(--gray-700);
+            font-size: 14px;
+            font-weight: 500;
+            border-radius: 8px;
+            transition: all var(--transition-fast);
+        }
+
+        .nav-link:hover {
+            background: var(--gray-100);
+            color: var(--black);
+        }
+
+        .nav-link.active {
+            background: var(--black);
+            color: var(--warm-white);
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: var(--space-sm);
+        }
+
+        .auth-link {
+            padding: var(--space-sm) var(--space-md);
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
+            border-radius: 8px;
+            transition: all var(--transition-fast);
+        }
+
+        .auth-link.login {
+            color: var(--gray-700);
+        }
+
+        .auth-link.login:hover {
+            color: var(--black);
+            background: var(--gray-100);
+        }
+
+        .auth-link.signup {
+            background: var(--black);
+            color: var(--warm-white);
+        }
+
+        .auth-link.signup:hover {
+            background: var(--gray-700);
+        }
+
+        .user-greeting {
+            font-size: 14px;
+            color: var(--gray-700);
+            padding: var(--space-sm) var(--space-md);
+            background: var(--gray-100);
+            border-radius: 20px;
+        }
+
+        /* ==================== HERO SECTION ==================== */
+        .hero {
+            text-align: center;
+            max-width: 720px;
+            width: 100%;
+            margin-bottom: var(--space-2xl);
+        }
+
+        .hero-logo {
+            font-family: var(--font-display);
+            font-size: 56px;
+            font-weight: 800;
+            margin-bottom: var(--space-md);
+            letter-spacing: -1px;
+        }
+
+        .hero-logo .logo-a { color: var(--black); }
+        .hero-logo .logo-f { color: var(--green); }
+        .hero-logo .logo-r { color: var(--gold); }
+        .hero-logo .logo-o { color: var(--red); }
+        .hero-logo .logo-text { color: var(--black); }
+
+        .beta-badge {
+            display: inline-block;
+            font-family: var(--font-body);
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--green);
+            background: rgba(45, 106, 79, 0.1);
+            padding: 3px 8px;
+            border-radius: 4px;
+            vertical-align: super;
+            margin-left: 8px;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+
+        .hero-tagline {
+            font-family: var(--font-display);
+            font-size: 22px;
+            font-weight: 600;
+            color: var(--gray-700);
+            margin-bottom: var(--space-lg);
+            line-height: 1.4;
+        }
+
+        .hero-tagline em {
+            font-style: normal;
+            color: var(--green);
+        }
+
+        .hero-subtitle {
+            font-size: 16px;
+            color: var(--gray-500);
+            max-width: 480px;
+            margin: 0 auto;
+        }
+
+        /* ==================== SEARCH SECTION ==================== */
+        .search-section {
+            width: 100%;
+            max-width: 640px;
+            margin-bottom: var(--space-2xl);
+        }
+
+        .search-container {
+            position: relative;
+        }
+
+        .search-box-wrapper {
+            position: relative;
+            background: var(--warm-white);
+            border: 2px solid var(--gray-200);
+            border-radius: 16px;
+            box-shadow: 
+                0 4px 6px -1px rgba(0, 0, 0, 0.05),
+                0 10px 20px -5px rgba(0, 0, 0, 0.05);
+            transition: all var(--transition-base);
+            overflow: hidden;
+        }
+
+        .search-box-wrapper:hover {
+            border-color: var(--gray-300);
+            box-shadow: 
+                0 4px 6px -1px rgba(0, 0, 0, 0.08),
+                0 10px 25px -5px rgba(0, 0, 0, 0.08);
+        }
+
+        .search-box-wrapper:focus-within {
+            border-color: var(--green);
+            box-shadow: 
+                0 0 0 3px rgba(45, 106, 79, 0.1),
+                0 10px 25px -5px rgba(0, 0, 0, 0.1);
+        }
+
+        .search-inner {
+            display: flex;
+            align-items: center;
+            padding: var(--space-sm) var(--space-md);
+        }
+
+        .search-icon {
+            width: 24px;
+            height: 24px;
+            color: var(--gray-500);
+            flex-shrink: 0;
+            margin-right: var(--space-sm);
+        }
+
+        .search-box {
+            flex: 1;
+            height: 52px;
+            border: none;
+            outline: none;
+            font-family: var(--font-body);
+            font-size: 17px;
+            color: var(--black);
+            background: transparent;
+            padding: 0 var(--space-sm);
+            -webkit-appearance: none;
+        }
+
+        .search-box::placeholder {
+            color: var(--gray-500);
+            font-style: italic;
+        }
+
+        .search-button {
+            width: 44px;
+            height: 44px;
+            border: none;
+            background: var(--black);
+            border-radius: 10px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--warm-white);
+            flex-shrink: 0;
+            transition: all var(--transition-fast);
+        }
+
+        .search-button:hover {
+            background: var(--gray-700);
+            transform: scale(1.02);
+        }
+
+        .search-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .search-button svg {
+            width: 20px;
+            height: 20px;
+        }
+
+        /* Search Results Dropdown */
+        .search-results {
+            position: absolute;
+            width: 100%;
+            background: var(--warm-white);
+            border-radius: 12px;
+            border: 1px solid var(--gray-200);
+            box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.15);
+            margin-top: var(--space-sm);
+            display: none;
+            z-index: 100;
+            max-height: 320px;
+            overflow-y: auto;
+            text-align: left;
+        }
+
+        .search-results .suggestion-item {
+            padding: var(--space-md);
+            cursor: pointer;
+            border-bottom: 1px solid var(--gray-100);
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            transition: background var(--transition-fast);
+        }
+
+        .search-results .suggestion-item:last-child {
+            border-bottom: none;
+        }
+
+        .search-results .suggestion-item:hover,
+        .search-results .suggestion-item.selected {
+            background: var(--gray-100);
+        }
+
+        .search-results .suggestion-item.no-results {
+            color: var(--gray-500);
+            cursor: default;
+            text-align: center;
+            padding: var(--space-lg);
+        }
+
+        .search-results .suggestion-display {
+            font-weight: 600;
+            color: var(--black);
+        }
+
+        .search-results .suggestion-desc {
+            font-size: 13px;
+            color: var(--gray-500);
+            line-height: 1.4;
+        }
+
+        /* ==================== COMMUNITY QUESTIONS ==================== */
+        .community-section {
+            width: 100%;
+            max-width: 640px;
+        }
+
+        .section-header {
+            display: flex;
+            align-items: center;
+            gap: var(--space-sm);
+            margin-bottom: var(--space-md);
+        }
+
+        .section-icon {
+            width: 20px;
+            height: 20px;
+            color: var(--gold);
+        }
+
+        .section-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--gray-500);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .question-list {
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-sm);
+        }
+
+        .question-card {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: var(--space-md) var(--space-lg);
+            background: var(--warm-white);
+            border: 1px solid var(--gray-200);
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all var(--transition-fast);
+            text-decoration: none;
+            color: inherit;
+        }
+
+        .question-card:hover {
+            border-color: var(--gray-300);
+            box-shadow: 0 4px 12px -4px rgba(0, 0, 0, 0.08);
+            transform: translateY(-1px);
+        }
+
+        .question-text {
+            font-size: 15px;
+            color: var(--black);
+            font-weight: 500;
+        }
+
+        .question-text::before {
+            content: '"';
+            color: var(--green);
+            font-family: var(--font-display);
+            font-size: 18px;
+            margin-right: 2px;
+        }
+
+        .question-text::after {
+            content: '"';
+            color: var(--green);
+            font-family: var(--font-display);
+            font-size: 18px;
+            margin-left: 2px;
+        }
+
+        .question-meta {
+            display: flex;
+            align-items: center;
+            gap: var(--space-xs);
+            font-size: 13px;
+            color: var(--gray-500);
+            flex-shrink: 0;
+            margin-left: var(--space-md);
+        }
+
+        .answer-count {
+            background: var(--gray-100);
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-weight: 500;
+        }
+
+        /* ==================== CATEGORY PILLS ==================== */
+        .categories-section {
+            width: 100%;
+            max-width: 720px;
+            margin-top: var(--space-2xl);
+        }
+
+        .category-pills {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: var(--space-sm);
+        }
+
+        .category-pill {
+            display: flex;
+            align-items: center;
+            gap: var(--space-sm);
+            padding: var(--space-sm) var(--space-md);
+            background: var(--warm-white);
+            border: 1px solid var(--gray-200);
+            border-radius: 100px;
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--gray-700);
+            text-decoration: none;
+            transition: all var(--transition-fast);
+            cursor: pointer;
+        }
+
+        .category-pill:hover {
+            border-color: var(--gray-300);
+            background: var(--gray-100);
+            transform: translateY(-1px);
+        }
+
+        .category-pill .pill-icon {
+            width: 18px;
+            height: 18px;
+        }
+
+        .category-pill.business .pill-icon { color: var(--green); }
+        .category-pill.culture .pill-icon { color: var(--gold); }
+        .category-pill.health .pill-icon { color: var(--red); }
+        .category-pill.news .pill-icon { color: #4a90d9; }
+        .category-pill.community .pill-icon { color: #9b59b6; }
+        .category-pill.advocacy .pill-icon { color: var(--red-deep); }
+
+        /* ==================== FOOTER ==================== */
+        .footer {
+            padding: var(--space-xl) var(--space-lg);
+            border-top: 1px solid var(--gray-200);
+            background: var(--warm-white);
+        }
+
+        .footer-content {
+            max-width: 900px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: var(--space-md);
+        }
+
+        .footer-brand {
+            font-family: var(--font-display);
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--black);
+        }
+
+        .footer-links {
+            display: flex;
+            gap: var(--space-lg);
+            flex-wrap: wrap;
+        }
+
+        .footer-link {
+            font-size: 14px;
+            color: var(--gray-500);
+            text-decoration: none;
+            transition: color var(--transition-fast);
+        }
+
+        .footer-link:hover {
+            color: var(--black);
+        }
+
+        .footer-tagline {
+            font-size: 13px;
+            color: var(--gray-500);
+            text-align: center;
+            width: 100%;
+            margin-top: var(--space-md);
+            padding-top: var(--space-md);
+            border-top: 1px solid var(--gray-100);
+        }
+
+        /* ==================== MOBILE SIDEBAR ==================== */
+        .mobile-sidebar-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.4);
+            z-index: 200;
+            opacity: 0;
+            transition: opacity var(--transition-base);
+        }
+
+        .mobile-sidebar-overlay.show {
+            display: block;
+            opacity: 1;
+        }
+
+        .mobile-sidebar {
+            position: fixed;
+            top: 0;
+            left: -300px;
+            width: 300px;
+            height: 100%;
+            background: var(--warm-white);
+            z-index: 201;
+            transition: left var(--transition-base);
+            overflow-y: auto;
+            box-shadow: 4px 0 20px rgba(0, 0, 0, 0.1);
+        }
+
+        .mobile-sidebar.open {
+            left: 0;
+        }
+
+        .mobile-sidebar-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: var(--space-lg);
+            border-bottom: 1px solid var(--gray-200);
+        }
+
+        .mobile-sidebar-title {
+            font-family: var(--font-display);
+            font-size: 20px;
+            font-weight: 700;
+        }
+
+        .mobile-sidebar-close {
+            width: 36px;
+            height: 36px;
+            border: none;
+            background: var(--gray-100);
+            border-radius: 8px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--gray-700);
+            transition: background var(--transition-fast);
+        }
+
+        .mobile-sidebar-close:hover {
+            background: var(--gray-200);
+        }
+
+        .mobile-sidebar-nav {
+            padding: var(--space-md) 0;
+        }
+
+        .mobile-nav-item {
+            display: flex;
+            align-items: center;
+            gap: var(--space-md);
+            padding: var(--space-md) var(--space-lg);
+            text-decoration: none;
+            color: var(--gray-700);
+            font-weight: 500;
+            transition: all var(--transition-fast);
+        }
+
+        .mobile-nav-item:hover {
+            background: var(--gray-100);
+            color: var(--black);
+        }
+
+        .mobile-nav-item svg {
+            width: 22px;
+            height: 22px;
+            color: var(--gray-500);
+        }
+
+        .mobile-nav-divider {
+            height: 1px;
+            background: var(--gray-200);
+            margin: var(--space-sm) var(--space-lg);
+        }
+
+        /* ==================== RESPONSIVE ==================== */
+        @media (max-width: 768px) {
+            input, select, textarea {
+                font-size: 16px !important;
+            }
+
+            .header-nav {
+                display: none;
+            }
+
+            .menu-toggle {
+                display: flex;
+            }
+
+            .main-content {
+                padding: var(--space-lg) var(--space-md);
+                padding-top: 100px;
+                justify-content: flex-start;
+            }
+
+            .hero-logo {
+                font-size: 42px;
+            }
+
+            .hero-tagline {
+                font-size: 18px;
+            }
+
+            .hero-subtitle {
+                font-size: 14px;
+            }
+
+            .search-box {
+                height: 48px;
+                font-size: 16px !important;
+            }
+
+            .question-card {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: var(--space-sm);
+            }
+
+            .question-meta {
+                margin-left: 0;
+            }
+
+            .category-pills {
+                gap: var(--space-xs);
+            }
+
+            .category-pill {
+                padding: var(--space-xs) var(--space-sm);
+                font-size: 13px;
+            }
+
+            .footer-content {
+                flex-direction: column;
+                text-align: center;
+            }
+
+            .footer-links {
+                justify-content: center;
+            }
+
+            .auth-link {
+                padding: var(--space-xs) var(--space-sm);
+                font-size: 13px;
+            }
+
+            .user-greeting {
+                font-size: 12px;
+                padding: var(--space-xs) var(--space-sm);
+            }
+        }
+
+        @media (max-width: 480px) {
+            .hero-logo {
+                font-size: 36px;
+            }
+
+            .beta-badge {
+                font-size: 9px;
+            }
+
+            .hero-tagline {
+                font-size: 16px;
+            }
+
+            .question-text {
+                font-size: 14px;
+            }
+
+            .search-inner {
+                padding: var(--space-xs) var(--space-sm);
+            }
+
+            .search-button {
+                width: 40px;
+                height: 40px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Mobile Sidebar Overlay -->
+    <div class="mobile-sidebar-overlay" id="mobile-sidebar-overlay"></div>
+    
+    <!-- Mobile Sidebar -->
+    <div class="mobile-sidebar" id="mobile-sidebar">
+        <div class="mobile-sidebar-header">
+            <span class="mobile-sidebar-title">
+                <span style="color: var(--black);">A</span><span style="color: var(--green);">f</span><span style="color: var(--gold);">r</span><span style="color: var(--red);">o</span>Todo
+            </span>
+            <button class="mobile-sidebar-close" id="mobile-sidebar-close">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M18 6L6 18M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+        <nav class="mobile-sidebar-nav">
+            <a href="/" class="mobile-nav-item">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/>
+                </svg>
+                <span>Home</span>
+            </a>
+            <a href="" class="mobile-nav-item">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 7V3H2v18h20V7H12zM6 19H4v-2h2v2zm0-4H4v-2h2v2zm0-4H4V9h2v2zm0-4H4V5h2v2zm4 12H8v-2h2v2zm0-4H8v-2h2v2zm0-4H8V9h2v2zm0-4H8V5h2v2zm10 12h-8v-2h2v-2h-2v-2h2v-2h-2V9h8v10zm-2-8h-2v2h2v-2zm0 4h-2v2h2v-2z"/>
+                </svg>
+                <span>Business</span>
+            </a>
+            <a href="" class="mobile-nav-item">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9c0-.46-.04-.92-.1-1.36-.98 1.37-2.58 2.26-4.4 2.26-3.03 0-5.5-2.47-5.5-5.5 0-1.82.89-3.42 2.26-4.4-.44-.06-.9-.1-1.36-.1z"/>
+                </svg>
+                <span>Culture</span>
+            </a>
+            <a href="" class="mobile-nav-item">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                </svg>
+                <span>Health</span>
+            </a>
+            <a href="" class="mobile-nav-item">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z"/>
+                </svg>
+                <span>News</span>
+            </a>
+            <div class="mobile-nav-divider"></div>
+            {% if user.is_authenticated %}
+            <a href="" class="mobile-nav-item">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/>
+                </svg>
+                <span>Logout</span>
+            </a>
+            {% else %}
+            <a href="" class="mobile-nav-item">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+                </svg>
+                <span>Login</span>
+            </a>
+            <a href="" class="mobile-nav-item">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M15 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-9-2V7H4v3H1v2h3v3h2v-3h3v-2H6zm9 4c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+                </svg>
+                <span>Sign Up</span>
+            </a>
+            {% endif %}
+        </nav>
+    </div>
+
+    <!-- Header -->
+    <header class="header">
+        <div class="header-left">
+            <button class="menu-toggle" id="mobile-menu-toggle">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M3 6h18M3 12h18M3 18h18"/>
+                </svg>
+            </button>
+            <a href="/" class="header-logo">
+                <span class="logo-a">A</span><span class="logo-f">f</span><span class="logo-r">r</span><span class="logo-o">o</span><span class="logo-text">Todo</span>
+            </a>
+        </div>
+        
+        <nav class="header-nav">
+            <a href="" class="nav-link">Business</a>
+            <a href="" class="nav-link">Culture</a>
+            <a href="" class="nav-link">Health</a>
+            <a href="" class="nav-link">News</a>
+            <a href="" class="nav-link">Community</a>
+        </nav>
+
+        <div class="header-right">
+            {% if user.is_authenticated %}
+            <span class="user-greeting">Welcome, {{ user.username }}</span>
+            <a href="" class="auth-link login">Logout</a>
+            {% else %}
+            <a href="" class="auth-link login">Login</a>
+            <a href="" class="auth-link signup">Sign Up</a>
+            {% endif %}
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="page-wrapper">
+        <div class="main-content">
+            <!-- Hero Section -->
+            <section class="hero">
+                <h1 class="hero-logo">
+                    <span class="logo-a">A</span><span class="logo-f">f</span><span class="logo-r">r</span><span class="logo-o">o</span><span class="logo-text">Todo</span>
+                    <span class="beta-badge">Beta</span>
+                </h1>
+                <p class="hero-tagline">
+                    Ask the community anything about<br>
+                    <em>Black business, culture & wellness</em>
+                </p>
+                <p class="hero-subtitle">
+                    Discover Black-owned businesses, find resources, and connect with your global community.
+                </p>
+            </section>
+
+            <!-- Search Section -->
+            <section class="search-section">
+                <div class="search-container">
+                    <form action="{% url 'searchengine:search' %}" method="get" id="search-form">
+                        <div class="search-box-wrapper">
+                            <div class="search-inner">
+                                <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="11" cy="11" r="8"/>
+                                    <path d="M21 21l-4.35-4.35"/>
+                                </svg>
+                                <input 
+                                    type="text" 
+                                    class="search-box" 
+                                    id="search-input" 
+                                    name="query" 
+                                    placeholder="Where can I find a Black-owned bookstore in Atlanta?"
+                                    autocomplete="off"
+                                >
+                                <input type="hidden" id="session-id-field" name="session_id" value="">
+                                <button type="submit" class="search-button" id="search-button">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                        <path d="M5 12h14M12 5l7 7-7 7"/>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="search-results" id="search-results"></div>
+                    </form>
+                </div>
+            </section>
+
+            <!-- Community Questions -->
+            <section class="community-section">
+                <div class="section-header">
+                    <svg class="section-icon" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9-4.03-9-9-9zm0 16c-3.86 0-7-3.14-7-7s3.14-7 7-7 7 3.14 7 7-3.14 7-7 7zm1-11h-2v3H8v2h3v3h2v-3h3v-2h-3V8z"/>
+                    </svg>
+                    <span class="section-title">Popular Questions</span>
+                </div>
+                <div class="question-list">
+                    <a href="#" class="question-card" data-query="Best HBCU for pre-med">
+                        <span class="question-text">Best HBCU for pre-med?</span>
+                        <span class="question-meta">
+                            <span class="answer-count">12 results</span>
+                        </span>
+                    </a>
+                    <a href="#" class="question-card" data-query="Black therapists in Chicago">
+                        <span class="question-text">Black therapists in Chicago?</span>
+                        <span class="question-meta">
+                            <span class="answer-count">8 results</span>
+                        </span>
+                    </a>
+                    <a href="#" class="question-card" data-query="Affordable natural hair products">
+                        <span class="question-text">Affordable natural hair products?</span>
+                        <span class="question-meta">
+                            <span class="answer-count">23 results</span>
+                        </span>
+                    </a>
+                </div>
+            </section>
+
+            <!-- Category Pills -->
+            <section class="categories-section">
+                <div class="category-pills">
+                    <a href="" class="category-pill business">
+                        <svg class="pill-icon" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 7V3H2v18h20V7H12zM6 19H4v-2h2v2zm0-4H4v-2h2v2zm0-4H4V9h2v2zm0-4H4V5h2v2zm4 12H8v-2h2v2zm0-4H8v-2h2v2zm0-4H8V9h2v2zm0-4H8V5h2v2zm10 12h-8v-2h2v-2h-2v-2h2v-2h-2V9h8v10zm-2-8h-2v2h2v-2zm0 4h-2v2h2v-2z"/>
+                        </svg>
+                        Business
+                    </a>
+                    <a href="" class="category-pill culture">
+                        <svg class="pill-icon" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9c0-.46-.04-.92-.1-1.36-.98 1.37-2.58 2.26-4.4 2.26-3.03 0-5.5-2.47-5.5-5.5 0-1.82.89-3.42 2.26-4.4-.44-.06-.9-.1-1.36-.1z"/>
+                        </svg>
+                        Culture
+                    </a>
+                    <a href="" class="category-pill health">
+                        <svg class="pill-icon" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                        </svg>
+                        Health
+                    </a>
+                    <a href="" class="category-pill news">
+                        <svg class="pill-icon" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z"/>
+                        </svg>
+                        News
+                    </a>
+                    <a href="" class="category-pill community">
+                        <svg class="pill-icon" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/>
+                        </svg>
+                        Community
+                    </a>
+                    <a href="" class="category-pill advocacy">
+                        <svg class="pill-icon" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"/>
+                        </svg>
+                        Advocacy
+                    </a>
+                </div>
+            </section>
+        </div>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <div class="footer-content">
+                <span class="footer-brand">AfroTodo</span>
+                <div class="footer-links">
+                    <a href="" class="footer-link">About</a>
+                    <a href="" class="footer-link">Add Business</a>
+                    <a href="" class="footer-link">Advertise</a>
+                    <a href="" class="footer-link">Privacy</a>
+                    <a href="" class="footer-link">Terms</a>
+                    <a href="" class="footer-link">Contact</a>
+                </div>
+                <p class="footer-tagline">Shop Black. Learn Black. Own the future.</p>
+            </div>
+        </footer>
+    </main>
+
+<!-- ==================== SESSION MANAGEMENT (UNCHANGED) ==================== -->
+<script>
+class SessionManager {
+    constructor() {
+        this.sessionId = null;
+        this.isInitialized = false;
+    }
+
+    initSession() {
+        if (this.isInitialized) return this.sessionId;
+
+        const existingSessionId = localStorage.getItem('sessionId');
+        
+        if (existingSessionId) {
+            this.sessionId = existingSessionId;
+            this.updateSessionActivity();
+        } else {
+            this.createNewSession();
+        }
+
+        this.isInitialized = true;
+        return this.sessionId;
+    }
+
+    createNewSession() {
+        this.sessionId = this.generateSessionId();
+        
+        const sessionData = {
+            session_id: this.sessionId,
+            device_type: this.getDeviceType(),
+            browser: navigator.userAgent,
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+            url: window.location.href,
+            referrer: document.referrer || 'direct',
+            created_at: new Date().toISOString(),
+            page_views: 1
+        };
+
+        localStorage.setItem('sessionId', this.sessionId);
+        localStorage.setItem('sessionData', JSON.stringify(sessionData));
+        this.sendSessionToServer(sessionData);
+    }
+
+    updateSessionActivity() {
+        const existingData = JSON.parse(localStorage.getItem('sessionData') || '{}');
+        const updateData = {
+            session_id: this.sessionId,
+            url: window.location.href,
+            referrer: document.referrer || 'direct',
+            last_activity: new Date().toISOString(),
+            page_views: (existingData.page_views || 0) + 1
+        };
+
+        const updatedSessionData = { ...existingData, ...updateData };
+        localStorage.setItem('sessionData', JSON.stringify(updatedSessionData));
+        this.sendSessionUpdate(updateData);
+    }
+
+    generateSessionId() {
+        if (self.crypto && self.crypto.randomUUID) {
+            return self.crypto.randomUUID();
+        }
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+            const r = Math.random() * 16 | 0;
+            const v = c == 'x' ? r : (r & 0x3 | 0x8);
+            return v.toString(16);
+        });
+    }
+
+    getDeviceType() {
+        if (/tablet|ipad/i.test(navigator.userAgent)) return 'tablet';
+        if (/mobile|android|iphone/i.test(navigator.userAgent)) return 'mobile';
+        return 'desktop';
+    }
+
+    async sendSessionToServer(sessionData) {
+        try {
+            await fetch('/api/cache-redis-session/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': this.getCsrfToken()
+                },
+                body: JSON.stringify(sessionData)
+            });
+        } catch (error) {
+            console.warn('Session creation error:', error);
+        }
+    }
+
+    async sendSessionUpdate(updateData) {
+        try {
+            await fetch('/api/update-session-activity/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': this.getCsrfToken()
+                },
+                body: JSON.stringify(updateData)
+            });
+        } catch (error) {
+            console.warn('Session update error:', error);
+        }
+    }
+
+    getCsrfToken() {
+        const match = document.cookie.match(/csrftoken=([^;]+)/);
+        return match ? match[1] : '';
+    }
+
+    getSessionId() { return this.sessionId; }
+    hasSession() { return !!this.sessionId; }
+    
+    clearSession() {
+        localStorage.removeItem('sessionId');
+        localStorage.removeItem('sessionData');
+        this.sessionId = null;
+        this.isInitialized = false;
+    }
+}
+
+const sessionManager = new SessionManager();
+
+document.addEventListener('DOMContentLoaded', function() {
+    const sessionId = sessionManager.initSession();
+    const sessionField = document.getElementById('session-id-field');
+    if (sessionField && sessionId) {
+        sessionField.value = sessionId;
+    }
+});
+
+window.sessionManager = sessionManager;
+</script>
+
+<!-- ==================== SEARCH & UI SCRIPT ==================== -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+
+    // ==================== SECURITY & TRACKING UTILITIES ====================
+    const SearchSecurity = {
+        generateUUID: function() {
+            if (crypto && crypto.randomUUID) {
+                return crypto.randomUUID();
+            }
+            return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+                const r = Math.random() * 16 | 0;
+                const v = c === 'x' ? r : (r & 0x3 | 0x8);
+                return v.toString(16);
+            });
+        },
+
+        generateNonce: function(length = 16) {
+            const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+            let result = '';
+            const randomValues = new Uint32Array(length);
+            crypto.getRandomValues(randomValues);
+            for (let i = 0; i < length; i++) {
+                result += chars[randomValues[i] % chars.length];
+            }
+            return result;
+        },
+
+        getSessionId: function() {
+            let sessionId = sessionStorage.getItem('search_session_id');
+            if (!sessionId) {
+                sessionId = this.generateUUID();
+                sessionStorage.setItem('search_session_id', sessionId);
+            }
+            return sessionId;
+        },
+
+        getTimestamp: function() {
+            return Date.now();
+        },
+
+        getDeviceType: function() {
+            const ua = navigator.userAgent;
+            if (/tablet|ipad|playbook|silk/i.test(ua)) return 'tablet';
+            if (/mobile|android|iphone|ipod|blackberry|opera mini|iemobile/i.test(ua)) return 'mobile';
+            return 'desktop';
+        },
+
+        getClientFingerprint: function() {
+            const components = [
+                navigator.userAgent,
+                navigator.language,
+                screen.width + 'x' + screen.height,
+                screen.colorDepth,
+                new Date().getTimezoneOffset(),
+                !!window.sessionStorage,
+                !!window.localStorage,
+                navigator.hardwareConcurrency || 'unknown'
+            ];
+            const str = components.join('|');
+            let hash = 0;
+            for (let i = 0; i < str.length; i++) {
+                const char = str.charCodeAt(i);
+                hash = ((hash << 5) - hash) + char;
+                hash = hash & hash;
+            }
+            return Math.abs(hash).toString(16);
+        }
+    };
+
+    // ==================== SEARCH STATE TRACKING ====================
+    const SearchState = {
+        sessionId: SearchSecurity.getSessionId(),
+        requestSequence: 0,
+        typingStartTime: null,
+        selectedFromDropdown: false,
+        resultCount: 0,
+        source: 'home',
+        deviceType: SearchSecurity.getDeviceType(),
+        clientFingerprint: SearchSecurity.getClientFingerprint(),
+
+        reset: function() {
+            this.typingStartTime = null;
+            this.selectedFromDropdown = false;
+            this.resultCount = 0;
+        },
+
+        getTypingTime: function() {
+            if (!this.typingStartTime) return 0;
+            return Date.now() - this.typingStartTime;
+        },
+
+        incrementSequence: function() {
+            this.requestSequence++;
+            return this.requestSequence;
+        }
+    };
+
+    // ==================== MOBILE SIDEBAR ====================
+    const mobileMenuToggle = document.getElementById('mobile-menu-toggle');
+    const mobileSidebar = document.getElementById('mobile-sidebar');
+    const mobileSidebarOverlay = document.getElementById('mobile-sidebar-overlay');
+    const mobileSidebarClose = document.getElementById('mobile-sidebar-close');
+
+    function openMobileSidebar() {
+        if (mobileSidebar) mobileSidebar.classList.add('open');
+        if (mobileSidebarOverlay) mobileSidebarOverlay.classList.add('show');
+        document.body.style.overflow = 'hidden';
+    }
+
+    function closeMobileSidebar() {
+        if (mobileSidebar) mobileSidebar.classList.remove('open');
+        if (mobileSidebarOverlay) mobileSidebarOverlay.classList.remove('show');
+        document.body.style.overflow = '';
+    }
+
+    if (mobileMenuToggle) mobileMenuToggle.addEventListener('click', openMobileSidebar);
+    if (mobileSidebarClose) mobileSidebarClose.addEventListener('click', closeMobileSidebar);
+    if (mobileSidebarOverlay) mobileSidebarOverlay.addEventListener('click', closeMobileSidebar);
+
+    document.querySelectorAll('.mobile-nav-item').forEach(item => {
+        item.addEventListener('click', closeMobileSidebar);
+    });
+
+    // ==================== SEARCH AUTOCOMPLETE ====================
+    const searchInput = document.getElementById('search-input');
+    const searchResults = document.getElementById('search-results');
+    const searchForm = document.getElementById('search-form');
+    
+    if (!searchInput || !searchResults || !searchForm) return;
+
+    let debounceTimer = null;
+    let selectedIndex = -1;
+    let currentSuggestions = [];
+    let isSelectingSuggestion = false;
+
+    searchInput.addEventListener('keydown', function(e) {
+        if (!SearchState.typingStartTime && e.key.length === 1) {
+            SearchState.typingStartTime = Date.now();
+        }
+    });
+
+    searchInput.addEventListener('input', function() {
+        clearTimeout(debounceTimer);
+        
+        if (isSelectingSuggestion) {
+            return;
+        }
+        
+        const query = this.value.trim();
+        SearchState.selectedFromDropdown = false;
+        
+        if (query.length < 2) {
+            hideDropdown();
+            return;
+        }
+        
+        debounceTimer = setTimeout(() => fetchSuggestions(query), 150);
+    });
+
+    async function fetchSuggestions(query) {
+        try {
+            const response = await fetch(`/api/search/?q=${encodeURIComponent(query)}`);
+            if (!response.ok) throw new Error('Search failed');
+            
+            const data = await response.json();
+            currentSuggestions = data.suggestions || [];
+            SearchState.resultCount = currentSuggestions.length;
+            renderDropdown(currentSuggestions);
+        } catch (error) {
+            console.error('Search error:', error);
+            hideDropdown();
+        }
+    }
+
+    function renderDropdown(suggestions) {
+        if (!suggestions.length) {
+            searchResults.innerHTML = '<div class="suggestion-item no-results">No results found</div>';
+            searchResults.style.display = 'block';
+            selectedIndex = -1;
+            SearchState.resultCount = 0;
+            return;
+        }
+
+        searchResults.innerHTML = suggestions.map((s, i) => `
+            <div class="suggestion-item" data-index="${i}">
+                <span class="suggestion-display">${escapeHtml(s.display)}</span>
+                ${s.description ? `<span class="suggestion-desc">${escapeHtml(s.description)}</span>` : ''}
+            </div>
+        `).join('');
+        
+        searchResults.style.display = 'block';
+        selectedIndex = -1;
+        
+        searchResults.querySelectorAll('.suggestion-item[data-index]').forEach(item => {
+            item.addEventListener('click', () => selectSuggestion(parseInt(item.dataset.index)));
+            item.addEventListener('mouseenter', function() {
+                clearSelection();
+                this.classList.add('selected');
+                selectedIndex = parseInt(this.dataset.index);
+            });
+        });
+    }
+
+    function selectSuggestion(index) {
+        if (index >= 0 && index < currentSuggestions.length) {
+            isSelectingSuggestion = true;
+            SearchState.selectedFromDropdown = true;
+            
+            searchInput.value = currentSuggestions[index].text;
+            
+            hideDropdown();
+            submitSearch();
+            
+            isSelectingSuggestion = false;
+        }
+    }
+
+    searchInput.addEventListener('keydown', function(e) {
+        const items = searchResults.querySelectorAll('.suggestion-item[data-index]');
+        
+        if (e.key === 'ArrowDown' && items.length && searchResults.style.display !== 'none') {
+            e.preventDefault();
+            selectedIndex = (selectedIndex + 1) % items.length;
+            updateSelection(items);
+        } else if (e.key === 'ArrowUp' && items.length && searchResults.style.display !== 'none') {
+            e.preventDefault();
+            selectedIndex = selectedIndex <= 0 ? items.length - 1 : selectedIndex - 1;
+            updateSelection(items);
+        } else if (e.key === 'Enter') {
+            e.preventDefault();
+            if (selectedIndex >= 0 && items.length) {
+                selectSuggestion(selectedIndex);
+            } else if (searchInput.value.trim()) {
+                SearchState.selectedFromDropdown = false;
+                submitSearch();
+            }
+        } else if (e.key === 'Escape') {
+            hideDropdown();
+        }
+    });
+
+    function updateSelection(items) {
+        clearSelection();
+        if (items[selectedIndex]) {
+            items[selectedIndex].classList.add('selected');
+            items[selectedIndex].scrollIntoView({ block: 'nearest' });
+        }
+    }
+
+    function clearSelection() {
+        searchResults.querySelectorAll('.suggestion-item').forEach(el => el.classList.remove('selected'));
+    }
+
+    function hideDropdown() {
+        searchResults.style.display = 'none';
+        selectedIndex = -1;
+        currentSuggestions = [];
+    }
+
+    function escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    // ==================== FORM SUBMISSION ====================
+    function addHiddenField(name, value) {
+        let field = searchForm.querySelector(`input[name="${name}"]`);
+        if (!field) {
+            field = document.createElement('input');
+            field.type = 'hidden';
+            field.name = name;
+            searchForm.appendChild(field);
+        }
+        field.value = value;
+    }
+
+    function submitSearch() {
+        const query = searchInput.value.trim();
+        if (!query) return;
+
+        const params = {
+            session_id: SearchState.sessionId,
+            request_id: SearchSecurity.generateUUID(),
+            timestamp: SearchSecurity.getTimestamp(),
+            nonce: SearchSecurity.generateNonce(),
+            alt_mode: SearchState.selectedFromDropdown ? 'n' : 'y',
+            search_source: SearchState.source,
+            device_type: SearchState.deviceType,
+            result_count: SearchState.resultCount,
+            typing_time_ms: SearchState.getTypingTime(),
+            client_fp: SearchState.clientFingerprint,
+            req_seq: SearchState.incrementSequence()
+        };
+
+        Object.entries(params).forEach(([name, value]) => {
+            addHiddenField(name, value);
+        });
+
+        hideDropdown();
+        searchForm.submit();
+    }
+
+    searchForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const query = searchInput.value.trim();
+        if (!query) return false;
+
+        if (!SearchState.selectedFromDropdown) {
+            SearchState.selectedFromDropdown = false;
+        }
+        
+        submitSearch();
+    });
+
+    document.addEventListener('click', function(e) {
+        if (!searchResults.contains(e.target) && e.target !== searchInput) {
+            hideDropdown();
+        }
+    });
+
+    searchInput.addEventListener('focus', function() {
+        SearchState.reset();
+        if (this.value.trim().length >= 2) {
+            fetchSuggestions(this.value.trim());
+        }
+    });
+
+    // ==================== QUESTION CARD CLICKS ====================
+    document.querySelectorAll('.question-card').forEach(card => {
+        card.addEventListener('click', function(e) {
+            e.preventDefault();
+            const query = this.dataset.query;
+            if (query) {
+                searchInput.value = query;
+                SearchState.selectedFromDropdown = false;
+                submitSearch();
+            }
+        });
+    });
+
+    // ==================== CLEANUP ====================
+    window.addEventListener('beforeunload', function() {
+        clearTimeout(debounceTimer);
+    });
+
+    window._searchDebug = {
+        state: SearchState,
+        security: SearchSecurity
+    };
+});
+</script>
+
+</body>
+</html>

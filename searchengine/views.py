@@ -745,7 +745,7 @@ def log_search_analytics(params, search_type, result_count, is_suspicious=False)
 # =============================================================================
 
 def home(request):
-    return render(request, 'home2.html')
+    return render(request, 'home3.html')
 
 
 def search_suggestions(request):
@@ -836,7 +836,7 @@ def search(request):
     is_allowed, error = validator.check_rate_limit(params.session_id, params.client_fp)
     if not is_allowed:
         logger.warning(f"Rate limit exceeded: {params.session_id}")
-        return render(request, 'results.html', {
+        return render(request, 'results2.html', {
             'query': params.query,
             'results': [],
             'has_results': False,
@@ -851,7 +851,7 @@ def search(request):
     
     # === 3. EMPTY QUERY - SHOW HOMEPAGE ===
     if not params.query:
-        return render(request, 'results.html', {
+        return render(request, 'results2.html', {
             'query': '',
             'results': [],
             'has_results': False,
@@ -865,7 +865,7 @@ def search(request):
     
     if cached_result and not filters:
         cached_result['from_cache'] = True
-        return render(request, 'results.html', cached_result)
+        return render(request, 'results2.html', cached_result)
     
     # === 5. ROUTE BASED ON ALT_MODE ===
     # DEBUG LOGGING - remove in production
@@ -1019,7 +1019,7 @@ def search(request):
     if not filters and total_results > 0:
         cache.set(cache_key, context, timeout=300)
     
-    return render(request, 'results.html', context)
+    return render(request, 'results2.html', context)
 
 
 # =============================================================================
