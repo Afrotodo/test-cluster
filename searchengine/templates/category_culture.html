@@ -1,0 +1,268 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Black Culture & Heritage | AfroTodo</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700;800&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --black: #1a1a1a;
+            --green: #2d6a4f;
+            --gold: #d4a03a;
+            --gold-light: #e9c46a;
+            --gold-pale: rgba(212, 160, 58, 0.15);
+            --red: #bc4749;
+            --cream: #faf8f5;
+            --warm-white: #fffef9;
+            --gray-100: #f5f3f0;
+            --gray-200: #e8e4df;
+            --gray-300: #d4cfc8;
+            --gray-400: #b8b2a7;
+            --gray-500: #8a8279;
+            --gray-600: #6b655c;
+            --gray-700: #4a4640;
+            --font-display: 'Playfair Display', Georgia, serif;
+            --font-body: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+            --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+            --shadow-lg: 0 12px 40px rgba(0,0,0,0.12);
+            --transition-fast: 150ms ease;
+            --transition-base: 250ms ease;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: var(--font-body); background-color: var(--cream); color: var(--black); line-height: 1.6; }
+        a { text-decoration: none; color: inherit; }
+
+        .header { background: var(--warm-white); border-bottom: 1px solid var(--gray-200); position: sticky; top: 0; z-index: 100; }
+        .header-inner { max-width: 1400px; margin: 0 auto; padding: 16px 24px; display: flex; align-items: center; justify-content: space-between; }
+        .logo { font-family: var(--font-display); font-size: 28px; font-weight: 700; }
+        .logo .a { color: var(--black); } .logo .f { color: var(--green); } .logo .r { color: var(--gold); } .logo .o { color: var(--red); }
+        .nav-links { display: flex; gap: 8px; }
+        .nav-link { padding: 8px 16px; font-size: 15px; font-weight: 500; color: var(--gray-600); border-radius: 8px; transition: all var(--transition-fast); }
+        .nav-link:hover { background: var(--gray-100); color: var(--black); }
+        .nav-link.active { background: var(--gold-pale); color: var(--gold); }
+
+        .hero { background: var(--black); color: white; position: relative; overflow: hidden; }
+        .hero-feature { max-width: 1400px; margin: 0 auto; display: grid; grid-template-columns: 1.2fr 1fr; min-height: 500px; }
+        .hero-image { position: relative; background: linear-gradient(135deg, #2a2a2a 0%, #1a1a1a 100%); }
+        .hero-image img { width: 100%; height: 100%; object-fit: cover; opacity: 0.9; }
+        .hero-image-overlay { position: absolute; inset: 0; background: linear-gradient(to right, transparent 50%, var(--black) 100%); }
+        .hero-content { padding: 60px 48px; display: flex; flex-direction: column; justify-content: center; }
+        .hero-badge { display: inline-flex; background: var(--gold); color: var(--black); padding: 6px 14px; border-radius: 4px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 24px; width: fit-content; }
+        .hero-title { font-family: var(--font-display); font-size: clamp(28px, 4vw, 42px); font-weight: 700; line-height: 1.2; margin-bottom: 20px; }
+        .hero-description { font-size: 17px; opacity: 0.85; line-height: 1.7; margin-bottom: 28px; max-width: 500px; }
+        .hero-cta { display: inline-flex; align-items: center; gap: 8px; padding: 14px 28px; background: var(--gold); color: var(--black); font-weight: 600; font-size: 15px; border-radius: 8px; transition: all var(--transition-fast); width: fit-content; }
+        .hero-cta:hover { background: var(--gold-light); transform: translateY(-2px); }
+
+        .topics-section { padding: 64px 24px; max-width: 1400px; margin: 0 auto; }
+        .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 32px; }
+        .section-title { font-family: var(--font-display); font-size: 28px; font-weight: 700; }
+        .topics-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; }
+        .topic-card { background: var(--warm-white); border: 1px solid var(--gray-200); border-radius: 16px; padding: 28px 20px; text-align: center; transition: all var(--transition-base); cursor: pointer; }
+        .topic-card:hover { border-color: var(--gold); transform: translateY(-4px); box-shadow: var(--shadow-md); }
+        .topic-icon { width: 56px; height: 56px; background: var(--gold-pale); border-radius: 16px; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px; font-size: 28px; }
+        .topic-name { font-weight: 600; font-size: 15px; color: var(--black); }
+
+        .history-section { background: linear-gradient(135deg, var(--gold) 0%, #c49227 100%); color: var(--black); padding: 48px 24px; }
+        .history-inner { max-width: 1400px; margin: 0 auto; display: grid; grid-template-columns: auto 1fr auto; gap: 48px; align-items: center; }
+        .history-date-day { font-family: var(--font-display); font-size: 64px; font-weight: 800; line-height: 1; }
+        .history-date-month { font-size: 18px; font-weight: 600; text-transform: uppercase; letter-spacing: 2px; }
+        .history-content h3 { font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; opacity: 0.8; }
+        .history-content h2 { font-family: var(--font-display); font-size: 28px; font-weight: 700; margin-bottom: 12px; }
+        .history-content p { font-size: 16px; opacity: 0.9; max-width: 600px; }
+        .history-link { display: flex; align-items: center; gap: 8px; padding: 12px 24px; background: var(--black); color: white; font-weight: 600; font-size: 14px; border-radius: 8px; white-space: nowrap; }
+
+        .hbcu-section { padding: 64px 24px; max-width: 1400px; margin: 0 auto; }
+        .hbcu-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; }
+        .hbcu-card { background: var(--warm-white); border: 1px solid var(--gray-200); border-radius: 16px; overflow: hidden; transition: all var(--transition-base); }
+        .hbcu-card:hover { box-shadow: var(--shadow-lg); transform: translateY(-4px); }
+        .hbcu-image { height: 160px; background: linear-gradient(135deg, var(--gray-200) 0%, var(--gray-300) 100%); position: relative; }
+        .hbcu-badge { position: absolute; top: 12px; left: 12px; padding: 4px 10px; background: var(--gold); color: var(--black); font-size: 11px; font-weight: 700; text-transform: uppercase; border-radius: 4px; }
+        .hbcu-content { padding: 20px; }
+        .hbcu-name { font-family: var(--font-display); font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+        .hbcu-location { font-size: 14px; color: var(--gray-500); margin-bottom: 12px; }
+        .hbcu-stats { display: flex; gap: 16px; }
+        .hbcu-stat { font-size: 13px; color: var(--gray-600); }
+        .hbcu-stat strong { color: var(--black); }
+
+        .two-column-section { padding: 64px 24px; max-width: 1400px; margin: 0 auto; display: grid; grid-template-columns: 1fr 1fr; gap: 48px; }
+        .column-section { background: var(--warm-white); border: 1px solid var(--gray-200); border-radius: 16px; padding: 28px; }
+        .column-title { font-family: var(--font-display); font-size: 22px; font-weight: 700; margin-bottom: 24px; }
+        .trending-item { display: flex; gap: 16px; padding: 16px 0; border-bottom: 1px solid var(--gray-200); }
+        .trending-item:last-child { border-bottom: none; }
+        .trending-number { font-family: var(--font-display); font-size: 24px; font-weight: 700; color: var(--gold); width: 32px; }
+        .trending-content h4 { font-weight: 600; font-size: 15px; margin-bottom: 4px; }
+        .trending-content p { font-size: 13px; color: var(--gray-500); }
+        .event-item { display: flex; gap: 16px; padding: 16px 0; border-bottom: 1px solid var(--gray-200); }
+        .event-item:last-child { border-bottom: none; }
+        .event-date { width: 56px; height: 56px; background: var(--gold-pale); border-radius: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; flex-shrink: 0; }
+        .event-date-month { font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--gold); }
+        .event-date-day { font-family: var(--font-display); font-size: 22px; font-weight: 700; }
+        .event-content h4 { font-weight: 600; font-size: 15px; margin-bottom: 4px; }
+        .event-content p { font-size: 13px; color: var(--gray-500); }
+
+        .authors-section { padding: 64px 24px; background: var(--gray-100); }
+        .authors-inner { max-width: 1400px; margin: 0 auto; }
+        .books-scroll { display: flex; gap: 24px; overflow-x: auto; padding-bottom: 16px; scrollbar-width: none; }
+        .books-scroll::-webkit-scrollbar { display: none; }
+        .book-card { flex-shrink: 0; width: 160px; cursor: pointer; }
+        .book-cover { width: 160px; height: 240px; background: linear-gradient(135deg, var(--gray-300) 0%, var(--gray-400) 100%); border-radius: 8px; margin-bottom: 12px; box-shadow: var(--shadow-md); transition: all var(--transition-fast); }
+        .book-card:hover .book-cover { transform: translateY(-8px); box-shadow: var(--shadow-lg); }
+        .book-title { font-weight: 600; font-size: 14px; margin-bottom: 4px; line-height: 1.3; }
+        .book-author { font-size: 13px; color: var(--gray-500); }
+
+        .footer { background: var(--black); color: white; padding: 48px 24px; margin-top: 64px; }
+        .footer-inner { max-width: 1400px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 24px; }
+        .footer-logo { font-family: var(--font-display); font-size: 24px; font-weight: 700; }
+        .footer-links { display: flex; gap: 32px; }
+        .footer-link { font-size: 14px; color: var(--gray-400); }
+        .footer-link:hover { color: white; }
+
+        @media (max-width: 1024px) {
+            .hero-feature { grid-template-columns: 1fr; }
+            .hero-image { height: 300px; }
+            .topics-grid { grid-template-columns: repeat(3, 1fr); }
+            .hbcu-grid { grid-template-columns: repeat(2, 1fr); }
+            .two-column-section { grid-template-columns: 1fr; }
+            .history-inner { grid-template-columns: 1fr; text-align: center; }
+        }
+        @media (max-width: 768px) {
+            .nav-links { display: none; }
+            .hero-content { padding: 40px 24px; }
+            .topics-grid { grid-template-columns: repeat(2, 1fr); }
+            .hbcu-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="header-inner">
+            <a href="{% url 'searchengine:home' %}" class="logo"><span class="a">A</span><span class="f">f</span><span class="r">r</span><span class="o">o</span>Todo</a>
+            <nav class="nav-links">
+                <a href="{% url 'searchengine:category' 'business' %}" class="nav-link">Business</a>
+                <a href="{% url 'searchengine:category' 'culture' %}" class="nav-link active">Culture</a>
+                <a href="{% url 'searchengine:category' 'health' %}" class="nav-link">Health</a>
+                <a href="{% url 'searchengine:category' 'news' %}" class="nav-link">News</a>
+                <a href="{% url 'searchengine:category' 'community' %}" class="nav-link">Community</a>
+            </nav>
+        </div>
+    </header>
+
+    <section class="hero">
+        <div class="hero-feature">
+            <div class="hero-image">
+                {% if featured_article.image %}<img src="{{ featured_article.image }}" alt="{{ featured_article.title }}">{% endif %}
+                <div class="hero-image-overlay"></div>
+            </div>
+            <div class="hero-content">
+                <span class="hero-badge">Featured</span>
+                <h1 class="hero-title">{{ featured_article.title|default:"The Legacy of HBCUs: 150 Years of Excellence" }}</h1>
+                <p class="hero-description">{{ featured_article.excerpt|default:"Explore the rich history, groundbreaking achievements, and lasting impact of Historically Black Colleges and Universities on American education and culture." }}</p>
+                <a href="{{ featured_article.url|default:'#' }}" class="hero-cta">Explore Story →</a>
+            </div>
+        </div>
+    </section>
+
+    <section class="topics-section">
+        <div class="section-header"><h2 class="section-title">Explore by Topic</h2></div>
+        <div class="topics-grid">
+            <a href="?topic=music" class="topic-card"><div class="topic-icon">🎵</div><div class="topic-name">Music</div></a>
+            <a href="?topic=art" class="topic-card"><div class="topic-icon">🎨</div><div class="topic-name">Art</div></a>
+            <a href="?topic=literature" class="topic-card"><div class="topic-icon">📚</div><div class="topic-name">Literature</div></a>
+            <a href="?topic=film" class="topic-card"><div class="topic-icon">🎬</div><div class="topic-name">Film & TV</div></a>
+            <a href="?topic=hbcus" class="topic-card"><div class="topic-icon">🎓</div><div class="topic-name">HBCUs</div></a>
+            <a href="?topic=food" class="topic-card"><div class="topic-icon">🍽️</div><div class="topic-name">Food</div></a>
+            <a href="?topic=fashion" class="topic-card"><div class="topic-icon">👗</div><div class="topic-name">Fashion</div></a>
+            <a href="?topic=history" class="topic-card"><div class="topic-icon">🏛️</div><div class="topic-name">History</div></a>
+            <a href="?topic=theater" class="topic-card"><div class="topic-icon">🎭</div><div class="topic-name">Theater</div></a>
+            <a href="?topic=events" class="topic-card"><div class="topic-icon">📅</div><div class="topic-name">Events</div></a>
+        </div>
+    </section>
+
+    <section class="history-section">
+        <div class="history-inner">
+            <div class="history-date">
+                <div class="history-date-day">{{ today.day|default:"1" }}</div>
+                <div class="history-date-month">{{ today.month|default:"JAN" }}</div>
+            </div>
+            <div class="history-content">
+                <h3>This Day in Black History</h3>
+                <h2>{{ history_event.title|default:"1863 — Emancipation Proclamation Takes Effect" }}</h2>
+                <p>{{ history_event.description|default:"President Abraham Lincoln's executive order declared all enslaved people in Confederate states to be forever free, marking a pivotal moment in American history." }}</p>
+            </div>
+            <a href="?topic=history" class="history-link">View Full Timeline →</a>
+        </div>
+    </section>
+
+    <section class="hbcu-section">
+        <div class="section-header"><h2 class="section-title">HBCU Spotlight</h2></div>
+        <div class="hbcu-grid">
+            {% for hbcu in hbcus %}
+            <a href="#" class="hbcu-card">
+                <div class="hbcu-image">{% if hbcu.type %}<span class="hbcu-badge">{{ hbcu.type }}</span>{% endif %}</div>
+                <div class="hbcu-content">
+                    <h3 class="hbcu-name">{{ hbcu.name }}</h3>
+                    <p class="hbcu-location">{{ hbcu.city }}, {{ hbcu.state }}</p>
+                    <div class="hbcu-stats"><span class="hbcu-stat">Est. <strong>{{ hbcu.founded }}</strong></span></div>
+                </div>
+            </a>
+            {% empty %}
+            <a href="#" class="hbcu-card"><div class="hbcu-image"><span class="hbcu-badge">Private</span></div><div class="hbcu-content"><h3 class="hbcu-name">Spelman College</h3><p class="hbcu-location">Atlanta, GA</p><div class="hbcu-stats"><span class="hbcu-stat">Est. <strong>1881</strong></span></div></div></a>
+            <a href="#" class="hbcu-card"><div class="hbcu-image"><span class="hbcu-badge">Private</span></div><div class="hbcu-content"><h3 class="hbcu-name">Howard University</h3><p class="hbcu-location">Washington, DC</p><div class="hbcu-stats"><span class="hbcu-stat">Est. <strong>1867</strong></span></div></div></a>
+            <a href="#" class="hbcu-card"><div class="hbcu-image"><span class="hbcu-badge">Private</span></div><div class="hbcu-content"><h3 class="hbcu-name">Morehouse College</h3><p class="hbcu-location">Atlanta, GA</p><div class="hbcu-stats"><span class="hbcu-stat">Est. <strong>1867</strong></span></div></div></a>
+            <a href="#" class="hbcu-card"><div class="hbcu-image"><span class="hbcu-badge">Public</span></div><div class="hbcu-content"><h3 class="hbcu-name">Florida A&M</h3><p class="hbcu-location">Tallahassee, FL</p><div class="hbcu-stats"><span class="hbcu-stat">Est. <strong>1887</strong></span></div></div></a>
+            {% endfor %}
+        </div>
+    </section>
+
+    <section class="two-column-section">
+        <div class="column-section">
+            <h3 class="column-title">🔥 Trending in Music</h3>
+            {% for item in trending_music %}
+            <div class="trending-item"><span class="trending-number">{{ forloop.counter }}</span><div class="trending-content"><h4>{{ item.title }}</h4><p>{{ item.subtitle }}</p></div></div>
+            {% empty %}
+            <div class="trending-item"><span class="trending-number">1</span><div class="trending-content"><h4>New Album Release Breaks Records</h4><p>R&B · Released this week</p></div></div>
+            <div class="trending-item"><span class="trending-number">2</span><div class="trending-content"><h4>Grammy Nominations Announced</h4><p>Awards · Black artists dominate</p></div></div>
+            <div class="trending-item"><span class="trending-number">3</span><div class="trending-content"><h4>Viral Track Takes Over Social Media</h4><p>Hip-Hop · 50M streams</p></div></div>
+            {% endfor %}
+        </div>
+        <div class="column-section">
+            <h3 class="column-title">📅 Upcoming Events</h3>
+            {% for event in events %}
+            <div class="event-item"><div class="event-date"><span class="event-date-month">{{ event.month }}</span><span class="event-date-day">{{ event.day }}</span></div><div class="event-content"><h4>{{ event.title }}</h4><p>{{ event.location }}</p></div></div>
+            {% empty %}
+            <div class="event-item"><div class="event-date"><span class="event-date-month">JAN</span><span class="event-date-day">15</span></div><div class="event-content"><h4>MLK Day Celebration</h4><p>Nationwide</p></div></div>
+            <div class="event-item"><div class="event-date"><span class="event-date-month">FEB</span><span class="event-date-day">1</span></div><div class="event-content"><h4>Black History Month Kickoff</h4><p>Nationwide</p></div></div>
+            <div class="event-item"><div class="event-date"><span class="event-date-month">JUN</span><span class="event-date-day">19</span></div><div class="event-content"><h4>Juneteenth Celebration</h4><p>Nationwide</p></div></div>
+            {% endfor %}
+        </div>
+    </section>
+
+    <section class="authors-section">
+        <div class="authors-inner">
+            <div class="section-header"><h2 class="section-title">Black Authors to Read</h2></div>
+            <div class="books-scroll">
+                {% for book in books %}
+                <a href="#" class="book-card"><div class="book-cover"></div><h4 class="book-title">{{ book.title }}</h4><p class="book-author">{{ book.author }}</p></a>
+                {% empty %}
+                <a href="#" class="book-card"><div class="book-cover"></div><h4 class="book-title">Beloved</h4><p class="book-author">Toni Morrison</p></a>
+                <a href="#" class="book-card"><div class="book-cover"></div><h4 class="book-title">Between the World and Me</h4><p class="book-author">Ta-Nehisi Coates</p></a>
+                <a href="#" class="book-card"><div class="book-cover"></div><h4 class="book-title">The Color Purple</h4><p class="book-author">Alice Walker</p></a>
+                <a href="#" class="book-card"><div class="book-cover"></div><h4 class="book-title">Kindred</h4><p class="book-author">Octavia Butler</p></a>
+                <a href="#" class="book-card"><div class="book-cover"></div><h4 class="book-title">Invisible Man</h4><p class="book-author">Ralph Ellison</p></a>
+                {% endfor %}
+            </div>
+        </div>
+    </section>
+
+    <footer class="footer">
+        <div class="footer-inner">
+            <div class="footer-logo"><span class="a">A</span><span class="f">f</span><span class="r">r</span><span class="o">o</span>Todo</div>
+            <nav class="footer-links"><a href="#" class="footer-link">About</a><a href="#" class="footer-link">Contact</a><a href="#" class="footer-link">Privacy</a><a href="#" class="footer-link">Terms</a></nav>
+        </div>
+    </footer>
+</body>
+</html>

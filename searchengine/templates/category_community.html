@@ -1,0 +1,280 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Community Hub | AfroTodo</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700;800&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --black: #1a1a1a;
+            --green: #2d6a4f;
+            --green-pale: rgba(45, 106, 79, 0.1);
+            --gold: #d4a03a;
+            --gold-pale: rgba(212, 160, 58, 0.15);
+            --red: #bc4749;
+            --red-pale: rgba(188, 71, 73, 0.1);
+            --cream: #faf8f5;
+            --warm-white: #fffef9;
+            --gray-100: #f5f3f0;
+            --gray-200: #e8e4df;
+            --gray-300: #d4cfc8;
+            --gray-400: #b8b2a7;
+            --gray-500: #8a8279;
+            --gray-600: #6b655c;
+            --gray-700: #4a4640;
+            --font-display: 'Playfair Display', Georgia, serif;
+            --font-body: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+            --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+            --shadow-lg: 0 12px 40px rgba(0,0,0,0.12);
+            --transition-fast: 150ms ease;
+            --transition-base: 250ms ease;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: var(--font-body); background-color: var(--cream); color: var(--black); line-height: 1.6; }
+        a { text-decoration: none; color: inherit; }
+
+        .header { background: var(--warm-white); border-bottom: 1px solid var(--gray-200); position: sticky; top: 0; z-index: 100; }
+        .header-inner { max-width: 1400px; margin: 0 auto; padding: 16px 24px; display: flex; align-items: center; justify-content: space-between; }
+        .logo { font-family: var(--font-display); font-size: 28px; font-weight: 700; }
+        .logo .a { color: var(--black); } .logo .f { color: var(--green); } .logo .r { color: var(--gold); } .logo .o { color: var(--red); }
+        .nav-links { display: flex; gap: 8px; }
+        .nav-link { padding: 8px 16px; font-size: 15px; font-weight: 500; color: var(--gray-600); border-radius: 8px; }
+        .nav-link:hover { background: var(--gray-100); color: var(--black); }
+        .nav-link.active { background: var(--red-pale); color: var(--red); }
+
+        .hero { background: linear-gradient(135deg, #fef2f2 0%, #fff7ed 50%, var(--cream) 100%); padding: 60px 24px; text-align: center; }
+        .hero-inner { max-width: 800px; margin: 0 auto; }
+        .hero-badge { display: inline-flex; align-items: center; gap: 8px; background: var(--red); color: white; padding: 8px 16px; border-radius: 100px; font-size: 13px; font-weight: 600; margin-bottom: 24px; }
+        .hero-title { font-family: var(--font-display); font-size: clamp(32px, 5vw, 48px); font-weight: 700; margin-bottom: 16px; }
+        .hero-subtitle { font-size: 18px; color: var(--gray-600); margin-bottom: 32px; }
+        .hero-actions { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; }
+        .hero-btn { display: inline-flex; align-items: center; gap: 8px; padding: 16px 32px; font-family: var(--font-body); font-size: 16px; font-weight: 600; border-radius: 12px; cursor: pointer; }
+        .hero-btn-primary { background: var(--red); color: white; border: none; }
+        .hero-btn-secondary { background: transparent; color: var(--black); border: 2px solid var(--gray-300); }
+
+        .events-section { max-width: 1400px; margin: 0 auto; padding: 64px 24px; }
+        .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 32px; }
+        .section-title { font-family: var(--font-display); font-size: 28px; font-weight: 700; }
+        .section-link { font-size: 14px; font-weight: 600; color: var(--red); }
+        .events-list { display: flex; flex-direction: column; gap: 16px; }
+        .event-card { display: flex; gap: 20px; padding: 24px; background: var(--warm-white); border: 1px solid var(--gray-200); border-radius: 16px; }
+        .event-card:hover { border-color: var(--red); box-shadow: var(--shadow-md); }
+        .event-date-box { width: 80px; height: 80px; background: linear-gradient(135deg, var(--red) 0%, #a13f41 100%); border-radius: 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; flex-shrink: 0; }
+        .event-date-month { font-size: 12px; font-weight: 700; text-transform: uppercase; }
+        .event-date-day { font-family: var(--font-display); font-size: 32px; font-weight: 700; line-height: 1; }
+        .event-content { flex: 1; }
+        .event-type { display: inline-block; padding: 4px 10px; background: var(--red-pale); color: var(--red); font-size: 11px; font-weight: 700; text-transform: uppercase; border-radius: 4px; margin-bottom: 8px; }
+        .event-name { font-family: var(--font-display); font-size: 20px; font-weight: 700; margin-bottom: 8px; }
+        .event-meta { display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 12px; font-size: 14px; color: var(--gray-600); }
+        .event-description { font-size: 14px; color: var(--gray-600); }
+        .event-btn { padding: 10px 20px; font-size: 14px; font-weight: 600; border-radius: 8px; background: var(--red); color: white; border: none; cursor: pointer; }
+
+        .help-section { background: var(--gray-100); padding: 64px 24px; }
+        .help-inner { max-width: 1400px; margin: 0 auto; }
+        .help-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+        .help-card { display: flex; align-items: center; gap: 16px; padding: 24px; background: var(--warm-white); border: 1px solid var(--gray-200); border-radius: 16px; cursor: pointer; }
+        .help-card:hover { border-color: var(--gold); box-shadow: var(--shadow-md); }
+        .help-icon { width: 56px; height: 56px; background: var(--gold-pale); border-radius: 16px; display: flex; align-items: center; justify-content: center; font-size: 28px; }
+        .help-content h3 { font-weight: 600; font-size: 16px; margin-bottom: 4px; }
+        .help-content p { font-size: 13px; color: var(--gray-500); }
+
+        .orgs-section { max-width: 1400px; margin: 0 auto; padding: 64px 24px; }
+        .orgs-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 24px; }
+        .org-card { display: flex; gap: 20px; padding: 28px; background: var(--warm-white); border: 1px solid var(--gray-200); border-radius: 16px; }
+        .org-card:hover { border-color: var(--green); box-shadow: var(--shadow-md); }
+        .org-logo { width: 72px; height: 72px; background: var(--gray-100); border-radius: 16px; display: flex; align-items: center; justify-content: center; font-family: var(--font-display); font-size: 24px; font-weight: 700; color: var(--gray-400); flex-shrink: 0; }
+        .org-content { flex: 1; }
+        .org-name { font-family: var(--font-display); font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+        .org-type { font-size: 14px; color: var(--green); font-weight: 500; margin-bottom: 8px; }
+        .org-description { font-size: 14px; color: var(--gray-600); line-height: 1.5; margin-bottom: 12px; }
+        .org-stats { display: flex; gap: 16px; font-size: 13px; color: var(--gray-500); }
+        .org-stat strong { color: var(--black); }
+
+        .two-column-section { max-width: 1400px; margin: 0 auto; padding: 0 24px 64px; display: grid; grid-template-columns: 1fr 1fr; gap: 48px; }
+        .column-card { background: var(--warm-white); border: 1px solid var(--gray-200); border-radius: 16px; padding: 28px; }
+        .column-title { font-family: var(--font-display); font-size: 20px; font-weight: 700; margin-bottom: 24px; }
+        .volunteer-list { list-style: none; }
+        .volunteer-item { padding: 16px 0; border-bottom: 1px solid var(--gray-200); display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+        .volunteer-item:last-child { border-bottom: none; }
+        .volunteer-info h4 { font-weight: 600; font-size: 15px; margin-bottom: 4px; }
+        .volunteer-info p { font-size: 13px; color: var(--gray-500); }
+        .volunteer-badge { padding: 6px 12px; background: var(--green-pale); color: var(--green); font-size: 12px; font-weight: 600; border-radius: 100px; }
+        .civic-item { padding: 20px; background: var(--gray-100); border-radius: 12px; margin-bottom: 16px; }
+        .civic-item:last-child { margin-bottom: 0; }
+        .civic-header { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+        .civic-icon { width: 40px; height: 40px; background: var(--warm-white); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px; }
+        .civic-header h4 { font-weight: 600; font-size: 15px; }
+        .civic-item p { font-size: 14px; color: var(--gray-600); margin-bottom: 12px; }
+        .civic-link { font-size: 14px; font-weight: 600; color: var(--red); }
+
+        .churches-section { background: var(--gray-100); padding: 64px 24px; }
+        .churches-inner { max-width: 1400px; margin: 0 auto; }
+        .churches-scroll { display: flex; gap: 20px; overflow-x: auto; padding-bottom: 16px; scrollbar-width: none; }
+        .churches-scroll::-webkit-scrollbar { display: none; }
+        .church-card { flex-shrink: 0; width: 280px; background: var(--warm-white); border: 1px solid var(--gray-200); border-radius: 16px; overflow: hidden; }
+        .church-card:hover { box-shadow: var(--shadow-md); }
+        .church-image { height: 140px; background: var(--gray-200); }
+        .church-content { padding: 20px; }
+        .church-name { font-family: var(--font-display); font-size: 17px; font-weight: 700; margin-bottom: 4px; }
+        .church-denomination { font-size: 13px; color: var(--gray-500); margin-bottom: 8px; }
+        .church-location { font-size: 13px; color: var(--gray-600); }
+
+        .footer { background: var(--black); color: white; padding: 48px 24px; }
+        .footer-inner { max-width: 1400px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 24px; }
+        .footer-logo { font-family: var(--font-display); font-size: 24px; font-weight: 700; }
+        .footer-links { display: flex; gap: 32px; }
+        .footer-link { font-size: 14px; color: var(--gray-400); }
+
+        @media (max-width: 1024px) {
+            .help-grid { grid-template-columns: repeat(2, 1fr); }
+            .orgs-grid { grid-template-columns: 1fr; }
+            .two-column-section { grid-template-columns: 1fr; }
+        }
+        @media (max-width: 768px) {
+            .nav-links { display: none; }
+            .hero-actions { flex-direction: column; }
+            .hero-btn { width: 100%; justify-content: center; }
+            .help-grid { grid-template-columns: 1fr; }
+            .event-card { flex-direction: column; }
+            .event-date-box { width: 100%; flex-direction: row; gap: 12px; padding: 16px; }
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="header-inner">
+            <a href="{% url 'searchengine:home' %}" class="logo"><span class="a">A</span><span class="f">f</span><span class="r">r</span><span class="o">o</span>Todo</a>
+            <nav class="nav-links">
+                <a href="{% url 'searchengine:category' 'business' %}" class="nav-link">Business</a>
+                <a href="{% url 'searchengine:category' 'culture' %}" class="nav-link">Culture</a>
+                <a href="{% url 'searchengine:category' 'health' %}" class="nav-link">Health</a>
+                <a href="{% url 'searchengine:category' 'news' %}" class="nav-link">News</a>
+                <a href="{% url 'searchengine:category' 'community' %}" class="nav-link active">Community</a>
+            </nav>
+        </div>
+    </header>
+
+    <section class="hero">
+        <div class="hero-inner">
+            <span class="hero-badge">👥 Community Hub</span>
+            <h1 class="hero-title">Your Community in {{ city|default:"Atlanta" }}</h1>
+            <p class="hero-subtitle">Connect with local events, organizations, and resources. Get involved, get support, and build together.</p>
+            <div class="hero-actions">
+                <a href="#events" class="hero-btn hero-btn-primary">📅 Browse Events</a>
+                <a href="#help" class="hero-btn hero-btn-secondary">❓ Find Help</a>
+            </div>
+        </div>
+    </section>
+
+    <section class="events-section" id="events">
+        <div class="section-header"><h2 class="section-title">📅 Upcoming Events</h2><a href="#" class="section-link">Full Calendar →</a></div>
+        <div class="events-list">
+            {% for event in events %}
+            <article class="event-card">
+                <div class="event-date-box"><span class="event-date-month">{{ event.month }}</span><span class="event-date-day">{{ event.day }}</span></div>
+                <div class="event-content">
+                    <span class="event-type">{{ event.type }}</span>
+                    <h3 class="event-name">{{ event.title }}</h3>
+                    <div class="event-meta"><span>📍 {{ event.location }}</span><span>🕐 {{ event.time }}</span><span>{{ event.price|default:"Free" }}</span></div>
+                    <p class="event-description">{{ event.description }}</p>
+                </div>
+                <div><a href="{{ event.url }}" class="event-btn">RSVP</a></div>
+            </article>
+            {% empty %}
+            <article class="event-card">
+                <div class="event-date-box"><span class="event-date-month">JAN</span><span class="event-date-day">15</span></div>
+                <div class="event-content"><span class="event-type">Volunteer</span><h3 class="event-name">MLK Day of Service</h3><div class="event-meta"><span>📍 Ebenezer Baptist Church</span><span>🕐 9 AM - 2 PM</span><span>Free</span></div><p class="event-description">Join us for a day of community service honoring Dr. Martin Luther King Jr.'s legacy.</p></div>
+                <div><a href="#" class="event-btn">RSVP</a></div>
+            </article>
+            <article class="event-card">
+                <div class="event-date-box"><span class="event-date-month">JAN</span><span class="event-date-day">20</span></div>
+                <div class="event-content"><span class="event-type">Networking</span><h3 class="event-name">Black Business Networking Mixer</h3><div class="event-meta"><span>📍 Ponce City Market</span><span>🕐 6 PM - 9 PM</span><span>$15</span></div><p class="event-description">Connect with local Black entrepreneurs, business owners, and professionals.</p></div>
+                <div><a href="#" class="event-btn">RSVP</a></div>
+            </article>
+            <article class="event-card">
+                <div class="event-date-box"><span class="event-date-month">JAN</span><span class="event-date-day">27</span></div>
+                <div class="event-content"><span class="event-type">Educational</span><h3 class="event-name">First-Time Homebuyer Workshop</h3><div class="event-meta"><span>📍 Atlanta Urban League</span><span>🕐 10 AM - 1 PM</span><span>Free</span></div><p class="event-description">Learn about down payment assistance programs, credit repair, and the home buying process.</p></div>
+                <div><a href="#" class="event-btn">RSVP</a></div>
+            </article>
+            {% endfor %}
+        </div>
+    </section>
+
+    <section class="help-section" id="help">
+        <div class="help-inner">
+            <div class="section-header"><h2 class="section-title">🤝 I Need Help With...</h2></div>
+            <div class="help-grid">
+                <a href="?category=housing" class="help-card"><div class="help-icon">🏠</div><div class="help-content"><h3>Housing Assistance</h3><p>Rental help, homebuyer programs</p></div></a>
+                <a href="?category=legal" class="help-card"><div class="help-icon">⚖️</div><div class="help-content"><h3>Legal Aid</h3><p>Free consultations, know your rights</p></div></a>
+                <a href="?category=jobs" class="help-card"><div class="help-icon">💼</div><div class="help-content"><h3>Jobs & Training</h3><p>Employment, skills training</p></div></a>
+                <a href="?category=food" class="help-card"><div class="help-icon">🍎</div><div class="help-content"><h3>Food & Essentials</h3><p>Food banks, pantries, supplies</p></div></a>
+                <a href="?category=family" class="help-card"><div class="help-icon">👨‍👩‍👧</div><div class="help-content"><h3>Family Services</h3><p>Childcare, parenting support</p></div></a>
+                <a href="?category=youth" class="help-card"><div class="help-icon">🎓</div><div class="help-content"><h3>Youth Programs</h3><p>After-school, mentorship, camps</p></div></a>
+            </div>
+        </div>
+    </section>
+
+    <section class="orgs-section">
+        <div class="section-header"><h2 class="section-title">🏛️ Local Organizations</h2><a href="#" class="section-link">View All →</a></div>
+        <div class="orgs-grid">
+            {% for org in organizations %}
+            <a href="{{ org.url }}" class="org-card"><div class="org-logo">{{ org.initials }}</div><div class="org-content"><h3 class="org-name">{{ org.name }}</h3><p class="org-type">{{ org.type }}</p><p class="org-description">{{ org.description }}</p><div class="org-stats">{% if org.founded %}<span class="org-stat">Founded <strong>{{ org.founded }}</strong></span>{% endif %}</div></div></a>
+            {% empty %}
+            <a href="#" class="org-card"><div class="org-logo">NA</div><div class="org-content"><h3 class="org-name">NAACP Atlanta Chapter</h3><p class="org-type">Civil Rights · Advocacy</p><p class="org-description">Advancing equity and justice through advocacy, education, and community empowerment since 1917.</p><div class="org-stats"><span class="org-stat">Founded <strong>1917</strong></span></div></div></a>
+            <a href="#" class="org-card"><div class="org-logo">UL</div><div class="org-content"><h3 class="org-name">Atlanta Urban League</h3><p class="org-type">Economic Empowerment</p><p class="org-description">Enabling African Americans to secure economic self-reliance through job training, housing, and education.</p><div class="org-stats"><span class="org-stat">Founded <strong>1920</strong></span></div></div></a>
+            <a href="#" class="org-card"><div class="org-logo">100</div><div class="org-content"><h3 class="org-name">100 Black Men of Atlanta</h3><p class="org-type">Mentorship · Youth Development</p><p class="org-description">Mentoring and educating young Black men through academic support, leadership, and life skills programs.</p><div class="org-stats"><span class="org-stat">Founded <strong>1987</strong></span></div></div></a>
+            <a href="#" class="org-card"><div class="org-logo">GI</div><div class="org-content"><h3 class="org-name">Girls Inc. Atlanta</h3><p class="org-type">Youth · Women's Empowerment</p><p class="org-description">Inspiring all girls to be strong, smart, and bold through mentoring and educational programs.</p></div></a>
+            {% endfor %}
+        </div>
+    </section>
+
+    <section class="two-column-section">
+        <div class="column-card">
+            <h3 class="column-title">✋ Volunteer Opportunities</h3>
+            <ul class="volunteer-list">
+                {% for item in volunteer_ops %}
+                <li class="volunteer-item"><div class="volunteer-info"><h4>{{ item.title }}</h4><p>{{ item.organization }} · {{ item.schedule }}</p></div><span class="volunteer-badge">{{ item.type }}</span></li>
+                {% empty %}
+                <li class="volunteer-item"><div class="volunteer-info"><h4>Food Bank Sorting</h4><p>Atlanta Community Food Bank · Sat mornings</p></div><span class="volunteer-badge">Weekly</span></li>
+                <li class="volunteer-item"><div class="volunteer-info"><h4>Youth Tutoring</h4><p>Boys & Girls Club · After school</p></div><span class="volunteer-badge">Ongoing</span></li>
+                <li class="volunteer-item"><div class="volunteer-info"><h4>Senior Home Visits</h4><p>Meals on Wheels · Flexible</p></div><span class="volunteer-badge">Flexible</span></li>
+                <li class="volunteer-item"><div class="volunteer-info"><h4>Habitat Build Day</h4><p>Habitat for Humanity · Jan 28</p></div><span class="volunteer-badge">One-time</span></li>
+                {% endfor %}
+            </ul>
+        </div>
+        <div class="column-card">
+            <h3 class="column-title">📣 Civic Action</h3>
+            <div class="civic-item"><div class="civic-header"><div class="civic-icon">🗳️</div><h4>Voter Registration</h4></div><p>Make sure you're registered and ready for upcoming elections.</p><a href="#" class="civic-link">Check Your Status →</a></div>
+            <div class="civic-item"><div class="civic-header"><div class="civic-icon">🏛️</div><h4>Town Hall Meeting</h4></div><p>City budget meeting on January 22nd. Your voice matters.</p><a href="#" class="civic-link">RSVP Now →</a></div>
+            <div class="civic-item"><div class="civic-header"><div class="civic-icon">📝</div><h4>Active Petitions</h4></div><p>3 local campaigns need your signature to move forward.</p><a href="#" class="civic-link">View Petitions →</a></div>
+        </div>
+    </section>
+
+    <section class="churches-section">
+        <div class="churches-inner">
+            <div class="section-header"><h2 class="section-title">⛪ Churches & Faith Communities</h2><a href="#" class="section-link">View All →</a></div>
+            <div class="churches-scroll">
+                {% for church in churches %}
+                <a href="{{ church.url }}" class="church-card"><div class="church-image"></div><div class="church-content"><h3 class="church-name">{{ church.name }}</h3><p class="church-denomination">{{ church.denomination }}</p><p class="church-location">📍 {{ church.neighborhood }}</p></div></a>
+                {% empty %}
+                <a href="#" class="church-card"><div class="church-image"></div><div class="church-content"><h3 class="church-name">Ebenezer Baptist Church</h3><p class="church-denomination">Baptist</p><p class="church-location">📍 Sweet Auburn</p></div></a>
+                <a href="#" class="church-card"><div class="church-image"></div><div class="church-content"><h3 class="church-name">Big Bethel AME</h3><p class="church-denomination">AME</p><p class="church-location">📍 Auburn Avenue</p></div></a>
+                <a href="#" class="church-card"><div class="church-image"></div><div class="church-content"><h3 class="church-name">First African Presbyterian</h3><p class="church-denomination">Presbyterian</p><p class="church-location">📍 Downtown</p></div></a>
+                <a href="#" class="church-card"><div class="church-image"></div><div class="church-content"><h3 class="church-name">Hillside Chapel</h3><p class="church-denomination">Non-denominational</p><p class="church-location">📍 Cascade Heights</p></div></a>
+                {% endfor %}
+            </div>
+        </div>
+    </section>
+
+    <footer class="footer">
+        <div class="footer-inner">
+            <div class="footer-logo"><span class="a">A</span><span class="f">f</span><span class="r">r</span><span class="o">o</span>Todo</div>
+            <nav class="footer-links"><a href="#" class="footer-link">About</a><a href="#" class="footer-link">Contact</a><a href="#" class="footer-link">Privacy</a><a href="#" class="footer-link">Terms</a></nav>
+        </div>
+    </footer>
+</body>
+</html>

@@ -20,16 +20,6 @@
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700;800&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     
     <style>
-
-        .hero-descriptor {
-    font-family: var(--font-body);
-    font-size: 14px;
-    font-weight: 600;
-    letter-spacing: 3px;
-    text-transform: uppercase;
-    color: var(--gray-500);
-    margin: 0 0 var(--space-lg) 0;
-}
         :root {
             /* Pan-African inspired palette with warmth */
             --black: #1a1a1a;
@@ -939,20 +929,20 @@
         </div>
         
         <nav class="header-nav">
-            <a href="{% url 'searchengine:category' 'business' %}" class="nav-link">Business</a>
-            <a href="{% url 'searchengine:category' 'culture' %}" class="nav-link">Culture</a>
-            <a href="{% url 'searchengine:category' 'health' %}" class="nav-link">Health</a>
-            <a href="{% url 'searchengine:category' 'news' %}" class="nav-link">News</a>
-            <a href="{% url 'searchengine:category' 'community' %}" class="nav-link">Community</a>
+            <a href="" class="nav-link">Business</a>
+            <a href="" class="nav-link">Culture</a>
+            <a href="" class="nav-link">Health</a>
+            <a href="" class="nav-link">News</a>
+            <a href="" class="nav-link">Community</a>
         </nav>
 
         <div class="header-right">
             {% if user.is_authenticated %}
             <span class="user-greeting">Welcome, {{ user.username }}</span>
-            <a href="{% url 'accounts:logout' %}" class="auth-link login">Logout</a>
+            <a href="" class="auth-link login">Logout</a>
             {% else %}
-            <a href="{% url 'accounts:login' %}" class="auth-link login">Login</a>
-            <a href="{% url 'accounts:register' %}" class="auth-link signup">Sign Up</a>
+            <a href="" class="auth-link login">Login</a>
+            <a href="" class="auth-link signup">Sign Up</a>
             {% endif %}
         </div>
     </header>
@@ -966,7 +956,6 @@
                     <span class="logo-a">A</span><span class="logo-f">f</span><span class="logo-r">r</span><span class="logo-o">o</span><span class="logo-text">Todo</span>
                     <span class="beta-badge">Beta</span>
                 </h1>
-                <p class="hero-descriptor">Knowledge Engine</p>
                 <p class="hero-tagline">
                     Ask the community anything about<br>
                     <em>Black business, culture & wellness</em>

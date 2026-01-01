@@ -524,8 +524,37 @@ from django.views import View
 from .searchapi import get_autocomplete
 from decouple import config
 from django.core.cache import cache
+import typesense
+import redis
+from decouple import config
+from django.shortcuts import render, get_object_or_404
+from django.http import Http404
 
+
+
+redis_client = redis.Redis(
+    host=config('REDIS_HOST', default='localhost'),
+    port=config('REDIS_PORT', default=6379, cast=int),
+    db=config('REDIS_DB', default=0, cast=int),
+    password=config('REDIS_PASSWORD', default=None),
+    decode_responses=True,
+)
 logger = logging.getLogger(__name__)
+
+
+typesense_client= typesense.Client({
+    'api_key': config('TYPESENSE_API_KEY'),
+    'nodes': [{
+        'host': config('TYPESENSE_HOST'),
+        'port': config('TYPESENSE_PORT'),
+        'protocol': config('TYPESENSE_PROTOCOL')
+    }],
+    'connection_timeout_seconds': 5
+})
+
+COLLECTION_NAME = 'documents'
+
+
 
 
 # =============================================================================
@@ -1174,3 +1203,290 @@ def search_api(request):
     }
     
     return JsonResponse(result)
+
+
+# views.py
+
+def category_view(request, category_slug):
+    """Route to category-specific templates with appropriate context."""
+    
+    city = get_user_city(request)  # Your location detection function
+    subcategory = request.GET.get('subcategory')
+    
+    # Route to appropriate template and build context
+    if category_slug == 'business':
+        return business_category(request, city, subcategory)
+    elif category_slug == 'culture':
+        return culture_category(request, city)
+    elif category_slug == 'health':
+        return health_category(request, city)
+    elif category_slug == 'news':
+        return news_category(request, city)
+    elif category_slug == 'community':
+        return community_category(request, city)
+    else:
+        raise Http404("Category not found")
+
+
+# views.py
+
+def business_category(request, city, subcategory=None):
+    """Business directory page."""
+    
+    query = request.GET.get('q', '*')
+    
+    # Simple search without filters
+    try:
+        results = typesense_client.collections[COLLECTION_NAME].documents.search({
+            'q': query if query else '*',
+            'query_by': 'name,description',  # Adjust to your actual fields
+            'per_page': 20,
+            'page': int(request.GET.get('page', 1))
+        })
+    except Exception as e:
+        print(f"Typesense error: {e}")
+        results = {'hits': [], 'found': 0}
+    
+    context = {
+        'city': city,
+        'subcategory': subcategory,
+        'listings': results.get('hits', []),
+        'total': results.get('found', 0),
+        'featured': [],
+        'trending': [],
+        'stats': {},
+    }
+    
+    return render(request, 'category_business.html', context)
+
+
+def culture_category(request, city):
+    """Culture & heritage page."""
+    from datetime import date
+    
+    today = date.today()
+    
+    # Get today's history event (from your database or API)
+    history_event = get_history_event(today.month, today.day)
+    
+    # Get featured article
+    featured_article = get_featured_article('culture')
+    
+    # Get HBCUs (could be static or from DB)
+    hbcus = get_hbcu_list(limit=4)
+    
+    # Get trending music/culture content
+    trending_music = get_trending_content('culture', 'music', limit=4)
+    
+    # Get upcoming cultural events
+    events = get_upcoming_events('culture', city, limit=4)
+    
+    # Get book recommendations
+    books = get_book_recommendations(limit=8)
+    
+    context = {
+        'city': city,
+        'today': {'day': today.day, 'month': today.strftime('%b').upper()},
+        'history_event': history_event,
+        'featured_article': featured_article,
+        'hbcus': hbcus,
+        'trending_music': trending_music,
+        'events': events,
+        'books': books,
+    }
+    
+    return render(request, 'category_culture.html', context)
+
+
+def health_category(request, city):
+    """Health providers directory page."""
+    
+    specialty = request.GET.get('specialty')
+    
+    try:
+        results = typesense_client.collections[COLLECTION_NAME].documents.search({
+            'q': request.GET.get('q', '*'),
+            'query_by': 'name,description',
+            'per_page': 20,
+            'page': int(request.GET.get('page', 1))
+        })
+        providers = results.get('hits', [])
+        total = results.get('found', 0)
+    except Exception as e:
+        print(f"Typesense error: {e}")
+        providers = []
+        total = 0
+    
+    context = {
+        'city': city,
+        'specialty': specialty,
+        'providers': providers,
+        'total': total,
+        'stats': {},
+    }
+    
+    return render(request, 'category_health.html', context)
+
+
+def news_category(request, city):
+    """News aggregation page."""
+    
+    section = request.GET.get('section', 'top')
+    
+    # Get news articles (from your news aggregation source)
+    top_story = get_top_story()
+    sidebar_stories = get_news_articles(limit=3, exclude=top_story['id'] if top_story else None)
+    top_articles = get_news_articles(section=section, limit=5)
+    opinions = get_opinion_articles(limit=3)
+    local_news = get_local_news(city, limit=4)
+    good_news = get_good_news(limit=4)
+    
+    context = {
+        'city': city,
+        'section': section,
+        'top_story': top_story,
+        'sidebar_stories': sidebar_stories,
+        'top_articles': top_articles,
+        'opinions': opinions,
+        'local_news': local_news,
+        'good_news': good_news,
+    }
+    
+    return render(request, 'category_news.html', context)
+
+
+def community_category(request, city):
+    """Community hub page."""
+    
+    # Get upcoming events
+    events = get_upcoming_events('community', city, limit=5)
+    
+    # Get local organizations
+    organizations = get_organizations(city, limit=4)
+    
+    # Get volunteer opportunities
+    volunteer_ops = get_volunteer_opportunities(city, limit=4)
+    
+    # Get churches/faith communities
+    churches = get_churches(city, limit=6)
+    
+    context = {
+        'city': city,
+        'events': events,
+        'organizations': organizations,
+        'volunteer_ops': volunteer_ops,
+        'churches': churches,
+    }
+    
+    return render(request, 'category_community.html', context)
+
+
+# ==================== HELPER FUNCTIONS ====================
+
+def get_user_city(request):
+    """Get user's city from session, cookie, or IP geolocation."""
+    # Check session first
+    if request.session.get('user_city'):
+        return request.session['user_city']
+    # Default or IP-based detection
+    return 'Atlanta'  # Replace with actual detection
+
+
+def get_featured_listings(category, city):
+    """Get featured/promoted listings from Redis cache."""
+    cache_key = f"featured:{category}:{city.lower()}"
+    cached = redis_client.get(cache_key)
+    if cached:
+        return json.loads(cached)
+    return []
+
+
+def get_trending_searches(category, city):
+    """Get trending searches from Redis."""
+    cache_key = f"trending:{category}:{city.lower()}"
+    results = redis_client.zrevrange(cache_key, 0, 7, withscores=False)
+    return [r.decode() for r in results] if results else []
+
+
+def get_category_stats(category, city):
+    """Get category statistics from Redis cache."""
+    cache_key = f"stats:{category}:{city.lower()}"
+    stats = redis_client.hgetall(cache_key)
+    if stats:
+        return {k.decode(): v.decode() for k, v in stats.items()}
+    return {}
+
+
+def get_history_event(month, day):
+    """Get 'This Day in Black History' event."""
+    # Query your database or API
+    # Return: {'title': '...', 'description': '...', 'year': 1863}
+    return None
+
+
+def get_featured_article(category):
+    """Get featured/hero article for a category."""
+    # Query your CMS or database
+    return None
+
+
+def get_hbcu_list(limit=4):
+    """Get list of HBCUs."""
+    # Could be static data or from database
+    return []
+
+
+def get_trending_content(category, subcategory, limit=4):
+    """Get trending content for a category."""
+    return []
+
+
+def get_upcoming_events(category, city, limit=5):
+    """Get upcoming events."""
+    # Query your events table/API
+    return []
+
+
+def get_book_recommendations(limit=8):
+    """Get book recommendations."""
+    return []
+
+
+def get_top_story():
+    """Get the top news story."""
+    return None
+
+
+def get_news_articles(section=None, limit=5, exclude=None):
+    """Get news articles, optionally filtered by section."""
+    return []
+
+
+def get_opinion_articles(limit=3):
+    """Get opinion/commentary articles."""
+    return []
+
+
+def get_local_news(city, limit=4):
+    """Get local news for a city."""
+    return []
+
+
+def get_good_news(limit=4):
+    """Get positive/uplifting news stories."""
+    return []
+
+
+def get_organizations(city, limit=4):
+    """Get local organizations."""
+    return []
+
+
+def get_volunteer_opportunities(city, limit=4):
+    """Get volunteer opportunities."""
+    return []
+
+
+def get_churches(city, limit=6):
+    """Get churches/faith communities."""
+    return []

@@ -1,0 +1,1176 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Black-Owned Businesses | AfroTodo</title>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700;800&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --black: #1a1a1a;
+            --green: #2d6a4f;
+            --green-light: #40916c;
+            --green-pale: rgba(45, 106, 79, 0.1);
+            --gold: #d4a03a;
+            --gold-light: #e9c46a;
+            --red: #bc4749;
+            --cream: #faf8f5;
+            --warm-white: #fffef9;
+            --gray-100: #f5f3f0;
+            --gray-200: #e8e4df;
+            --gray-300: #d4cfc8;
+            --gray-400: #b8b2a7;
+            --gray-500: #8a8279;
+            --gray-600: #6b655c;
+            --gray-700: #4a4640;
+            
+            --font-display: 'Playfair Display', Georgia, serif;
+            --font-body: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+            
+            --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+            --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+            --shadow-lg: 0 12px 40px rgba(0,0,0,0.12);
+            
+            --transition-fast: 150ms ease;
+            --transition-base: 250ms ease;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: var(--font-body);
+            background-color: var(--cream);
+            color: var(--black);
+            line-height: 1.6;
+        }
+
+        a {
+            text-decoration: none;
+            color: inherit;
+        }
+
+        /* ==================== HEADER ==================== */
+        .header {
+            background: var(--warm-white);
+            border-bottom: 1px solid var(--gray-200);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header-inner {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 16px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 24px;
+        }
+
+        .logo {
+            font-family: var(--font-display);
+            font-size: 28px;
+            font-weight: 700;
+            flex-shrink: 0;
+        }
+
+        .logo .a { color: var(--black); }
+        .logo .f { color: var(--green); }
+        .logo .r { color: var(--gold); }
+        .logo .o { color: var(--red); }
+
+        .nav-links {
+            display: flex;
+            gap: 8px;
+        }
+
+        .nav-link {
+            padding: 8px 16px;
+            font-size: 15px;
+            font-weight: 500;
+            color: var(--gray-600);
+            border-radius: 8px;
+            transition: all var(--transition-fast);
+        }
+
+        .nav-link:hover {
+            background: var(--gray-100);
+            color: var(--black);
+        }
+
+        .nav-link.active {
+            background: var(--green-pale);
+            color: var(--green);
+        }
+
+        /* ==================== HERO ==================== */
+        .hero {
+            background: linear-gradient(135deg, var(--green) 0%, #1b4332 100%);
+            color: white;
+            padding: 60px 24px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .hero::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.05'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+            opacity: 0.5;
+        }
+
+        .hero-inner {
+            max-width: 1400px;
+            margin: 0 auto;
+            position: relative;
+            z-index: 1;
+        }
+
+        .hero-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(255,255,255,0.15);
+            backdrop-filter: blur(10px);
+            padding: 8px 16px;
+            border-radius: 100px;
+            font-size: 14px;
+            font-weight: 500;
+            margin-bottom: 20px;
+        }
+
+        .hero-title {
+            font-family: var(--font-display);
+            font-size: clamp(32px, 5vw, 48px);
+            font-weight: 700;
+            margin-bottom: 12px;
+            line-height: 1.2;
+        }
+
+        .hero-subtitle {
+            font-size: 18px;
+            opacity: 0.9;
+            margin-bottom: 32px;
+            max-width: 600px;
+        }
+
+        /* Search Box */
+        .search-container {
+            display: flex;
+            gap: 12px;
+            max-width: 700px;
+            flex-wrap: wrap;
+        }
+
+        .search-box {
+            flex: 1;
+            min-width: 280px;
+            position: relative;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 18px 20px 18px 52px;
+            font-family: var(--font-body);
+            font-size: 16px;
+            border: none;
+            border-radius: 12px;
+            background: white;
+            box-shadow: var(--shadow-lg);
+            outline: none;
+        }
+
+        .search-input::placeholder {
+            color: var(--gray-400);
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 18px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 22px;
+            height: 22px;
+            color: var(--gray-400);
+        }
+
+        .location-btn {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 18px 24px;
+            background: white;
+            border: none;
+            border-radius: 12px;
+            font-family: var(--font-body);
+            font-size: 15px;
+            font-weight: 500;
+            color: var(--gray-700);
+            cursor: pointer;
+            box-shadow: var(--shadow-lg);
+            transition: all var(--transition-fast);
+        }
+
+        .location-btn:hover {
+            background: var(--gray-100);
+        }
+
+        .location-btn svg {
+            width: 20px;
+            height: 20px;
+            color: var(--red);
+        }
+
+        /* Hero Stats */
+        .hero-stats {
+            display: flex;
+            gap: 40px;
+            margin-top: 40px;
+            padding-top: 32px;
+            border-top: 1px solid rgba(255,255,255,0.2);
+        }
+
+        .stat {
+            text-align: left;
+        }
+
+        .stat-value {
+            font-family: var(--font-display);
+            font-size: 28px;
+            font-weight: 700;
+        }
+
+        .stat-label {
+            font-size: 14px;
+            opacity: 0.8;
+        }
+
+        /* ==================== CATEGORIES ==================== */
+        .categories-section {
+            padding: 24px;
+            background: var(--warm-white);
+            border-bottom: 1px solid var(--gray-200);
+        }
+
+        .categories-inner {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .categories-scroll {
+            display: flex;
+            gap: 12px;
+            overflow-x: auto;
+            padding-bottom: 8px;
+            scrollbar-width: none;
+        }
+
+        .categories-scroll::-webkit-scrollbar {
+            display: none;
+        }
+
+        .category-chip {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 20px;
+            background: var(--gray-100);
+            border: 2px solid transparent;
+            border-radius: 100px;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--gray-700);
+            white-space: nowrap;
+            cursor: pointer;
+            transition: all var(--transition-fast);
+        }
+
+        .category-chip:hover {
+            background: var(--green-pale);
+            color: var(--green);
+        }
+
+        .category-chip.active {
+            background: var(--green);
+            color: white;
+            border-color: var(--green);
+        }
+
+        .category-chip svg {
+            width: 18px;
+            height: 18px;
+        }
+
+        /* ==================== MAIN CONTENT ==================== */
+        .main-content {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 32px 24px;
+            display: grid;
+            grid-template-columns: 280px 1fr;
+            gap: 32px;
+        }
+
+        /* Sidebar / Filters */
+        .sidebar {
+            position: sticky;
+            top: 100px;
+            height: fit-content;
+        }
+
+        .filter-section {
+            background: var(--warm-white);
+            border: 1px solid var(--gray-200);
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 20px;
+        }
+
+        .filter-title {
+            font-size: 14px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--gray-500);
+            margin-bottom: 16px;
+        }
+
+        .filter-option {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 0;
+            cursor: pointer;
+        }
+
+        .filter-option input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+            accent-color: var(--green);
+        }
+
+        .filter-option label {
+            font-size: 15px;
+            color: var(--gray-700);
+            cursor: pointer;
+            flex: 1;
+        }
+
+        .filter-count {
+            font-size: 13px;
+            color: var(--gray-400);
+        }
+
+        .filter-radio {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .filter-radio label {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background var(--transition-fast);
+        }
+
+        .filter-radio label:hover {
+            background: var(--gray-100);
+        }
+
+        .filter-radio input[type="radio"] {
+            width: 18px;
+            height: 18px;
+            accent-color: var(--green);
+        }
+
+        /* Listings */
+        .listings-container {
+            min-width: 0;
+        }
+
+        .listings-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 24px;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+
+        .results-count {
+            font-size: 15px;
+            color: var(--gray-600);
+        }
+
+        .results-count strong {
+            color: var(--black);
+        }
+
+        .sort-select {
+            padding: 10px 16px;
+            font-family: var(--font-body);
+            font-size: 14px;
+            border: 1px solid var(--gray-300);
+            border-radius: 8px;
+            background: var(--warm-white);
+            color: var(--gray-700);
+            cursor: pointer;
+        }
+
+        /* Business Card */
+        .listing-card {
+            display: flex;
+            gap: 20px;
+            padding: 24px;
+            background: var(--warm-white);
+            border: 1px solid var(--gray-200);
+            border-radius: 16px;
+            margin-bottom: 16px;
+            transition: all var(--transition-base);
+        }
+
+        .listing-card:hover {
+            border-color: var(--green);
+            box-shadow: var(--shadow-md);
+        }
+
+        .listing-image {
+            width: 180px;
+            height: 140px;
+            border-radius: 12px;
+            overflow: hidden;
+            flex-shrink: 0;
+        }
+
+        .listing-image img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .listing-image-placeholder {
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, var(--gray-200) 0%, var(--gray-300) 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .listing-image-placeholder svg {
+            width: 48px;
+            height: 48px;
+            color: var(--gray-400);
+        }
+
+        .listing-content {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .listing-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 8px;
+        }
+
+        .listing-name {
+            font-family: var(--font-display);
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--black);
+        }
+
+        .listing-verified {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px 10px;
+            background: var(--green-pale);
+            border-radius: 100px;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--green);
+            white-space: nowrap;
+        }
+
+        .listing-verified svg {
+            width: 14px;
+            height: 14px;
+        }
+
+        .listing-meta {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+        }
+
+        .listing-rating {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .listing-rating svg {
+            width: 18px;
+            height: 18px;
+            color: var(--gold);
+        }
+
+        .listing-rating span {
+            color: var(--gray-500);
+            font-weight: 400;
+        }
+
+        .listing-location {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 14px;
+            color: var(--gray-500);
+        }
+
+        .listing-location svg {
+            width: 16px;
+            height: 16px;
+        }
+
+        .listing-tags {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-bottom: 12px;
+        }
+
+        .listing-tag {
+            padding: 4px 12px;
+            background: var(--gray-100);
+            border-radius: 100px;
+            font-size: 13px;
+            color: var(--gray-600);
+        }
+
+        .listing-description {
+            font-size: 14px;
+            color: var(--gray-600);
+            line-height: 1.5;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        /* Featured Section */
+        .featured-section {
+            background: var(--warm-white);
+            border: 1px solid var(--gray-200);
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 32px;
+        }
+
+        .section-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+
+        .section-title {
+            font-family: var(--font-display);
+            font-size: 22px;
+            font-weight: 700;
+        }
+
+        .section-link {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--green);
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .section-link:hover {
+            color: var(--green-light);
+        }
+
+        .featured-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 16px;
+        }
+
+        .featured-card {
+            background: var(--cream);
+            border-radius: 12px;
+            overflow: hidden;
+            transition: all var(--transition-fast);
+        }
+
+        .featured-card:hover {
+            transform: translateY(-4px);
+            box-shadow: var(--shadow-md);
+        }
+
+        .featured-card-image {
+            height: 120px;
+            background: linear-gradient(135deg, var(--gray-200) 0%, var(--gray-300) 100%);
+        }
+
+        .featured-card-image img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .featured-card-content {
+            padding: 16px;
+        }
+
+        .featured-card-name {
+            font-weight: 600;
+            font-size: 15px;
+            margin-bottom: 4px;
+        }
+
+        .featured-card-meta {
+            font-size: 13px;
+            color: var(--gray-500);
+        }
+
+        /* Popular Searches */
+        .popular-searches {
+            background: var(--warm-white);
+            border: 1px solid var(--gray-200);
+            border-radius: 16px;
+            padding: 24px;
+            margin-top: 32px;
+        }
+
+        .popular-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .popular-tag {
+            padding: 10px 18px;
+            background: var(--gray-100);
+            border-radius: 100px;
+            font-size: 14px;
+            color: var(--gray-700);
+            transition: all var(--transition-fast);
+        }
+
+        .popular-tag:hover {
+            background: var(--green);
+            color: white;
+        }
+
+        /* Load More */
+        .load-more {
+            text-align: center;
+            padding: 32px;
+        }
+
+        .load-more-btn {
+            padding: 16px 48px;
+            font-family: var(--font-body);
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--green);
+            background: var(--warm-white);
+            border: 2px solid var(--green);
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all var(--transition-fast);
+        }
+
+        .load-more-btn:hover {
+            background: var(--green);
+            color: white;
+        }
+
+        /* ==================== FOOTER ==================== */
+        .footer {
+            background: var(--black);
+            color: white;
+            padding: 48px 24px;
+            margin-top: 64px;
+        }
+
+        .footer-inner {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 24px;
+        }
+
+        .footer-logo {
+            font-family: var(--font-display);
+            font-size: 24px;
+            font-weight: 700;
+        }
+
+        .footer-links {
+            display: flex;
+            gap: 32px;
+        }
+
+        .footer-link {
+            font-size: 14px;
+            color: var(--gray-400);
+            transition: color var(--transition-fast);
+        }
+
+        .footer-link:hover {
+            color: white;
+        }
+
+        /* ==================== RESPONSIVE ==================== */
+        @media (max-width: 1024px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+
+            .sidebar {
+                position: static;
+                display: flex;
+                gap: 16px;
+                overflow-x: auto;
+                padding-bottom: 8px;
+            }
+
+            .filter-section {
+                min-width: 200px;
+                margin-bottom: 0;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .header-inner {
+                padding: 12px 16px;
+            }
+
+            .nav-links {
+                display: none;
+            }
+
+            .hero {
+                padding: 40px 16px;
+            }
+
+            .hero-stats {
+                flex-wrap: wrap;
+                gap: 24px;
+            }
+
+            .search-container {
+                flex-direction: column;
+            }
+
+            .search-box {
+                min-width: 100%;
+            }
+
+            .listing-card {
+                flex-direction: column;
+            }
+
+            .listing-image {
+                width: 100%;
+                height: 180px;
+            }
+
+            .sidebar {
+                flex-direction: column;
+            }
+
+            .filter-section {
+                min-width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-inner">
+            <a href="/" class="logo">
+                <span class="a">A</span><span class="f">f</span><span class="r">r</span><span class="o">o</span>Todo
+            </a>
+            <nav class="nav-links">
+                <a href="{% url 'category' 'business' %}" class="nav-link active">Business</a>
+                <a href="{% url 'category' 'culture' %}" class="nav-link">Culture</a>
+                <a href="{% url 'category' 'health' %}" class="nav-link">Health</a>
+                <a href="{% url 'category' 'news' %}" class="nav-link">News</a>
+                <a href="{% url 'category' 'community' %}" class="nav-link">Community</a>
+            </nav>
+        </div>
+    </header>
+
+    <!-- Hero -->
+    <section class="hero">
+        <div class="hero-inner">
+            <div class="hero-badge">
+                <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
+                    <path d="M12 7V3H2v18h20V7H12zM6 19H4v-2h2v2zm0-4H4v-2h2v2zm0-4H4V9h2v2zm0-4H4V5h2v2zm4 12H8v-2h2v2zm0-4H8v-2h2v2zm0-4H8V9h2v2zm0-4H8V5h2v2zm10 12h-8v-2h2v-2h-2v-2h2v-2h-2V9h8v10zm-2-8h-2v2h2v-2zm0 4h-2v2h2v-2z"/>
+                </svg>
+                Black-Owned Business Directory
+            </div>
+            <h1 class="hero-title">Discover Black-Owned Businesses in {{ city|default:"Your City" }}</h1>
+            <p class="hero-subtitle">Support the Black economy. Find trusted businesses, services, and professionals in your community.</p>
+            
+            <form class="search-container" action="{% url 'search' %}" method="GET">
+                <input type="hidden" name="category" value="business">
+                <div class="search-box">
+                    <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="11" cy="11" r="8"/>
+                        <path d="M21 21l-4.35-4.35"/>
+                    </svg>
+                    <input type="text" name="q" class="search-input" placeholder="Search restaurants, salons, contractors...">
+                </div>
+                <button type="button" class="location-btn">
+                    <svg viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+                    </svg>
+                    {{ city|default:"Select Location" }}
+                </button>
+            </form>
+
+            <div class="hero-stats">
+                <div class="stat">
+                    <div class="stat-value">{{ stats.business_count|default:"12,450" }}</div>
+                    <div class="stat-label">Businesses Listed</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-value">{{ stats.cities_count|default:"850" }}</div>
+                    <div class="stat-label">Cities Covered</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-value">{{ stats.verified_pct|default:"78" }}%</div>
+                    <div class="stat-label">Verified Listings</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Category Chips -->
+    <section class="categories-section">
+        <div class="categories-inner">
+            <div class="categories-scroll">
+                <a href="?subcategory=" class="category-chip {% if not subcategory %}active{% endif %}">
+                    All Businesses
+                </a>
+                <a href="?subcategory=restaurants" class="category-chip {% if subcategory == 'restaurants' %}active{% endif %}">
+                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M11 9H9V2H7v7H5V2H3v7c0 2.12 1.66 3.84 3.75 3.97V22h2.5v-9.03C11.34 12.84 13 11.12 13 9V2h-2v7zm5-3v8h2.5v8H21V2c-2.76 0-5 2.24-5 4z"/></svg>
+                    Restaurants
+                </a>
+                <a href="?subcategory=beauty" class="category-chip {% if subcategory == 'beauty' %}active{% endif %}">
+                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 12c0-4.42-3.58-8-8-8s-8 3.58-8 8c0 2.03.76 3.87 2 5.28V23h3v-3h2v3h2v-3h2v3h3v-5.72c1.24-1.41 2-3.25 2-5.28zm-8-6c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2z"/></svg>
+                    Beauty & Barber
+                </a>
+                <a href="?subcategory=professional" class="category-chip {% if subcategory == 'professional' %}active{% endif %}">
+                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 6h-4V4c0-1.11-.89-2-2-2h-4c-1.11 0-2 .89-2 2v2H4c-1.11 0-1.99.89-1.99 2L2 19c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2zm-6 0h-4V4h4v2z"/></svg>
+                    Professional
+                </a>
+                <a href="?subcategory=contractors" class="category-chip {% if subcategory == 'contractors' %}active{% endif %}">
+                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M22.7 19l-9.1-9.1c.9-2.3.4-5-1.5-6.9-2-2-5-2.4-7.4-1.3L9 6 6 9 1.6 4.7C.4 7.1.9 10.1 2.9 12.1c1.9 1.9 4.6 2.4 6.9 1.5l9.1 9.1c.4.4 1 .4 1.4 0l2.3-2.3c.5-.4.5-1.1.1-1.4z"/></svg>
+                    Contractors
+                </a>
+                <a href="?subcategory=realestate" class="category-chip {% if subcategory == 'realestate' %}active{% endif %}">
+                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
+                    Real Estate
+                </a>
+                <a href="?subcategory=retail" class="category-chip {% if subcategory == 'retail' %}active{% endif %}">
+                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 18c-1.1 0-1.99.9-1.99 2S5.9 22 7 22s2-.9 2-2-.9-2-2-2zM1 2v2h2l3.6 7.59-1.35 2.45c-.16.28-.25.61-.25.96 0 1.1.9 2 2 2h12v-2H7.42c-.14 0-.25-.11-.25-.25l.03-.12.9-1.63h7.45c.75 0 1.41-.41 1.75-1.03l3.58-6.49c.08-.14.12-.31.12-.48 0-.55-.45-1-1-1H5.21l-.94-2H1zm16 16c-1.1 0-1.99.9-1.99 2s.89 2 1.99 2 2-.9 2-2-.9-2-2-2z"/></svg>
+                    Retail
+                </a>
+                <a href="?subcategory=creative" class="category-chip {% if subcategory == 'creative' %}active{% endif %}">
+                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 22C6.49 22 2 17.51 2 12S6.49 2 12 2s10 4.04 10 9c0 3.31-2.69 6-6 6h-1.77c-.28 0-.5.22-.5.5 0 .12.05.23.13.33.41.47.64 1.06.64 1.67 0 1.38-1.12 2.5-2.5 2.5zm0-18c-4.41 0-8 3.59-8 8s3.59 8 8 8c.28 0 .5-.22.5-.5 0-.16-.08-.28-.14-.35-.41-.46-.63-1.05-.63-1.65 0-1.38 1.12-2.5 2.5-2.5H16c2.21 0 4-1.79 4-4 0-3.86-3.59-7-8-7z"/><circle cx="6.5" cy="11.5" r="1.5"/><circle cx="9.5" cy="7.5" r="1.5"/><circle cx="14.5" cy="7.5" r="1.5"/><circle cx="17.5" cy="11.5" r="1.5"/></svg>
+                    Creative
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <!-- Sidebar Filters -->
+        <aside class="sidebar">
+            <div class="filter-section">
+                <h3 class="filter-title">Distance</h3>
+                <div class="filter-radio">
+                    <label>
+                        <input type="radio" name="distance" value="5" checked> Within 5 miles
+                    </label>
+                    <label>
+                        <input type="radio" name="distance" value="10"> Within 10 miles
+                    </label>
+                    <label>
+                        <input type="radio" name="distance" value="25"> Within 25 miles
+                    </label>
+                    <label>
+                        <input type="radio" name="distance" value="any"> Any distance
+                    </label>
+                </div>
+            </div>
+
+            <div class="filter-section">
+                <h3 class="filter-title">Rating</h3>
+                <div class="filter-option">
+                    <input type="checkbox" id="rating-4">
+                    <label for="rating-4">4+ Stars</label>
+                </div>
+                <div class="filter-option">
+                    <input type="checkbox" id="rating-3">
+                    <label for="rating-3">3+ Stars</label>
+                </div>
+            </div>
+
+            <div class="filter-section">
+                <h3 class="filter-title">Features</h3>
+                <div class="filter-option">
+                    <input type="checkbox" id="verified">
+                    <label for="verified">Verified Only</label>
+                </div>
+                <div class="filter-option">
+                    <input type="checkbox" id="open-now">
+                    <label for="open-now">Open Now</label>
+                </div>
+                <div class="filter-option">
+                    <input type="checkbox" id="accepts-cards">
+                    <label for="accepts-cards">Accepts Cards</label>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Listings -->
+        <div class="listings-container">
+            <!-- Featured Section -->
+            {% if featured %}
+            <section class="featured-section">
+                <div class="section-header">
+                    <h2 class="section-title">✨ Featured Businesses</h2>
+                    <a href="?featured=1" class="section-link">
+                        See all
+                        <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
+                    </a>
+                </div>
+                <div class="featured-grid">
+                    {% for item in featured %}
+                    <a href="{% url 'business_detail' item.id %}" class="featured-card">
+                        <div class="featured-card-image">
+                            {% if item.image_url %}
+                            <img src="{{ item.image_url }}" alt="{{ item.name }}">
+                            {% endif %}
+                        </div>
+                        <div class="featured-card-content">
+                            <div class="featured-card-name">{{ item.name }}</div>
+                            <div class="featured-card-meta">⭐ {{ item.rating }} · {{ item.subcategory }}</div>
+                        </div>
+                    </a>
+                    {% endfor %}
+                </div>
+            </section>
+            {% endif %}
+
+            <!-- Results Header -->
+            <div class="listings-header">
+                <span class="results-count">
+                    <strong>{{ total|default:"1,247" }}</strong> businesses found
+                    {% if city %}in <strong>{{ city }}</strong>{% endif %}
+                </span>
+                <select class="sort-select">
+                    <option value="rating">Sort by: Highest Rated</option>
+                    <option value="reviews">Most Reviewed</option>
+                    <option value="distance">Nearest</option>
+                    <option value="newest">Newest</option>
+                </select>
+            </div>
+
+            <!-- Listing Cards -->
+            {% for listing in listings %}
+            <article class="listing-card">
+                <div class="listing-image">
+                    {% if listing.image_url %}
+                    <img src="{{ listing.image_url }}" alt="{{ listing.name }}">
+                    {% else %}
+                    <div class="listing-image-placeholder">
+                        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 7V3H2v18h20V7H12zM6 19H4v-2h2v2zm0-4H4v-2h2v2zm0-4H4V9h2v2zm0-4H4V5h2v2zm4 12H8v-2h2v2zm0-4H8v-2h2v2zm0-4H8V9h2v2zm0-4H8V5h2v2zm10 12h-8v-2h2v-2h-2v-2h2v-2h-2V9h8v10zm-2-8h-2v2h2v-2zm0 4h-2v2h2v-2z"/></svg>
+                    </div>
+                    {% endif %}
+                </div>
+                <div class="listing-content">
+                    <div class="listing-header">
+                        <h3 class="listing-name">{{ listing.name }}</h3>
+                        {% if listing.verified %}
+                        <span class="listing-verified">
+                            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+                            Verified
+                        </span>
+                        {% endif %}
+                    </div>
+                    <div class="listing-meta">
+                        <span class="listing-rating">
+                            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>
+                            {{ listing.rating|default:"4.5" }}
+                            <span>({{ listing.review_count|default:"0" }} reviews)</span>
+                        </span>
+                        <span class="listing-location">
+                            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
+                            {{ listing.distance|default:"2.3" }} miles · {{ listing.city }}
+                        </span>
+                    </div>
+                    <div class="listing-tags">
+                        {% for tag in listing.tags|slice:":3" %}
+                        <span class="listing-tag">{{ tag }}</span>
+                        {% empty %}
+                        <span class="listing-tag">{{ listing.subcategory }}</span>
+                        {% endfor %}
+                    </div>
+                    <p class="listing-description">{{ listing.description|truncatewords:25 }}</p>
+                </div>
+            </article>
+            {% empty %}
+            <!-- Sample listings for demo -->
+            <article class="listing-card">
+                <div class="listing-image">
+                    <div class="listing-image-placeholder">
+                        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 7V3H2v18h20V7H12zM6 19H4v-2h2v2zm0-4H4v-2h2v2zm0-4H4V9h2v2zm0-4H4V5h2v2zm4 12H8v-2h2v2zm0-4H8v-2h2v2zm0-4H8V9h2v2zm0-4H8V5h2v2zm10 12h-8v-2h2v-2h-2v-2h2v-2h-2V9h8v10zm-2-8h-2v2h2v-2zm0 4h-2v2h2v-2z"/></svg>
+                    </div>
+                </div>
+                <div class="listing-content">
+                    <div class="listing-header">
+                        <h3 class="listing-name">Sweet Auburn Seafood</h3>
+                        <span class="listing-verified">
+                            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+                            Verified
+                        </span>
+                    </div>
+                    <div class="listing-meta">
+                        <span class="listing-rating">
+                            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>
+                            4.8
+                            <span>(342 reviews)</span>
+                        </span>
+                        <span class="listing-location">
+                            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
+                            2.3 miles · Atlanta
+                        </span>
+                    </div>
+                    <div class="listing-tags">
+                        <span class="listing-tag">Seafood</span>
+                        <span class="listing-tag">Soul Food</span>
+                        <span class="listing-tag">$$</span>
+                    </div>
+                    <p class="listing-description">Family-owned since 1995, serving the best fried catfish and shrimp in Atlanta. Fresh ingredients, generous portions, and that home-cooked taste.</p>
+                </div>
+            </article>
+
+            <article class="listing-card">
+                <div class="listing-image">
+                    <div class="listing-image-placeholder">
+                        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 7V3H2v18h20V7H12zM6 19H4v-2h2v2zm0-4H4v-2h2v2zm0-4H4V9h2v2zm0-4H4V5h2v2zm4 12H8v-2h2v2zm0-4H8v-2h2v2zm0-4H8V9h2v2zm0-4H8V5h2v2zm10 12h-8v-2h2v-2h-2v-2h2v-2h-2V9h8v10zm-2-8h-2v2h2v-2zm0 4h-2v2h2v-2z"/></svg>
+                    </div>
+                </div>
+                <div class="listing-content">
+                    <div class="listing-header">
+                        <h3 class="listing-name">Crown & Glory Barbershop</h3>
+                        <span class="listing-verified">
+                            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+                            Verified
+                        </span>
+                    </div>
+                    <div class="listing-meta">
+                        <span class="listing-rating">
+                            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>
+                            4.9
+                            <span>(187 reviews)</span>
+                        </span>
+                        <span class="listing-location">
+                            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
+                            1.8 miles · Atlanta
+                        </span>
+                    </div>
+                    <div class="listing-tags">
+                        <span class="listing-tag">Barbershop</span>
+                        <span class="listing-tag">Fades</span>
+                        <span class="listing-tag">$</span>
+                    </div>
+                    <p class="listing-description">More than just a haircut — it's a community. Premium cuts, hot towel shaves, and real conversation. Walk-ins welcome.</p>
+                </div>
+            </article>
+            {% endfor %}
+
+            <!-- Load More -->
+            <div class="load-more">
+                <button class="load-more-btn">Load More Businesses</button>
+            </div>
+
+            <!-- Popular Searches -->
+            <section class="popular-searches">
+                <h3 class="section-title" style="margin-bottom: 16px;">Popular Searches in {{ city|default:"Atlanta" }}</h3>
+                <div class="popular-tags">
+                    {% for tag in trending %}
+                    <a href="{% url 'search' %}?q={{ tag }}&category=business" class="popular-tag">{{ tag }}</a>
+                    {% empty %}
+                    <a href="#" class="popular-tag">black barber near me</a>
+                    <a href="#" class="popular-tag">soul food</a>
+                    <a href="#" class="popular-tag">black accountant</a>
+                    <a href="#" class="popular-tag">african restaurant</a>
+                    <a href="#" class="popular-tag">black realtor</a>
+                    <a href="#" class="popular-tag">natural hair salon</a>
+                    <a href="#" class="popular-tag">black contractor</a>
+                    <a href="#" class="popular-tag">jamaican food</a>
+                    {% endfor %}
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="footer-inner">
+            <div class="footer-logo">
+                <span class="a">A</span><span class="f">f</span><span class="r">r</span><span class="o">o</span>Todo
+            </div>
+            <nav class="footer-links">
+                <a href="#" class="footer-link">About</a>
+                <a href="#" class="footer-link">Contact</a>
+                <a href="#" class="footer-link">Privacy</a>
+                <a href="#" class="footer-link">Terms</a>
+            </nav>
+        </div>
+    </footer>
+</body>
+</html>

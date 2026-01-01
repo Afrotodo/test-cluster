@@ -1,0 +1,272 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Black News & Media | AfroTodo</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700;800&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --black: #1a1a1a;
+            --green: #2d6a4f;
+            --gold: #d4a03a;
+            --red: #bc4749;
+            --cream: #faf8f5;
+            --warm-white: #fffef9;
+            --gray-100: #f5f3f0;
+            --gray-200: #e8e4df;
+            --gray-300: #d4cfc8;
+            --gray-400: #b8b2a7;
+            --gray-500: #8a8279;
+            --gray-600: #6b655c;
+            --gray-700: #4a4640;
+            --font-display: 'Playfair Display', Georgia, serif;
+            --font-body: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+            --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+            --shadow-lg: 0 12px 40px rgba(0,0,0,0.12);
+            --transition-fast: 150ms ease;
+            --transition-base: 250ms ease;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: var(--font-body); background-color: var(--cream); color: var(--black); line-height: 1.6; }
+        a { text-decoration: none; color: inherit; }
+
+        .header { background: var(--black); color: white; position: sticky; top: 0; z-index: 100; }
+        .header-inner { max-width: 1400px; margin: 0 auto; padding: 16px 24px; display: flex; align-items: center; justify-content: space-between; }
+        .logo { font-family: var(--font-display); font-size: 28px; font-weight: 700; }
+        .logo .a { color: white; } .logo .f { color: var(--green); } .logo .r { color: var(--gold); } .logo .o { color: var(--red); }
+        .nav-links { display: flex; gap: 4px; }
+        .nav-link { padding: 8px 16px; font-size: 14px; font-weight: 500; color: var(--gray-400); border-radius: 8px; }
+        .nav-link:hover { color: white; }
+        .nav-link.active { background: var(--gray-700); color: white; }
+
+        .category-nav { background: var(--warm-white); border-bottom: 1px solid var(--gray-200); position: sticky; top: 60px; z-index: 99; }
+        .category-nav-inner { max-width: 1400px; margin: 0 auto; padding: 0 24px; display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; }
+        .category-tab { padding: 16px 20px; font-size: 14px; font-weight: 600; color: var(--gray-600); white-space: nowrap; border-bottom: 3px solid transparent; }
+        .category-tab:hover { color: var(--black); }
+        .category-tab.active { color: var(--black); border-bottom-color: var(--black); }
+
+        .hero-section { max-width: 1400px; margin: 0 auto; padding: 32px 24px; }
+        .hero-grid { display: grid; grid-template-columns: 1.5fr 1fr; gap: 24px; }
+        .hero-main { position: relative; border-radius: 20px; overflow: hidden; background: var(--black); min-height: 450px; }
+        .hero-main-image { position: absolute; inset: 0; background: linear-gradient(135deg, #2a2a2a 0%, #1a1a1a 100%); }
+        .hero-main-image img { width: 100%; height: 100%; object-fit: cover; opacity: 0.6; }
+        .hero-main-content { position: absolute; bottom: 0; left: 0; right: 0; padding: 40px; background: linear-gradient(to top, rgba(0,0,0,0.9) 0%, transparent 100%); color: white; }
+        .hero-badge { display: inline-block; padding: 6px 12px; background: var(--red); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; border-radius: 4px; margin-bottom: 16px; }
+        .hero-title { font-family: var(--font-display); font-size: clamp(24px, 3vw, 36px); font-weight: 700; line-height: 1.2; margin-bottom: 12px; }
+        .hero-excerpt { font-size: 16px; opacity: 0.9; margin-bottom: 16px; }
+        .hero-meta { display: flex; gap: 16px; font-size: 13px; opacity: 0.7; }
+        .hero-source { font-weight: 600; }
+
+        .hero-sidebar { display: flex; flex-direction: column; gap: 16px; }
+        .sidebar-story { display: flex; gap: 16px; padding: 20px; background: var(--warm-white); border: 1px solid var(--gray-200); border-radius: 16px; }
+        .sidebar-story:hover { border-color: var(--gray-300); box-shadow: var(--shadow-md); }
+        .sidebar-image { width: 100px; height: 80px; border-radius: 8px; overflow: hidden; flex-shrink: 0; background: var(--gray-200); }
+        .sidebar-content { flex: 1; }
+        .sidebar-category { font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--gray-500); margin-bottom: 6px; }
+        .sidebar-title { font-weight: 600; font-size: 15px; line-height: 1.4; margin-bottom: 8px; }
+        .sidebar-meta { font-size: 12px; color: var(--gray-500); }
+
+        .main-content { max-width: 1400px; margin: 0 auto; padding: 0 24px 64px; display: grid; grid-template-columns: 1fr 360px; gap: 48px; }
+        .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 2px solid var(--gray-200); }
+        .section-title { font-family: var(--font-display); font-size: 24px; font-weight: 700; }
+        .section-link { font-size: 14px; font-weight: 600; color: var(--gray-600); }
+
+        .news-list { display: flex; flex-direction: column; gap: 20px; }
+        .news-card { display: flex; gap: 20px; padding: 24px; background: var(--warm-white); border: 1px solid var(--gray-200); border-radius: 16px; }
+        .news-card:hover { border-color: var(--gray-300); box-shadow: var(--shadow-md); }
+        .news-image { width: 200px; height: 140px; border-radius: 12px; overflow: hidden; flex-shrink: 0; background: var(--gray-200); }
+        .news-content { flex: 1; }
+        .news-category { font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--red); margin-bottom: 8px; }
+        .news-title { font-family: var(--font-display); font-size: 20px; font-weight: 700; line-height: 1.3; margin-bottom: 10px; }
+        .news-excerpt { font-size: 14px; color: var(--gray-600); line-height: 1.6; margin-bottom: 12px; }
+        .news-meta { display: flex; gap: 16px; font-size: 13px; color: var(--gray-500); }
+        .news-source { font-weight: 600; color: var(--black); }
+
+        .sidebar-section { background: var(--warm-white); border: 1px solid var(--gray-200); border-radius: 16px; padding: 24px; margin-bottom: 24px; }
+        .local-badge { padding: 4px 10px; background: var(--gray-100); border-radius: 100px; font-size: 12px; font-weight: 600; color: var(--gray-600); }
+        .local-list { list-style: none; }
+        .local-item { padding: 14px 0; border-bottom: 1px solid var(--gray-200); }
+        .local-item:last-child { border-bottom: none; }
+        .local-item-title { font-weight: 600; font-size: 14px; line-height: 1.4; margin-bottom: 6px; }
+        .local-item-meta { font-size: 12px; color: var(--gray-500); }
+        .good-news-header { background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); margin: -24px -24px 20px; padding: 20px 24px; border-radius: 16px 16px 0 0; }
+        .good-news-header h3 { font-family: var(--font-display); font-size: 18px; font-weight: 700; }
+
+        .opinion-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: 48px; }
+        .opinion-card { background: var(--warm-white); border: 1px solid var(--gray-200); border-radius: 16px; padding: 24px; text-align: center; }
+        .opinion-avatar { width: 64px; height: 64px; border-radius: 50%; background: var(--gray-200); margin: 0 auto 16px; }
+        .opinion-quote { font-family: var(--font-display); font-size: 16px; font-weight: 600; line-height: 1.4; margin-bottom: 12px; }
+        .opinion-author { font-size: 13px; color: var(--gray-600); }
+        .opinion-source { font-size: 12px; color: var(--gray-500); }
+
+        .sources-section { background: var(--gray-100); padding: 48px 24px; margin-top: 48px; }
+        .sources-inner { max-width: 1400px; margin: 0 auto; text-align: center; }
+        .sources-grid { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; margin-top: 24px; }
+        .source-tag { padding: 10px 20px; background: var(--warm-white); border: 1px solid var(--gray-200); border-radius: 100px; font-size: 14px; font-weight: 500; }
+        .source-tag:hover { background: var(--black); color: white; border-color: var(--black); }
+
+        .footer { background: var(--black); color: white; padding: 48px 24px; }
+        .footer-inner { max-width: 1400px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 24px; }
+        .footer-logo { font-family: var(--font-display); font-size: 24px; font-weight: 700; }
+        .footer-links { display: flex; gap: 32px; }
+        .footer-link { font-size: 14px; color: var(--gray-400); }
+
+        @media (max-width: 1024px) {
+            .main-content { grid-template-columns: 1fr; }
+            .hero-grid { grid-template-columns: 1fr; }
+            .hero-sidebar { flex-direction: row; overflow-x: auto; }
+            .sidebar-story { min-width: 300px; }
+            .opinion-grid { grid-template-columns: 1fr; }
+        }
+        @media (max-width: 768px) {
+            .nav-links { display: none; }
+            .hero-main { min-height: 350px; }
+            .news-card { flex-direction: column; }
+            .news-image { width: 100%; height: 180px; }
+            .hero-sidebar { flex-direction: column; }
+            .sidebar-story { min-width: auto; }
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="header-inner">
+            <a href="{% url 'searchengine:home' %}" class="logo"><span class="a">A</span><span class="f">f</span><span class="r">r</span><span class="o">o</span>Todo</a>
+            <nav class="nav-links">
+                <a href="{% url 'searchengine:category' 'business' %}" class="nav-link">Business</a>
+                <a href="{% url 'searchengine:category' 'culture' %}" class="nav-link">Culture</a>
+                <a href="{% url 'searchengine:category' 'health' %}" class="nav-link">Health</a>
+                <a href="{% url 'searchengine:category' 'news' %}" class="nav-link active">News</a>
+                <a href="{% url 'searchengine:category' 'community' %}" class="nav-link">Community</a>
+            </nav>
+        </div>
+    </header>
+
+    <nav class="category-nav">
+        <div class="category-nav-inner">
+            <a href="?section=top" class="category-tab active">Top Stories</a>
+            <a href="?section=local" class="category-tab">Local</a>
+            <a href="?section=national" class="category-tab">National</a>
+            <a href="?section=politics" class="category-tab">Politics</a>
+            <a href="?section=business" class="category-tab">Business</a>
+            <a href="?section=sports" class="category-tab">Sports</a>
+            <a href="?section=entertainment" class="category-tab">Entertainment</a>
+            <a href="?section=opinion" class="category-tab">Opinion</a>
+            <a href="?section=good-news" class="category-tab">Good News</a>
+        </div>
+    </nav>
+
+    <section class="hero-section">
+        <div class="hero-grid">
+            <a href="{{ top_story.url|default:'#' }}" class="hero-main">
+                <div class="hero-main-image">{% if top_story.image %}<img src="{{ top_story.image }}" alt="">{% endif %}</div>
+                <div class="hero-main-content">
+                    <span class="hero-badge">{{ top_story.category|default:"Breaking" }}</span>
+                    <h1 class="hero-title">{{ top_story.title|default:"Historic Legislation Passes Senate with Bipartisan Support" }}</h1>
+                    <p class="hero-excerpt">{{ top_story.excerpt|default:"The landmark bill represents years of advocacy and negotiation, with implications for communities across the nation." }}</p>
+                    <div class="hero-meta"><span class="hero-source">{{ top_story.source|default:"The Root" }}</span><span>{{ top_story.time|default:"2 hours ago" }}</span></div>
+                </div>
+            </a>
+            <div class="hero-sidebar">
+                {% for story in sidebar_stories %}
+                <a href="{{ story.url }}" class="sidebar-story"><div class="sidebar-image"></div><div class="sidebar-content"><div class="sidebar-category">{{ story.category }}</div><h3 class="sidebar-title">{{ story.title }}</h3><div class="sidebar-meta">{{ story.source }} · {{ story.time }}</div></div></a>
+                {% empty %}
+                <a href="#" class="sidebar-story"><div class="sidebar-image"></div><div class="sidebar-content"><div class="sidebar-category">Business</div><h3 class="sidebar-title">Black-Owned Tech Startup Raises $50M in Series B</h3><div class="sidebar-meta">Black Enterprise · 3h ago</div></div></a>
+                <a href="#" class="sidebar-story"><div class="sidebar-image"></div><div class="sidebar-content"><div class="sidebar-category">Sports</div><h3 class="sidebar-title">HBCU Football Team Makes Historic Playoff Appearance</h3><div class="sidebar-meta">HBCU Gameday · 4h ago</div></div></a>
+                <a href="#" class="sidebar-story"><div class="sidebar-image"></div><div class="sidebar-content"><div class="sidebar-category">Entertainment</div><h3 class="sidebar-title">New Film Breaks Box Office Records Opening Weekend</h3><div class="sidebar-meta">Essence · 5h ago</div></div></a>
+                {% endfor %}
+            </div>
+        </div>
+    </section>
+
+    <main class="main-content">
+        <div class="news-feed">
+            <section class="news-section">
+                <div class="section-header"><h2 class="section-title">Today's Top Stories</h2><a href="#" class="section-link">View All →</a></div>
+                <div class="news-list">
+                    {% for article in top_articles %}
+                    <article class="news-card">
+                        <div class="news-image"></div>
+                        <div class="news-content">
+                            <div class="news-category">{{ article.category }}</div>
+                            <h3 class="news-title">{{ article.title }}</h3>
+                            <p class="news-excerpt">{{ article.excerpt }}</p>
+                            <div class="news-meta"><span class="news-source">{{ article.source }}</span><span>{{ article.time }}</span></div>
+                        </div>
+                    </article>
+                    {% empty %}
+                    <article class="news-card"><div class="news-image"></div><div class="news-content"><div class="news-category">Politics</div><h3 class="news-title">Congressional Black Caucus Unveils New Policy Agenda</h3><p class="news-excerpt">The comprehensive plan addresses economic development, criminal justice reform, healthcare access, and education funding.</p><div class="news-meta"><span class="news-source">The Grio</span><span>6 hours ago</span></div></div></article>
+                    <article class="news-card"><div class="news-image"></div><div class="news-content"><div class="news-category">Business</div><h3 class="news-title">Report: Black Consumer Spending Power Reaches $1.8 Trillion</h3><p class="news-excerpt">New economic study highlights the growing influence of Black consumers and the businesses that serve them.</p><div class="news-meta"><span class="news-source">Black Enterprise</span><span>8 hours ago</span></div></div></article>
+                    <article class="news-card"><div class="news-image"></div><div class="news-content"><div class="news-category">Culture</div><h3 class="news-title">Afrobeats Takes Over Billboard Charts for Third Week</h3><p class="news-excerpt">Nigerian and Ghanaian artists continue their dominance on American music charts.</p><div class="news-meta"><span class="news-source">Blavity</span><span>10 hours ago</span></div></div></article>
+                    {% endfor %}
+                </div>
+            </section>
+
+            <section class="opinion-grid">
+                {% for opinion in opinions %}
+                <a href="{{ opinion.url }}" class="opinion-card"><div class="opinion-avatar"></div><p class="opinion-quote">"{{ opinion.title }}"</p><p class="opinion-author">{{ opinion.author }}</p><p class="opinion-source">{{ opinion.source }}</p></a>
+                {% empty %}
+                <a href="#" class="opinion-card"><div class="opinion-avatar"></div><p class="opinion-quote">"Why Economic Justice Must Lead the Conversation"</p><p class="opinion-author">Dr. Maya Richardson</p><p class="opinion-source">The Root</p></a>
+                <a href="#" class="opinion-card"><div class="opinion-avatar"></div><p class="opinion-quote">"The Real Story Behind the Education Funding Gap"</p><p class="opinion-author">James Williams</p><p class="opinion-source">Essence</p></a>
+                <a href="#" class="opinion-card"><div class="opinion-avatar"></div><p class="opinion-quote">"How Black Entrepreneurs Are Reshaping Tech"</p><p class="opinion-author">Lisa Chen-Johnson</p><p class="opinion-source">Black Enterprise</p></a>
+                {% endfor %}
+            </section>
+        </div>
+
+        <aside>
+            <div class="sidebar-section">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;"><h3 style="font-family:var(--font-display);font-size:18px;font-weight:700;">📍 Local News</h3><span class="local-badge">{{ city|default:"Atlanta" }}</span></div>
+                <ul class="local-list">
+                    {% for item in local_news %}
+                    <li class="local-item"><a href="{{ item.url }}"><p class="local-item-title">{{ item.title }}</p><span class="local-item-meta">{{ item.source }} · {{ item.time }}</span></a></li>
+                    {% empty %}
+                    <li class="local-item"><p class="local-item-title">City Council Approves New Affordable Housing Initiative</p><span class="local-item-meta">Atlanta Voice · 1h ago</span></li>
+                    <li class="local-item"><p class="local-item-title">Local HBCU Receives Historic $10M Grant</p><span class="local-item-meta">AJC · 3h ago</span></li>
+                    <li class="local-item"><p class="local-item-title">Black-Owned Restaurant Named Best in City</p><span class="local-item-meta">Eater Atlanta · 5h ago</span></li>
+                    {% endfor %}
+                </ul>
+            </div>
+            <div class="sidebar-section" style="padding-top:0;">
+                <div class="good-news-header"><h3>☀️ Good News</h3></div>
+                <ul class="local-list">
+                    {% for item in good_news %}
+                    <li class="local-item"><a href="{{ item.url }}" style="font-size:14px;font-weight:500;">{{ item.title }}</a></li>
+                    {% empty %}
+                    <li class="local-item"><a href="#" style="font-size:14px;font-weight:500;">Teen Entrepreneur Raises $1M for Education Nonprofit</a></li>
+                    <li class="local-item"><a href="#" style="font-size:14px;font-weight:500;">Community Garden Transforms Food Desert</a></li>
+                    <li class="local-item"><a href="#" style="font-size:14px;font-weight:500;">First Black Woman Named CEO of Fortune 500 Company</a></li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </aside>
+    </main>
+
+    <section class="sources-section">
+        <div class="sources-inner">
+            <h2 class="section-title">Sources We Aggregate</h2>
+            <div class="sources-grid">
+                <a href="#" class="source-tag">The Root</a>
+                <a href="#" class="source-tag">Essence</a>
+                <a href="#" class="source-tag">Ebony</a>
+                <a href="#" class="source-tag">Black Enterprise</a>
+                <a href="#" class="source-tag">Blavity</a>
+                <a href="#" class="source-tag">The Grio</a>
+                <a href="#" class="source-tag">NewsOne</a>
+                <a href="#" class="source-tag">Atlanta Black Star</a>
+                <a href="#" class="source-tag">HBCU Gameday</a>
+            </div>
+        </div>
+    </section>
+
+    <footer class="footer">
+        <div class="footer-inner">
+            <div class="footer-logo"><span class="a">A</span><span class="f">f</span><span class="r">r</span><span class="o">o</span>Todo</div>
+            <nav class="footer-links"><a href="#" class="footer-link">About</a><a href="#" class="footer-link">Contact</a><a href="#" class="footer-link">Privacy</a><a href="#" class="footer-link">Terms</a></nav>
+        </div>
+    </footer>
+</body>
+</html>
