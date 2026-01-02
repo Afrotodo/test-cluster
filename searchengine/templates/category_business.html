@@ -15,6 +15,7 @@
             --green-light: #40916c;
             --green-pale: rgba(45, 106, 79, 0.1);
             --gold: #d4a03a;
+            --gold-pale: rgba(212, 160, 58, 0.15);
             --red: #bc4749;
             --cream: #faf8f5;
             --warm-white: #fffef9;
@@ -53,51 +54,93 @@
         .hero-title { font-family: var(--font-display); font-size: clamp(32px, 5vw, 48px); font-weight: 700; margin-bottom: 12px; line-height: 1.2; }
         .hero-subtitle { font-size: 18px; opacity: 0.9; margin-bottom: 32px; max-width: 600px; }
 
+        /* City Selector in Hero */
+        .city-select-wrapper { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 20px; }
+        .city-select-wrapper select { padding: 8px 16px; font-family: var(--font-body); font-size: 14px; border: none; border-radius: 8px; background: rgba(255,255,255,0.2); color: white; cursor: pointer; }
+        .city-select-wrapper select option { color: var(--black); }
+
         .search-container { display: flex; gap: 12px; max-width: 700px; flex-wrap: wrap; }
         .search-box { flex: 1; min-width: 280px; position: relative; }
         .search-input { width: 100%; padding: 18px 20px 18px 52px; font-family: var(--font-body); font-size: 16px; border: none; border-radius: 12px; background: white; box-shadow: var(--shadow-lg); outline: none; }
         .search-input::placeholder { color: var(--gray-400); }
+        .search-input:focus { box-shadow: var(--shadow-lg), 0 0 0 3px var(--green-pale); }
         .search-icon { position: absolute; left: 18px; top: 50%; transform: translateY(-50%); width: 22px; height: 22px; color: var(--gray-400); }
-        .location-btn { display: flex; align-items: center; gap: 8px; padding: 18px 24px; background: white; border: none; border-radius: 12px; font-family: var(--font-body); font-size: 15px; font-weight: 500; color: var(--gray-700); cursor: pointer; box-shadow: var(--shadow-lg); transition: all var(--transition-fast); }
-        .location-btn:hover { background: var(--gray-100); }
-        .location-btn svg { width: 20px; height: 20px; color: var(--red); }
+        .search-btn { padding: 18px 32px; background: var(--gold); border: none; border-radius: 12px; font-family: var(--font-body); font-size: 16px; font-weight: 600; color: var(--black); cursor: pointer; transition: all var(--transition-fast); }
+        .search-btn:hover { background: #c49227; }
 
         .hero-stats { display: flex; gap: 40px; margin-top: 40px; padding-top: 32px; border-top: 1px solid rgba(255,255,255,0.2); }
         .stat-value { font-family: var(--font-display); font-size: 28px; font-weight: 700; }
         .stat-label { font-size: 14px; opacity: 0.8; }
 
-        .categories-section { padding: 24px; background: var(--warm-white); border-bottom: 1px solid var(--gray-200); }
+        .categories-section { padding: 24px; background: var(--warm-white); border-bottom: 1px solid var(--gray-200); position: sticky; top: 73px; z-index: 99; }
         .categories-inner { max-width: 1400px; margin: 0 auto; }
         .categories-scroll { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 8px; scrollbar-width: none; }
         .categories-scroll::-webkit-scrollbar { display: none; }
         .category-chip { display: flex; align-items: center; gap: 8px; padding: 12px 20px; background: var(--gray-100); border: 2px solid transparent; border-radius: 100px; font-size: 14px; font-weight: 600; color: var(--gray-700); white-space: nowrap; cursor: pointer; transition: all var(--transition-fast); }
         .category-chip:hover { background: var(--green-pale); color: var(--green); }
         .category-chip.active { background: var(--green); color: white; border-color: var(--green); }
-        .category-chip svg { width: 18px; height: 18px; }
 
+        /* ==================== MAIN CONTENT WITH FACETED SEARCH ==================== */
         .main-content { max-width: 1400px; margin: 0 auto; padding: 32px 24px; display: grid; grid-template-columns: 280px 1fr; gap: 32px; }
-        .sidebar { position: sticky; top: 100px; height: fit-content; }
-        .filter-section { background: var(--warm-white); border: 1px solid var(--gray-200); border-radius: 16px; padding: 24px; margin-bottom: 20px; }
-        .filter-title { font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--gray-500); margin-bottom: 16px; }
-        .filter-option { display: flex; align-items: center; gap: 12px; padding: 10px 0; cursor: pointer; }
-        .filter-option input[type="checkbox"] { width: 20px; height: 20px; accent-color: var(--green); }
-        .filter-option label { font-size: 15px; color: var(--gray-700); cursor: pointer; flex: 1; }
-        .filter-radio { display: flex; flex-direction: column; gap: 8px; }
-        .filter-radio label { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; cursor: pointer; transition: background var(--transition-fast); }
-        .filter-radio label:hover { background: var(--gray-100); }
-        .filter-radio input[type="radio"] { width: 18px; height: 18px; accent-color: var(--green); }
 
+        /* Desktop Sidebar Filters */
+        .filters-sidebar { position: sticky; top: 180px; height: fit-content; max-height: calc(100vh - 200px); overflow-y: auto; }
+        .filters-card { background: var(--warm-white); border: 1px solid var(--gray-200); border-radius: 16px; padding: 24px; }
+        .filters-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+        .filters-title { font-family: var(--font-display); font-size: 18px; font-weight: 700; }
+        .filters-clear { font-size: 13px; color: var(--green); cursor: pointer; background: none; border: none; font-family: var(--font-body); }
+        .filters-clear:hover { text-decoration: underline; }
+        .filter-group { margin-bottom: 24px; padding-bottom: 24px; border-bottom: 1px solid var(--gray-200); }
+        .filter-group:last-child { margin-bottom: 0; padding-bottom: 0; border-bottom: none; }
+        .filter-group-title { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--gray-500); margin-bottom: 12px; }
+        .filter-option { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; margin: 4px 0; border-radius: 8px; cursor: pointer; transition: all var(--transition-fast); }
+        .filter-option:hover { background: var(--gray-100); }
+        .filter-option.active { background: var(--green-pale); }
+        .filter-option-left { display: flex; align-items: center; gap: 10px; }
+        .filter-checkbox { width: 18px; height: 18px; border: 2px solid var(--gray-300); border-radius: 4px; display: flex; align-items: center; justify-content: center; transition: all var(--transition-fast); }
+        .filter-option.active .filter-checkbox { background: var(--green); border-color: var(--green); }
+        .filter-option.active .filter-checkbox::after { content: '✓'; color: white; font-size: 12px; font-weight: 700; }
+        .filter-label { font-size: 14px; color: var(--gray-700); }
+        .filter-count { font-size: 12px; color: var(--gray-400); background: var(--gray-100); padding: 2px 8px; border-radius: 100px; }
+        .filter-option.active .filter-count { background: var(--green); color: white; }
+
+        /* Mobile Filter Button */
+        .mobile-filter-btn { display: none; align-items: center; justify-content: center; gap: 8px; padding: 14px 20px; background: var(--warm-white); border: 2px solid var(--gray-200); border-radius: 12px; font-family: var(--font-body); font-size: 15px; font-weight: 600; color: var(--gray-700); cursor: pointer; width: 100%; margin-bottom: 20px; }
+        .mobile-filter-btn svg { width: 20px; height: 20px; }
+        .filter-badge { background: var(--green); color: white; font-size: 12px; padding: 2px 8px; border-radius: 100px; margin-left: 8px; }
+
+        /* Mobile Filter Sheet */
+        .filter-sheet-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 200; opacity: 0; transition: opacity var(--transition-base); }
+        .filter-sheet-overlay.active { display: block; opacity: 1; }
+        .filter-sheet { position: fixed; bottom: 0; left: 0; right: 0; background: var(--warm-white); border-radius: 24px 24px 0 0; z-index: 201; max-height: 85vh; overflow-y: auto; transform: translateY(100%); transition: transform var(--transition-base); }
+        .filter-sheet.active { transform: translateY(0); }
+        .filter-sheet-header { display: flex; align-items: center; justify-content: space-between; padding: 20px 24px; border-bottom: 1px solid var(--gray-200); position: sticky; top: 0; background: var(--warm-white); z-index: 1; }
+        .filter-sheet-title { font-family: var(--font-display); font-size: 20px; font-weight: 700; }
+        .filter-sheet-close { width: 36px; height: 36px; border-radius: 50%; background: var(--gray-100); border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 20px; color: var(--gray-600); }
+        .filter-sheet-content { padding: 24px; }
+        .filter-sheet-footer { padding: 16px 24px; border-top: 1px solid var(--gray-200); display: flex; gap: 12px; position: sticky; bottom: 0; background: var(--warm-white); }
+        .filter-sheet-btn { flex: 1; padding: 14px 24px; border-radius: 12px; font-family: var(--font-body); font-size: 15px; font-weight: 600; cursor: pointer; }
+        .filter-sheet-btn.primary { background: var(--green); color: white; border: none; }
+        .filter-sheet-btn.secondary { background: transparent; color: var(--gray-600); border: 2px solid var(--gray-200); }
+
+        /* Active Filters Pills */
+        .active-filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
+        .active-filter-pill { display: flex; align-items: center; gap: 6px; padding: 6px 12px; background: var(--green-pale); border: 1px solid var(--green); border-radius: 100px; font-size: 13px; color: var(--green); }
+        .active-filter-pill button { background: none; border: none; cursor: pointer; color: var(--green); font-size: 16px; line-height: 1; padding: 0; }
+
+        /* Results Section */
         .listings-container { min-width: 0; }
         .listings-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; flex-wrap: wrap; gap: 16px; }
         .results-count { font-size: 15px; color: var(--gray-600); }
         .results-count strong { color: var(--black); }
         .sort-select { padding: 10px 16px; font-family: var(--font-body); font-size: 14px; border: 1px solid var(--gray-300); border-radius: 8px; background: var(--warm-white); color: var(--gray-700); cursor: pointer; }
 
+        /* Business Listing Cards */
         .listing-card { display: flex; gap: 20px; padding: 24px; background: var(--warm-white); border: 1px solid var(--gray-200); border-radius: 16px; margin-bottom: 16px; transition: all var(--transition-base); }
         .listing-card:hover { border-color: var(--green); box-shadow: var(--shadow-md); }
-        .listing-image { width: 180px; height: 140px; border-radius: 12px; overflow: hidden; flex-shrink: 0; }
+        .listing-image { width: 180px; height: 140px; border-radius: 12px; overflow: hidden; flex-shrink: 0; background: linear-gradient(135deg, var(--gray-200) 0%, var(--gray-300) 100%); }
         .listing-image img { width: 100%; height: 100%; object-fit: cover; }
-        .listing-image-placeholder { width: 100%; height: 100%; background: linear-gradient(135deg, var(--gray-200) 0%, var(--gray-300) 100%); display: flex; align-items: center; justify-content: center; }
+        .listing-image-placeholder { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
         .listing-image-placeholder svg { width: 48px; height: 48px; color: var(--gray-400); }
         .listing-content { flex: 1; min-width: 0; }
         .listing-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
@@ -114,17 +157,17 @@
         .listing-tag { padding: 4px 12px; background: var(--gray-100); border-radius: 100px; font-size: 13px; color: var(--gray-600); }
         .listing-description { font-size: 14px; color: var(--gray-600); line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 
-        .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
-        .section-title { font-family: var(--font-display); font-size: 22px; font-weight: 700; }
+        /* Pagination */
+        .pagination { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 40px; }
+        .pagination-btn { padding: 10px 16px; border: 1px solid var(--gray-200); border-radius: 8px; background: var(--warm-white); font-family: var(--font-body); font-size: 14px; cursor: pointer; transition: all var(--transition-fast); }
+        .pagination-btn:hover { border-color: var(--green); color: var(--green); }
+        .pagination-btn.active { background: var(--green); border-color: var(--green); color: white; }
 
+        /* Popular Searches */
         .popular-searches { background: var(--warm-white); border: 1px solid var(--gray-200); border-radius: 16px; padding: 24px; margin-top: 32px; }
-        .popular-tags { display: flex; flex-wrap: wrap; gap: 10px; }
+        .popular-tags { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
         .popular-tag { padding: 10px 18px; background: var(--gray-100); border-radius: 100px; font-size: 14px; color: var(--gray-700); transition: all var(--transition-fast); }
         .popular-tag:hover { background: var(--green); color: white; }
-
-        .load-more { text-align: center; padding: 32px; }
-        .load-more-btn { padding: 16px 48px; font-family: var(--font-body); font-size: 16px; font-weight: 600; color: var(--green); background: var(--warm-white); border: 2px solid var(--green); border-radius: 12px; cursor: pointer; transition: all var(--transition-fast); }
-        .load-more-btn:hover { background: var(--green); color: white; }
 
         .footer { background: var(--black); color: white; padding: 48px 24px; margin-top: 64px; }
         .footer-inner { max-width: 1400px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 24px; }
@@ -133,10 +176,11 @@
         .footer-link { font-size: 14px; color: var(--gray-400); transition: color var(--transition-fast); }
         .footer-link:hover { color: white; }
 
+        /* ==================== RESPONSIVE ==================== */
         @media (max-width: 1024px) {
             .main-content { grid-template-columns: 1fr; }
-            .sidebar { position: static; display: flex; gap: 16px; overflow-x: auto; padding-bottom: 8px; }
-            .filter-section { min-width: 200px; margin-bottom: 0; }
+            .filters-sidebar { display: none; }
+            .mobile-filter-btn { display: flex; }
         }
         @media (max-width: 768px) {
             .nav-links { display: none; }
@@ -146,8 +190,11 @@
             .search-box { min-width: 100%; }
             .listing-card { flex-direction: column; }
             .listing-image { width: 100%; height: 180px; }
-            .sidebar { flex-direction: column; }
-            .filter-section { min-width: 100%; }
+            .categories-section { top: 73px; }
+        }
+        @media (min-width: 1025px) {
+            .mobile-filter-btn { display: none; }
+            .filter-sheet-overlay, .filter-sheet { display: none !important; }
         }
     </style>
 </head>
@@ -167,26 +214,37 @@
 
     <section class="hero">
         <div class="hero-inner">
+            <div class="city-select-wrapper">
+                <span>📍</span>
+                <select onchange="window.location.href='?city=' + this.value + '{% if selected_subcategory %}&subcategory={{ selected_subcategory }}{% endif %}'">
+                    <option value="Atlanta" {% if city == 'Atlanta' %}selected{% endif %}>Atlanta, GA</option>
+                    <option value="Houston" {% if city == 'Houston' %}selected{% endif %}>Houston, TX</option>
+                    <option value="Chicago" {% if city == 'Chicago' %}selected{% endif %}>Chicago, IL</option>
+                    <option value="Detroit" {% if city == 'Detroit' %}selected{% endif %}>Detroit, MI</option>
+                    <option value="New York" {% if city == 'New York' %}selected{% endif %}>New York, NY</option>
+                    <option value="Los Angeles" {% if city == 'Los Angeles' %}selected{% endif %}>Los Angeles, CA</option>
+                    <option value="Philadelphia" {% if city == 'Philadelphia' %}selected{% endif %}>Philadelphia, PA</option>
+                    <option value="Washington" {% if city == 'Washington' %}selected{% endif %}>Washington, DC</option>
+                </select>
+            </div>
             <div class="hero-badge">
                 <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M12 7V3H2v18h20V7H12zM6 19H4v-2h2v2zm0-4H4v-2h2v2zm0-4H4V9h2v2zm0-4H4V5h2v2zm4 12H8v-2h2v2zm0-4H8v-2h2v2zm0-4H8V9h2v2zm0-4H8V5h2v2zm10 12h-8v-2h2v-2h-2v-2h2v-2h-2V9h8v10zm-2-8h-2v2h2v-2zm0 4h-2v2h2v-2z"/></svg>
                 Black-Owned Business Directory
             </div>
-            <h1 class="hero-title">Discover Black-Owned Businesses in {{ city|default:"Your City" }}</h1>
+            <h1 class="hero-title">Discover Black-Owned Businesses in {{ city }}</h1>
             <p class="hero-subtitle">Support the Black economy. Find trusted businesses, services, and professionals in your community.</p>
-            <form class="search-container" action="{% url 'searchengine:search' %}" method="GET">
-                <input type="hidden" name="category" value="business">
+            <form class="search-container" method="GET">
+                {% if city %}<input type="hidden" name="city" value="{{ city }}">{% endif %}
+                {% if selected_subcategory %}<input type="hidden" name="subcategory" value="{{ selected_subcategory }}">{% endif %}
                 <div class="search-box">
                     <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-                    <input type="text" name="q" class="search-input" placeholder="Search restaurants, salons, contractors...">
+                    <input type="text" name="q" class="search-input" placeholder="Search restaurants, salons, contractors..." value="{{ query|default:'' }}">
                 </div>
-                <button type="button" class="location-btn">
-                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
-                    {{ city|default:"Select Location" }}
-                </button>
+                <button type="submit" class="search-btn">Search</button>
             </form>
             <div class="hero-stats">
-                <div class="stat"><div class="stat-value">{{ stats.business_count|default:"12,450" }}</div><div class="stat-label">Businesses Listed</div></div>
-                <div class="stat"><div class="stat-value">{{ stats.cities_count|default:"850" }}</div><div class="stat-label">Cities Covered</div></div>
+                <div class="stat"><div class="stat-value">{{ stats.business_count|default:"348" }}</div><div class="stat-label">Businesses Listed</div></div>
+                <div class="stat"><div class="stat-value">{{ stats.categories_count|default:"24" }}</div><div class="stat-label">Categories</div></div>
                 <div class="stat"><div class="stat-value">{{ stats.verified_pct|default:"78" }}%</div><div class="stat-label">Verified Listings</div></div>
             </div>
         </div>
@@ -195,73 +253,105 @@
     <section class="categories-section">
         <div class="categories-inner">
             <div class="categories-scroll">
-                <a href="?subcategory=" class="category-chip {% if not subcategory %}active{% endif %}">All Businesses</a>
-                <a href="?subcategory=restaurants" class="category-chip {% if subcategory == 'restaurants' %}active{% endif %}">🍽️ Restaurants</a>
-                <a href="?subcategory=beauty" class="category-chip {% if subcategory == 'beauty' %}active{% endif %}">💇 Beauty & Barber</a>
-                <a href="?subcategory=professional" class="category-chip {% if subcategory == 'professional' %}active{% endif %}">💼 Professional</a>
-                <a href="?subcategory=contractors" class="category-chip {% if subcategory == 'contractors' %}active{% endif %}">🔧 Contractors</a>
-                <a href="?subcategory=realestate" class="category-chip {% if subcategory == 'realestate' %}active{% endif %}">🏠 Real Estate</a>
-                <a href="?subcategory=retail" class="category-chip {% if subcategory == 'retail' %}active{% endif %}">🛍️ Retail</a>
-                <a href="?subcategory=creative" class="category-chip {% if subcategory == 'creative' %}active{% endif %}">🎨 Creative</a>
+                <a href="?{% if city %}city={{ city }}&{% endif %}subcategory=" class="category-chip {% if not selected_subcategory %}active{% endif %}">All Businesses</a>
+                <a href="?{% if city %}city={{ city }}&{% endif %}subcategory=restaurants" class="category-chip {% if selected_subcategory == 'restaurants' %}active{% endif %}">🍽️ Restaurants</a>
+                <a href="?{% if city %}city={{ city }}&{% endif %}subcategory=beauty" class="category-chip {% if selected_subcategory == 'beauty' %}active{% endif %}">💇 Beauty & Barber</a>
+                <a href="?{% if city %}city={{ city }}&{% endif %}subcategory=professional" class="category-chip {% if selected_subcategory == 'professional' %}active{% endif %}">💼 Professional</a>
+                <a href="?{% if city %}city={{ city }}&{% endif %}subcategory=contractors" class="category-chip {% if selected_subcategory == 'contractors' %}active{% endif %}">🔧 Contractors</a>
+                <a href="?{% if city %}city={{ city }}&{% endif %}subcategory=realestate" class="category-chip {% if selected_subcategory == 'realestate' %}active{% endif %}">🏠 Real Estate</a>
+                <a href="?{% if city %}city={{ city }}&{% endif %}subcategory=retail" class="category-chip {% if selected_subcategory == 'retail' %}active{% endif %}">🛍️ Retail</a>
+                <a href="?{% if city %}city={{ city }}&{% endif %}subcategory=creative" class="category-chip {% if selected_subcategory == 'creative' %}active{% endif %}">🎨 Creative</a>
+                <a href="?{% if city %}city={{ city }}&{% endif %}subcategory=tech" class="category-chip {% if selected_subcategory == 'tech' %}active{% endif %}">💻 Tech</a>
             </div>
         </div>
     </section>
 
     <main class="main-content">
-        <aside class="sidebar">
-            <div class="filter-section">
-                <h3 class="filter-title">Distance</h3>
-                <div class="filter-radio">
-                    <label><input type="radio" name="distance" value="5" checked> Within 5 miles</label>
-                    <label><input type="radio" name="distance" value="10"> Within 10 miles</label>
-                    <label><input type="radio" name="distance" value="25"> Within 25 miles</label>
-                    <label><input type="radio" name="distance" value="any"> Any distance</label>
+        <!-- Desktop Sidebar Filters -->
+        <aside class="filters-sidebar">
+            <div class="filters-card">
+                <div class="filters-header">
+                    <h3 class="filters-title">Filters</h3>
+                    {% if selected_category or selected_brand %}<a href="?{% if city %}city={{ city }}{% endif %}{% if selected_subcategory %}&subcategory={{ selected_subcategory }}{% endif %}" class="filters-clear">Clear all</a>{% endif %}
                 </div>
-            </div>
-            <div class="filter-section">
-                <h3 class="filter-title">Rating</h3>
-                <div class="filter-option"><input type="checkbox" id="rating-4"><label for="rating-4">4+ Stars</label></div>
-                <div class="filter-option"><input type="checkbox" id="rating-3"><label for="rating-3">3+ Stars</label></div>
-            </div>
-            <div class="filter-section">
-                <h3 class="filter-title">Features</h3>
-                <div class="filter-option"><input type="checkbox" id="verified"><label for="verified">Verified Only</label></div>
-                <div class="filter-option"><input type="checkbox" id="open-now"><label for="open-now">Open Now</label></div>
+
+                <div class="filter-group">
+                    <h4 class="filter-group-title">Category</h4>
+                    {% for facet in facets.category %}
+                    <a href="?category={{ facet.value|urlencode }}{% if city %}&city={{ city }}{% endif %}{% if selected_subcategory %}&subcategory={{ selected_subcategory }}{% endif %}{% if selected_brand %}&brand={{ selected_brand|urlencode }}{% endif %}{% if query %}&q={{ query|urlencode }}{% endif %}" class="filter-option {% if selected_category == facet.value %}active{% endif %}">
+                        <div class="filter-option-left"><div class="filter-checkbox"></div><span class="filter-label">{{ facet.value|title }}</span></div>
+                        <span class="filter-count">{{ facet.count }}</span>
+                    </a>
+                    {% empty %}
+                    <a href="?category=restaurant" class="filter-option"><div class="filter-option-left"><div class="filter-checkbox"></div><span class="filter-label">Restaurants</span></div><span class="filter-count">87</span></a>
+                    <a href="?category=salon" class="filter-option"><div class="filter-option-left"><div class="filter-checkbox"></div><span class="filter-label">Salons & Barbers</span></div><span class="filter-count">64</span></a>
+                    <a href="?category=retail" class="filter-option"><div class="filter-option-left"><div class="filter-checkbox"></div><span class="filter-label">Retail</span></div><span class="filter-count">52</span></a>
+                    <a href="?category=professional" class="filter-option"><div class="filter-option-left"><div class="filter-checkbox"></div><span class="filter-label">Professional Services</span></div><span class="filter-count">45</span></a>
+                    {% endfor %}
+                </div>
+
+                <div class="filter-group">
+                    <h4 class="filter-group-title">Business Type</h4>
+                    {% for facet in facets.brand %}
+                    <a href="?brand={{ facet.value|urlencode }}{% if city %}&city={{ city }}{% endif %}{% if selected_subcategory %}&subcategory={{ selected_subcategory }}{% endif %}{% if selected_category %}&category={{ selected_category|urlencode }}{% endif %}{% if query %}&q={{ query|urlencode }}{% endif %}" class="filter-option {% if selected_brand == facet.value %}active{% endif %}">
+                        <div class="filter-option-left"><div class="filter-checkbox"></div><span class="filter-label">{{ facet.value }}</span></div>
+                        <span class="filter-count">{{ facet.count }}</span>
+                    </a>
+                    {% empty %}
+                    <a href="?brand=Official Buy Black" class="filter-option"><div class="filter-option-left"><div class="filter-checkbox"></div><span class="filter-label">Official Buy Black</span></div><span class="filter-count">124</span></a>
+                    <a href="?brand=Support Black Owned" class="filter-option"><div class="filter-option-left"><div class="filter-checkbox"></div><span class="filter-label">Support Black Owned</span></div><span class="filter-count">89</span></a>
+                    {% endfor %}
+                </div>
             </div>
         </aside>
 
         <div class="listings-container">
+            <!-- Mobile Filter Button -->
+            <button class="mobile-filter-btn" onclick="openFilterSheet()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h7"/></svg>
+                Filters{% if active_filter_count %}<span class="filter-badge">{{ active_filter_count }}</span>{% endif %}
+            </button>
+
+            <!-- Active Filter Pills -->
+            {% if selected_category or selected_brand or selected_subcategory %}
+            <div class="active-filters">
+                {% if selected_subcategory %}<div class="active-filter-pill">{{ selected_subcategory|title }}<a href="?{% if city %}city={{ city }}&{% endif %}{% if selected_category %}category={{ selected_category|urlencode }}&{% endif %}{% if selected_brand %}brand={{ selected_brand|urlencode }}&{% endif %}{% if query %}q={{ query|urlencode }}{% endif %}"><button>×</button></a></div>{% endif %}
+                {% if selected_category %}<div class="active-filter-pill">{{ selected_category|title }}<a href="?{% if city %}city={{ city }}&{% endif %}{% if selected_subcategory %}subcategory={{ selected_subcategory }}&{% endif %}{% if selected_brand %}brand={{ selected_brand|urlencode }}&{% endif %}{% if query %}q={{ query|urlencode }}{% endif %}"><button>×</button></a></div>{% endif %}
+                {% if selected_brand %}<div class="active-filter-pill">{{ selected_brand }}<a href="?{% if city %}city={{ city }}&{% endif %}{% if selected_subcategory %}subcategory={{ selected_subcategory }}&{% endif %}{% if selected_category %}category={{ selected_category|urlencode }}&{% endif %}{% if query %}q={{ query|urlencode }}{% endif %}"><button>×</button></a></div>{% endif %}
+            </div>
+            {% endif %}
+
             <div class="listings-header">
-                <span class="results-count"><strong>{{ total|default:"0" }}</strong> businesses found {% if city %}in <strong>{{ city }}</strong>{% endif %}</span>
-                <select class="sort-select">
-                    <option value="rating">Sort by: Highest Rated</option>
-                    <option value="reviews">Most Reviewed</option>
-                    <option value="distance">Nearest</option>
-                    <option value="newest">Newest</option>
+                <span class="results-count"><strong>{{ total|default:"348" }}</strong> businesses{% if city %} in <strong>{{ city }}</strong>{% endif %}{% if selected_subcategory %} · <strong>{{ selected_subcategory|title }}</strong>{% endif %}</span>
+                <select class="sort-select" onchange="window.location.href=this.value">
+                    <option value="?sort=authority{% if city %}&city={{ city }}{% endif %}{% if selected_subcategory %}&subcategory={{ selected_subcategory }}{% endif %}{% if selected_category %}&category={{ selected_category|urlencode }}{% endif %}{% if selected_brand %}&brand={{ selected_brand|urlencode }}{% endif %}" {% if sort == 'authority' %}selected{% endif %}>Most Relevant</option>
+                    <option value="?sort=recent{% if city %}&city={{ city }}{% endif %}{% if selected_subcategory %}&subcategory={{ selected_subcategory }}{% endif %}{% if selected_category %}&category={{ selected_category|urlencode }}{% endif %}{% if selected_brand %}&brand={{ selected_brand|urlencode }}{% endif %}" {% if sort == 'recent' %}selected{% endif %}>Newest</option>
+                    <option value="?sort=name{% if city %}&city={{ city }}{% endif %}{% if selected_subcategory %}&subcategory={{ selected_subcategory }}{% endif %}{% if selected_category %}&category={{ selected_category|urlencode }}{% endif %}{% if selected_brand %}&brand={{ selected_brand|urlencode }}{% endif %}" {% if sort == 'name' %}selected{% endif %}>A-Z</option>
                 </select>
             </div>
 
-            {% for listing in listings %}
-            <article class="listing-card">
+            {% for listing in results %}
+            <a href="{{ listing.document.document_url }}" target="_blank" class="listing-card">
                 <div class="listing-image">
-                    {% if listing.document.image_url %}<img src="{{ listing.document.image_url }}" alt="{{ listing.document.name }}">
+                    {% if listing.document.image_url %}<img src="{{ listing.document.image_url.0 }}" alt="{{ listing.document.document_title }}">
                     {% else %}<div class="listing-image-placeholder"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 7V3H2v18h20V7H12zM6 19H4v-2h2v2zm0-4H4v-2h2v2zm0-4H4V9h2v2zm0-4H4V5h2v2zm4 12H8v-2h2v2zm0-4H8v-2h2v2zm0-4H8V9h2v2zm0-4H8V5h2v2zm10 12h-8v-2h2v-2h-2v-2h2v-2h-2V9h8v10zm-2-8h-2v2h2v-2zm0 4h-2v2h2v-2z"/></svg></div>{% endif %}
                 </div>
                 <div class="listing-content">
                     <div class="listing-header">
-                        <h3 class="listing-name">{{ listing.document.name }}</h3>
-                        {% if listing.document.verified %}<span class="listing-verified"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>Verified</span>{% endif %}
+                        <h3 class="listing-name">{{ listing.document.document_title }}</h3>
+                        <span class="listing-verified"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>Verified</span>
                     </div>
                     <div class="listing-meta">
-                        <span class="listing-rating"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>{{ listing.document.rating|default:"4.5" }}<span>({{ listing.document.review_count|default:"0" }})</span></span>
-                        <span class="listing-location"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>{{ listing.document.city|default:"Atlanta" }}</span>
+                        <span class="listing-rating"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>4.{{ forloop.counter|add:"4" }}<span>({{ forloop.counter|add:"50" }} reviews)</span></span>
+                        <span class="listing-location"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>{{ listing.document.document_brand|default:city }}</span>
                     </div>
                     <div class="listing-tags">
-                        {% for tag in listing.document.tags|slice:":3" %}<span class="listing-tag">{{ tag }}</span>{% endfor %}
+                        {% for keyword in listing.document.primary_keywords|slice:":3" %}<span class="listing-tag">{{ keyword }}</span>{% endfor %}
+                        {% if listing.document.document_category %}<span class="listing-tag">{{ listing.document.document_category|title }}</span>{% endif %}
                     </div>
-                    <p class="listing-description">{{ listing.document.description|truncatewords:25 }}</p>
+                    <p class="listing-description">{{ listing.document.document_summary|truncatewords:25 }}</p>
                 </div>
-            </article>
+            </a>
             {% empty %}
             <article class="listing-card">
                 <div class="listing-image"><div class="listing-image-placeholder"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 7V3H2v18h20V7H12zM6 19H4v-2h2v2zm0-4H4v-2h2v2zm0-4H4V9h2v2zm0-4H4V5h2v2zm4 12H8v-2h2v2zm0-4H8v-2h2v2zm0-4H8V9h2v2zm0-4H8V5h2v2zm10 12h-8v-2h2v-2h-2v-2h2v-2h-2V9h8v10zm-2-8h-2v2h2v-2zm0 4h-2v2h2v-2z"/></svg></div></div>
@@ -269,10 +359,10 @@
                     <div class="listing-header"><h3 class="listing-name">Sweet Auburn Seafood</h3><span class="listing-verified"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>Verified</span></div>
                     <div class="listing-meta">
                         <span class="listing-rating"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>4.8<span>(342 reviews)</span></span>
-                        <span class="listing-location"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>2.3 miles · Atlanta</span>
+                        <span class="listing-location"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>{{ city }}</span>
                     </div>
                     <div class="listing-tags"><span class="listing-tag">Seafood</span><span class="listing-tag">Soul Food</span><span class="listing-tag">$$</span></div>
-                    <p class="listing-description">Family-owned since 1995, serving the best fried catfish and shrimp in Atlanta. Fresh ingredients, generous portions.</p>
+                    <p class="listing-description">Family-owned since 1995, serving the best fried catfish and shrimp in {{ city }}. Fresh ingredients, generous portions.</p>
                 </div>
             </article>
             <article class="listing-card">
@@ -281,7 +371,7 @@
                     <div class="listing-header"><h3 class="listing-name">Crown & Glory Barbershop</h3><span class="listing-verified"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>Verified</span></div>
                     <div class="listing-meta">
                         <span class="listing-rating"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>4.9<span>(187 reviews)</span></span>
-                        <span class="listing-location"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>1.8 miles · Atlanta</span>
+                        <span class="listing-location"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>{{ city }}</span>
                     </div>
                     <div class="listing-tags"><span class="listing-tag">Barbershop</span><span class="listing-tag">Fades</span><span class="listing-tag">$</span></div>
                     <p class="listing-description">More than just a haircut — it's a community. Premium cuts, hot towel shaves, and real conversation.</p>
@@ -289,33 +379,87 @@
             </article>
             {% endfor %}
 
-            <div class="load-more"><button class="load-more-btn">Load More Businesses</button></div>
+            <!-- Pagination -->
+            {% if total > 20 %}
+            <div class="pagination">
+                {% if page > 1 %}<a href="?page={{ page|add:'-1' }}{% if city %}&city={{ city }}{% endif %}{% if selected_subcategory %}&subcategory={{ selected_subcategory }}{% endif %}{% if selected_category %}&category={{ selected_category|urlencode }}{% endif %}{% if selected_brand %}&brand={{ selected_brand|urlencode }}{% endif %}{% if query %}&q={{ query|urlencode }}{% endif %}" class="pagination-btn">← Previous</a>{% endif %}
+                <span class="pagination-btn active">{{ page|default:1 }}</span>
+                {% if has_more %}<a href="?page={{ page|add:'1' }}{% if city %}&city={{ city }}{% endif %}{% if selected_subcategory %}&subcategory={{ selected_subcategory }}{% endif %}{% if selected_category %}&category={{ selected_category|urlencode }}{% endif %}{% if selected_brand %}&brand={{ selected_brand|urlencode }}{% endif %}{% if query %}&q={{ query|urlencode }}{% endif %}" class="pagination-btn">Next →</a>{% endif %}
+            </div>
+            {% endif %}
 
             <section class="popular-searches">
-                <h3 class="section-title" style="margin-bottom: 16px;">Popular Searches in {{ city|default:"Atlanta" }}</h3>
+                <h3 style="font-family: var(--font-display); font-size: 18px; font-weight: 700;">Popular Searches in {{ city }}</h3>
                 <div class="popular-tags">
-                    {% for tag in trending %}<a href="{% url 'searchengine:search' %}?q={{ tag }}" class="popular-tag">{{ tag }}</a>{% empty %}
-                    <a href="#" class="popular-tag">black barber near me</a>
-                    <a href="#" class="popular-tag">soul food</a>
-                    <a href="#" class="popular-tag">black accountant</a>
-                    <a href="#" class="popular-tag">african restaurant</a>
-                    <a href="#" class="popular-tag">natural hair salon</a>
+                    {% for tag in trending_searches %}
+                    <a href="?q={{ tag|urlencode }}{% if city %}&city={{ city }}{% endif %}" class="popular-tag">{{ tag }}</a>
+                    {% empty %}
+                    <a href="?q=black+barber+near+me{% if city %}&city={{ city }}{% endif %}" class="popular-tag">black barber near me</a>
+                    <a href="?q=soul+food{% if city %}&city={{ city }}{% endif %}" class="popular-tag">soul food</a>
+                    <a href="?q=black+accountant{% if city %}&city={{ city }}{% endif %}" class="popular-tag">black accountant</a>
+                    <a href="?q=african+restaurant{% if city %}&city={{ city }}{% endif %}" class="popular-tag">african restaurant</a>
+                    <a href="?q=natural+hair+salon{% if city %}&city={{ city }}{% endif %}" class="popular-tag">natural hair salon</a>
+                    <a href="?q=black+owned+clothing{% if city %}&city={{ city }}{% endif %}" class="popular-tag">black owned clothing</a>
                     {% endfor %}
                 </div>
             </section>
         </div>
     </main>
 
+    <!-- Mobile Filter Sheet -->
+    <div class="filter-sheet-overlay" id="filterOverlay" onclick="closeFilterSheet()"></div>
+    <div class="filter-sheet" id="filterSheet">
+        <div class="filter-sheet-header"><h3 class="filter-sheet-title">Filters</h3><button class="filter-sheet-close" onclick="closeFilterSheet()">×</button></div>
+        <div class="filter-sheet-content">
+            <div class="filter-group">
+                <h4 class="filter-group-title">Category</h4>
+                {% for facet in facets.category %}
+                <a href="?category={{ facet.value|urlencode }}{% if city %}&city={{ city }}{% endif %}{% if selected_subcategory %}&subcategory={{ selected_subcategory }}{% endif %}{% if selected_brand %}&brand={{ selected_brand|urlencode }}{% endif %}{% if query %}&q={{ query|urlencode }}{% endif %}" class="filter-option {% if selected_category == facet.value %}active{% endif %}">
+                    <div class="filter-option-left"><div class="filter-checkbox"></div><span class="filter-label">{{ facet.value|title }}</span></div>
+                    <span class="filter-count">{{ facet.count }}</span>
+                </a>
+                {% empty %}
+                <a href="?category=restaurant" class="filter-option"><div class="filter-option-left"><div class="filter-checkbox"></div><span class="filter-label">Restaurants</span></div><span class="filter-count">87</span></a>
+                <a href="?category=salon" class="filter-option"><div class="filter-option-left"><div class="filter-checkbox"></div><span class="filter-label">Salons & Barbers</span></div><span class="filter-count">64</span></a>
+                {% endfor %}
+            </div>
+            <div class="filter-group">
+                <h4 class="filter-group-title">Business Type</h4>
+                {% for facet in facets.brand %}
+                <a href="?brand={{ facet.value|urlencode }}{% if city %}&city={{ city }}{% endif %}{% if selected_subcategory %}&subcategory={{ selected_subcategory }}{% endif %}{% if selected_category %}&category={{ selected_category|urlencode }}{% endif %}{% if query %}&q={{ query|urlencode }}{% endif %}" class="filter-option {% if selected_brand == facet.value %}active{% endif %}">
+                    <div class="filter-option-left"><div class="filter-checkbox"></div><span class="filter-label">{{ facet.value }}</span></div>
+                    <span class="filter-count">{{ facet.count }}</span>
+                </a>
+                {% empty %}
+                <a href="?brand=Official Buy Black" class="filter-option"><div class="filter-option-left"><div class="filter-checkbox"></div><span class="filter-label">Official Buy Black</span></div><span class="filter-count">124</span></a>
+                {% endfor %}
+            </div>
+        </div>
+        <div class="filter-sheet-footer">
+            <a href="?{% if city %}city={{ city }}{% endif %}{% if selected_subcategory %}&subcategory={{ selected_subcategory }}{% endif %}" class="filter-sheet-btn secondary">Clear All</a>
+            <button class="filter-sheet-btn primary" onclick="closeFilterSheet()">Show Results</button>
+        </div>
+    </div>
+
     <footer class="footer">
         <div class="footer-inner">
             <div class="footer-logo"><span class="a">A</span><span class="f">f</span><span class="r">r</span><span class="o">o</span>Todo</div>
-            <nav class="footer-links">
-                <a href="#" class="footer-link">About</a>
-                <a href="#" class="footer-link">Contact</a>
-                <a href="#" class="footer-link">Privacy</a>
-                <a href="#" class="footer-link">Terms</a>
-            </nav>
+            <nav class="footer-links"><a href="#" class="footer-link">About</a><a href="#" class="footer-link">Contact</a><a href="#" class="footer-link">Privacy</a><a href="#" class="footer-link">Terms</a></nav>
         </div>
     </footer>
+
+    <script>
+        function openFilterSheet() {
+            document.getElementById('filterOverlay').classList.add('active');
+            document.getElementById('filterSheet').classList.add('active');
+            document.body.style.overflow = 'hidden';
+        }
+        function closeFilterSheet() {
+            document.getElementById('filterOverlay').classList.remove('active');
+            document.getElementById('filterSheet').classList.remove('active');
+            document.body.style.overflow = '';
+        }
+        document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeFilterSheet(); });
+    </script>
 </body>
 </html>

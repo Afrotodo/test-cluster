@@ -1,4 +1,3 @@
-
 {% load static %}
 <!DOCTYPE html>
 <html lang="en">
@@ -68,6 +67,7 @@
         .specialties-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
         .specialty-card { display: flex; align-items: center; gap: 16px; padding: 24px; background: var(--warm-white); border: 1px solid var(--gray-200); border-radius: 16px; transition: all var(--transition-base); cursor: pointer; }
         .specialty-card:hover { border-color: var(--teal); box-shadow: var(--shadow-md); }
+        .specialty-card.active { border-color: var(--teal); background: var(--teal-pale); }
         .specialty-icon { width: 56px; height: 56px; background: var(--teal-pale); border-radius: 16px; display: flex; align-items: center; justify-content: center; font-size: 28px; }
         .specialty-content h3 { font-weight: 600; font-size: 16px; margin-bottom: 4px; }
         .specialty-content p { font-size: 13px; color: var(--gray-500); }
@@ -80,15 +80,341 @@
         .alert-content p { font-size: 14px; color: var(--gray-700); }
         .alert-btn { padding: 10px 20px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; background: var(--red); color: white; border: none; }
 
-        .providers-section { padding: 64px 24px; max-width: 1400px; margin: 0 auto; }
-        .providers-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; flex-wrap: wrap; gap: 16px; }
+        /* ==================== FACETED SEARCH LAYOUT ==================== */
+        .providers-layout { 
+            display: flex; 
+            gap: 32px; 
+            max-width: 1400px; 
+            margin: 0 auto; 
+            padding: 64px 24px; 
+        }
+
+        /* Desktop Sidebar */
+        .filters-sidebar {
+            width: 280px;
+            flex-shrink: 0;
+            position: sticky;
+            top: 100px;
+            height: fit-content;
+            max-height: calc(100vh - 120px);
+            overflow-y: auto;
+        }
+
+        .filters-card {
+            background: var(--warm-white);
+            border: 1px solid var(--gray-200);
+            border-radius: 16px;
+            padding: 24px;
+        }
+
+        .filters-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+
+        .filters-title {
+            font-family: var(--font-display);
+            font-size: 18px;
+            font-weight: 700;
+        }
+
+        .filters-clear {
+            font-size: 13px;
+            color: var(--teal);
+            cursor: pointer;
+            background: none;
+            border: none;
+            font-family: var(--font-body);
+        }
+
+        .filters-clear:hover {
+            text-decoration: underline;
+        }
+
+        .filter-group {
+            margin-bottom: 24px;
+            padding-bottom: 24px;
+            border-bottom: 1px solid var(--gray-200);
+        }
+
+        .filter-group:last-child {
+            margin-bottom: 0;
+            padding-bottom: 0;
+            border-bottom: none;
+        }
+
+        .filter-group-title {
+            font-size: 13px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--gray-500);
+            margin-bottom: 12px;
+        }
+
+        .filter-option {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 12px;
+            margin: 4px 0;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all var(--transition-fast);
+        }
+
+        .filter-option:hover {
+            background: var(--gray-100);
+        }
+
+        .filter-option.active {
+            background: var(--teal-pale);
+        }
+
+        .filter-option-left {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .filter-checkbox {
+            width: 18px;
+            height: 18px;
+            border: 2px solid var(--gray-300);
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all var(--transition-fast);
+        }
+
+        .filter-option.active .filter-checkbox {
+            background: var(--teal);
+            border-color: var(--teal);
+        }
+
+        .filter-option.active .filter-checkbox::after {
+            content: '✓';
+            color: white;
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .filter-label {
+            font-size: 14px;
+            color: var(--gray-700);
+        }
+
+        .filter-count {
+            font-size: 12px;
+            color: var(--gray-400);
+            background: var(--gray-100);
+            padding: 2px 8px;
+            border-radius: 100px;
+        }
+
+        .filter-option.active .filter-count {
+            background: var(--teal);
+            color: white;
+        }
+
+        /* Mobile Filter Button */
+        .mobile-filter-btn {
+            display: none;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            width: 100%;
+            padding: 14px 20px;
+            background: var(--warm-white);
+            border: 2px solid var(--gray-200);
+            border-radius: 12px;
+            font-family: var(--font-body);
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--gray-700);
+            cursor: pointer;
+            margin-bottom: 20px;
+        }
+
+        .mobile-filter-btn svg {
+            width: 20px;
+            height: 20px;
+        }
+
+        .filter-badge {
+            background: var(--teal);
+            color: white;
+            font-size: 12px;
+            padding: 2px 8px;
+            border-radius: 100px;
+            margin-left: 8px;
+        }
+
+        /* Mobile Filter Sheet */
+        .filter-sheet-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 200;
+            opacity: 0;
+            transition: opacity var(--transition-base);
+        }
+
+        .filter-sheet-overlay.active {
+            display: block;
+            opacity: 1;
+        }
+
+        .filter-sheet {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: var(--warm-white);
+            border-radius: 24px 24px 0 0;
+            z-index: 201;
+            max-height: 85vh;
+            overflow-y: auto;
+            transform: translateY(100%);
+            transition: transform var(--transition-base);
+        }
+
+        .filter-sheet.active {
+            transform: translateY(0);
+        }
+
+        .filter-sheet-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 20px 24px;
+            border-bottom: 1px solid var(--gray-200);
+            position: sticky;
+            top: 0;
+            background: var(--warm-white);
+            z-index: 1;
+        }
+
+        .filter-sheet-title {
+            font-family: var(--font-display);
+            font-size: 20px;
+            font-weight: 700;
+        }
+
+        .filter-sheet-close {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: var(--gray-100);
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            color: var(--gray-600);
+        }
+
+        .filter-sheet-content {
+            padding: 24px;
+        }
+
+        .filter-sheet-footer {
+            padding: 16px 24px;
+            border-top: 1px solid var(--gray-200);
+            display: flex;
+            gap: 12px;
+            position: sticky;
+            bottom: 0;
+            background: var(--warm-white);
+        }
+
+        .filter-sheet-btn {
+            flex: 1;
+            padding: 14px 24px;
+            border-radius: 12px;
+            font-family: var(--font-body);
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .filter-sheet-btn.primary {
+            background: var(--teal);
+            color: white;
+            border: none;
+        }
+
+        .filter-sheet-btn.secondary {
+            background: transparent;
+            color: var(--gray-600);
+            border: 2px solid var(--gray-200);
+        }
+
+        /* Active Filters Pills */
+        .active-filters {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 20px;
+        }
+
+        .active-filter-pill {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            background: var(--teal-pale);
+            border: 1px solid var(--teal);
+            border-radius: 100px;
+            font-size: 13px;
+            color: var(--teal);
+        }
+
+        .active-filter-pill button {
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: var(--teal);
+            font-size: 16px;
+            line-height: 1;
+            padding: 0;
+        }
+
+        /* Results Section */
+        .providers-section { 
+            flex: 1; 
+            min-width: 0; 
+        }
+
+        .providers-header { 
+            display: flex; 
+            align-items: center; 
+            justify-content: space-between; 
+            margin-bottom: 24px; 
+            flex-wrap: wrap; 
+            gap: 16px; 
+        }
+
         .results-info { font-size: 15px; color: var(--gray-600); }
         .results-info strong { color: var(--black); }
-        .filter-select { padding: 10px 16px; font-family: var(--font-body); font-size: 14px; border: 1px solid var(--gray-300); border-radius: 8px; background: var(--warm-white); }
+        .sort-select { 
+            padding: 10px 16px; 
+            font-family: var(--font-body); 
+            font-size: 14px; 
+            border: 1px solid var(--gray-300); 
+            border-radius: 8px; 
+            background: var(--warm-white); 
+        }
 
         .provider-card { display: flex; gap: 24px; padding: 28px; background: var(--warm-white); border: 1px solid var(--gray-200); border-radius: 16px; margin-bottom: 16px; transition: all var(--transition-base); }
         .provider-card:hover { border-color: var(--teal); box-shadow: var(--shadow-md); }
         .provider-photo { width: 120px; height: 120px; border-radius: 16px; overflow: hidden; flex-shrink: 0; background: var(--gray-200); display: flex; align-items: center; justify-content: center; }
+        .provider-photo img { width: 100%; height: 100%; object-fit: cover; }
         .provider-photo svg { width: 48px; height: 48px; color: var(--gray-400); }
         .provider-content { flex: 1; }
         .provider-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 8px; flex-wrap: wrap; }
@@ -111,6 +437,42 @@
         .btn-primary { background: var(--teal); color: white; border: none; }
         .btn-secondary { background: transparent; color: var(--teal); border: 2px solid var(--teal); }
 
+        /* Pagination */
+        .pagination {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin-top: 40px;
+        }
+
+        .pagination-btn {
+            padding: 10px 16px;
+            border: 1px solid var(--gray-200);
+            border-radius: 8px;
+            background: var(--warm-white);
+            font-family: var(--font-body);
+            font-size: 14px;
+            cursor: pointer;
+            transition: all var(--transition-fast);
+        }
+
+        .pagination-btn:hover {
+            border-color: var(--teal);
+            color: var(--teal);
+        }
+
+        .pagination-btn.active {
+            background: var(--teal);
+            border-color: var(--teal);
+            color: white;
+        }
+
+        .pagination-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
         .resources-section { padding: 64px 24px; background: var(--gray-100); }
         .resources-inner { max-width: 1400px; margin: 0 auto; display: grid; grid-template-columns: 1fr 1fr; gap: 32px; }
         .resources-card { background: var(--warm-white); border: 1px solid var(--gray-200); border-radius: 16px; padding: 28px; }
@@ -129,11 +491,17 @@
         .footer-links { display: flex; gap: 32px; }
         .footer-link { font-size: 14px; color: var(--gray-400); }
 
+        /* ==================== RESPONSIVE ==================== */
         @media (max-width: 1024px) {
             .specialties-grid { grid-template-columns: repeat(2, 1fr); }
             .resources-inner { grid-template-columns: 1fr; }
             .alert-banner { flex-direction: column; text-align: center; }
+            
+            /* Tablet: Hide sidebar, show filter button */
+            .filters-sidebar { display: none; }
+            .mobile-filter-btn { display: flex; }
         }
+
         @media (max-width: 768px) {
             .nav-links { display: none; }
             .search-container { flex-direction: column; }
@@ -142,6 +510,14 @@
             .provider-photo { width: 100%; height: 200px; }
             .provider-actions { flex-direction: column; }
             .provider-btn { width: 100%; text-align: center; }
+            .hero-stats { flex-direction: column; gap: 24px; }
+            .providers-layout { padding: 32px 16px; }
+        }
+
+        /* Desktop: Show sidebar, hide mobile filter button */
+        @media (min-width: 1025px) {
+            .mobile-filter-btn { display: none; }
+            .filter-sheet-overlay, .filter-sheet { display: none !important; }
         }
     </style>
 </head>
@@ -164,18 +540,17 @@
             <div class="hero-icon"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-1.99.9-1.99 2L3 19c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-1 11h-4v4h-4v-4H6v-4h4V6h4v4h4v4z"/></svg></div>
             <h1 class="hero-title">Find Healthcare Providers Who Understand You</h1>
             <p class="hero-subtitle">Connect with Black doctors, therapists, and specialists who provide culturally competent care.</p>
-            <form class="search-container" action="{% url 'searchengine:search' %}" method="GET">
-                <input type="hidden" name="category" value="health">
+            <form class="search-container" method="GET">
                 <div class="search-box">
                     <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-                    <input type="text" name="q" class="search-input" placeholder="Find a therapist, doctor, dentist...">
+                    <input type="text" name="q" class="search-input" placeholder="Find a therapist, doctor, dentist..." value="{{ query|default:'' }}">
                 </div>
                 <button type="submit" class="search-btn">Search</button>
             </form>
             <div class="hero-stats">
-                <div class="stat"><div class="stat-value">{{ stats.provider_count|default:"2,840" }}</div><div class="stat-label">Verified Providers</div></div>
-                <div class="stat"><div class="stat-value">{{ stats.specialties_count|default:"45" }}</div><div class="stat-label">Specialties</div></div>
-                <div class="stat"><div class="stat-value">{{ stats.cities_count|default:"320" }}</div><div class="stat-label">Cities</div></div>
+                <div class="stat"><div class="stat-value">{{ total|default:"386" }}</div><div class="stat-label">Health Resources</div></div>
+                <div class="stat"><div class="stat-value">{{ category_count|default:"12" }}</div><div class="stat-label">Categories</div></div>
+                <div class="stat"><div class="stat-value">{{ brand_count|default:"45" }}</div><div class="stat-label">Sources</div></div>
             </div>
         </div>
     </section>
@@ -183,84 +558,240 @@
     <section class="specialties-section">
         <h2 class="section-title">I'm Looking For...</h2>
         <div class="specialties-grid">
-            <a href="?specialty=mental-health" class="specialty-card"><div class="specialty-icon">🧠</div><div class="specialty-content"><h3>Mental Health</h3><p>Therapists, counselors, psychiatrists</p></div></a>
-            <a href="?specialty=primary-care" class="specialty-card"><div class="specialty-icon">👨‍⚕️</div><div class="specialty-content"><h3>Primary Care</h3><p>Family doctors, internists</p></div></a>
-            <a href="?specialty=dental" class="specialty-card"><div class="specialty-icon">🦷</div><div class="specialty-content"><h3>Dental</h3><p>Dentists, orthodontists</p></div></a>
-            <a href="?specialty=obgyn" class="specialty-card"><div class="specialty-icon">🤰</div><div class="specialty-content"><h3>OB/GYN & Maternal</h3><p>Women's health, pregnancy care</p></div></a>
-            <a href="?specialty=pediatrics" class="specialty-card"><div class="specialty-icon">👶</div><div class="specialty-content"><h3>Pediatrics</h3><p>Children's doctors</p></div></a>
-            <a href="?specialty=vision" class="specialty-card"><div class="specialty-icon">👁️</div><div class="specialty-content"><h3>Vision</h3><p>Eye doctors, optometrists</p></div></a>
-            <a href="?specialty=holistic" class="specialty-card"><div class="specialty-icon">🌿</div><div class="specialty-content"><h3>Holistic</h3><p>Naturopaths, herbalists</p></div></a>
-            <a href="?specialty=fitness" class="specialty-card"><div class="specialty-icon">💪</div><div class="specialty-content"><h3>Fitness & Nutrition</h3><p>Trainers, dietitians</p></div></a>
-            <a href="?specialty=specialists" class="specialty-card"><div class="specialty-icon">🩺</div><div class="specialty-content"><h3>Specialists</h3><p>Cardiology, dermatology</p></div></a>
+            <a href="?category=mental+health" class="specialty-card {% if selected_category == 'mental health' %}active{% endif %}"><div class="specialty-icon">🧠</div><div class="specialty-content"><h3>Mental Health</h3><p>Therapists, counselors, psychiatrists</p></div></a>
+            <a href="?category=fitness" class="specialty-card {% if selected_category == 'fitness' %}active{% endif %}"><div class="specialty-icon">💪</div><div class="specialty-content"><h3>Fitness & Wellness</h3><p>Exercise, nutrition, wellness</p></div></a>
+            <a href="?category=womens+health" class="specialty-card {% if selected_category == 'womens health' %}active{% endif %}"><div class="specialty-icon">🤰</div><div class="specialty-content"><h3>Women's Health</h3><p>Maternal care, reproductive health</p></div></a>
+            <a href="?category=therapy" class="specialty-card {% if selected_category == 'therapy' %}active{% endif %}"><div class="specialty-icon">💬</div><div class="specialty-content"><h3>Therapy</h3><p>Counseling, psychotherapy</p></div></a>
+            <a href="?category=health" class="specialty-card {% if selected_category == 'health' %}active{% endif %}"><div class="specialty-icon">🏥</div><div class="specialty-content"><h3>General Health</h3><p>Medical info, health news</p></div></a>
+            <a href="?" class="specialty-card"><div class="specialty-icon">📋</div><div class="specialty-content"><h3>View All</h3><p>Browse all health resources</p></div></a>
         </div>
     </section>
 
     <div class="alert-banner">
         <div class="alert-icon"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg></div>
-        <div class="alert-content"><h3>Black Maternal Health Crisis</h3><p>Black women are 3x more likely to die from pregnancy-related causes. Find OB/GYNs who prioritize your care.</p></div>
-        <a href="?specialty=obgyn" class="alert-btn">Find Maternal Care</a>
+        <div class="alert-content"><h3>Black Maternal Health Crisis</h3><p>Black women are 3x more likely to die from pregnancy-related causes. Find resources that prioritize your care.</p></div>
+        <a href="?category=womens+health" class="alert-btn">Find Maternal Care</a>
     </div>
 
-    <section class="providers-section">
-        <div class="providers-header">
-            <span class="results-info"><strong>{{ total|default:"340" }}</strong> providers in <strong>{{ city|default:"Atlanta" }}</strong></span>
-            <select class="filter-select"><option>All Specialties</option><option>Mental Health</option><option>Primary Care</option></select>
-        </div>
+    <!-- Main Content with Faceted Search -->
+    <div class="providers-layout">
+        
+        <!-- Desktop Sidebar Filters -->
+        <aside class="filters-sidebar">
+            <div class="filters-card">
+                <div class="filters-header">
+                    <h3 class="filters-title">Filters</h3>
+                    {% if selected_category or selected_brand %}
+                    <a href="?" class="filters-clear">Clear all</a>
+                    {% endif %}
+                </div>
 
-        {% for provider in providers %}
-        <article class="provider-card">
-            <div class="provider-photo"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg></div>
-            <div class="provider-content">
-                <div class="provider-header">
-                    <h3 class="provider-name">{{ provider.document.name }}</h3>
-                    <div class="provider-badges">
-                        {% if provider.document.verified %}<span class="provider-badge badge-verified">✓ Verified</span>{% endif %}
-                        {% if provider.document.accepting %}<span class="provider-badge badge-accepting">Accepting Patients</span>{% endif %}
+                <!-- Category Facet -->
+                <div class="filter-group">
+                    <h4 class="filter-group-title">Category</h4>
+                    {% for facet in facets.category %}
+                    <a href="?category={{ facet.value|urlencode }}{% if selected_brand %}&brand={{ selected_brand|urlencode }}{% endif %}{% if query %}&q={{ query|urlencode }}{% endif %}" 
+                       class="filter-option {% if selected_category == facet.value %}active{% endif %}">
+                        <div class="filter-option-left">
+                            <div class="filter-checkbox"></div>
+                            <span class="filter-label">{{ facet.value|title }}</span>
+                        </div>
+                        <span class="filter-count">{{ facet.count }}</span>
+                    </a>
+                    {% empty %}
+                    <!-- Default facets if none provided -->
+                    <a href="?category=mental+health" class="filter-option"><div class="filter-option-left"><div class="filter-checkbox"></div><span class="filter-label">Mental Health</span></div><span class="filter-count">45</span></a>
+                    <a href="?category=fitness" class="filter-option"><div class="filter-option-left"><div class="filter-checkbox"></div><span class="filter-label">Fitness</span></div><span class="filter-count">22</span></a>
+                    <a href="?category=womens+health" class="filter-option"><div class="filter-option-left"><div class="filter-checkbox"></div><span class="filter-label">Women's Health</span></div><span class="filter-count">22</span></a>
+                    <a href="?category=therapy" class="filter-option"><div class="filter-option-left"><div class="filter-checkbox"></div><span class="filter-label">Therapy</span></div><span class="filter-count">22</span></a>
+                    <a href="?category=health" class="filter-option"><div class="filter-option-left"><div class="filter-checkbox"></div><span class="filter-label">General Health</span></div><span class="filter-count">185</span></a>
+                    {% endfor %}
+                </div>
+
+                <!-- Source/Brand Facet -->
+                <div class="filter-group">
+                    <h4 class="filter-group-title">Source</h4>
+                    {% for facet in facets.brand %}
+                    <a href="?brand={{ facet.value|urlencode }}{% if selected_category %}&category={{ selected_category|urlencode }}{% endif %}{% if query %}&q={{ query|urlencode }}{% endif %}" 
+                       class="filter-option {% if selected_brand == facet.value %}active{% endif %}">
+                        <div class="filter-option-left">
+                            <div class="filter-checkbox"></div>
+                            <span class="filter-label">{{ facet.value }}</span>
+                        </div>
+                        <span class="filter-count">{{ facet.count }}</span>
+                    </a>
+                    {% empty %}
+                    <!-- Default facets if none provided -->
+                    <a href="?brand=BlackDoctor.org" class="filter-option"><div class="filter-option-left"><div class="filter-checkbox"></div><span class="filter-label">BlackDoctor.org</span></div><span class="filter-count">185</span></a>
+                    <a href="?brand=Black+Health+Matters" class="filter-option"><div class="filter-option-left"><div class="filter-checkbox"></div><span class="filter-label">Black Health Matters</span></div><span class="filter-count">32</span></a>
+                    <a href="?brand=HelloBeautiful" class="filter-option"><div class="filter-option-left"><div class="filter-checkbox"></div><span class="filter-label">HelloBeautiful</span></div><span class="filter-count">22</span></a>
+                    {% endfor %}
+                </div>
+            </div>
+        </aside>
+
+        <!-- Results Section -->
+        <section class="providers-section">
+            
+            <!-- Mobile Filter Button -->
+            <button class="mobile-filter-btn" onclick="openFilterSheet()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h7"/></svg>
+                Filters
+                {% if active_filter_count %}<span class="filter-badge">{{ active_filter_count }}</span>{% endif %}
+            </button>
+
+            <!-- Active Filter Pills -->
+            {% if selected_category or selected_brand %}
+            <div class="active-filters">
+                {% if selected_category %}
+                <div class="active-filter-pill">
+                    {{ selected_category|title }}
+                    <a href="?{% if selected_brand %}brand={{ selected_brand|urlencode }}{% endif %}{% if query %}&q={{ query|urlencode }}{% endif %}"><button>×</button></a>
+                </div>
+                {% endif %}
+                {% if selected_brand %}
+                <div class="active-filter-pill">
+                    {{ selected_brand }}
+                    <a href="?{% if selected_category %}category={{ selected_category|urlencode }}{% endif %}{% if query %}&q={{ query|urlencode }}{% endif %}"><button>×</button></a>
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            <div class="providers-header">
+                <span class="results-info">
+                    <strong>{{ total|default:"386" }}</strong> health resources
+                    {% if selected_category %} in <strong>{{ selected_category|title }}</strong>{% endif %}
+                    {% if selected_brand %} from <strong>{{ selected_brand }}</strong>{% endif %}
+                </span>
+                <select class="sort-select" onchange="window.location.href=this.value">
+                    <option value="?sort=authority{% if selected_category %}&category={{ selected_category|urlencode }}{% endif %}">Most Relevant</option>
+                    <option value="?sort=recent{% if selected_category %}&category={{ selected_category|urlencode }}{% endif %}">Most Recent</option>
+                </select>
+            </div>
+
+            {% for hit in providers %}
+            <article class="provider-card">
+                <div class="provider-photo">
+                    {% if hit.document.image_url %}
+                    <img src="{{ hit.document.image_url.0 }}" alt="{{ hit.document.document_title }}">
+                    {% else %}
+                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-1.99.9-1.99 2L3 19c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-1 11h-4v4h-4v-4H6v-4h4V6h4v4h4v4z"/></svg>
+                    {% endif %}
+                </div>
+                <div class="provider-content">
+                    <div class="provider-header">
+                        <h3 class="provider-name">{{ hit.document.document_title }}</h3>
+                        <div class="provider-badges">
+                            {% if hit.document.authority_score >= 80 %}
+                            <span class="provider-badge badge-verified">✓ Trusted Source</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <p class="provider-specialty">{{ hit.document.document_brand }} · {{ hit.document.document_category|title }}</p>
+                    <p class="provider-quote">{{ hit.document.document_summary|truncatewords:30 }}</p>
+                    <div class="provider-tags">
+                        {% for keyword in hit.document.primary_keywords|slice:":4" %}
+                        <span class="provider-tag">{{ keyword }}</span>
+                        {% endfor %}
+                    </div>
+                    <div class="provider-actions">
+                        <a href="{{ hit.document.document_url }}" target="_blank" class="provider-btn btn-primary">Read Article</a>
+                        <button class="provider-btn btn-secondary" onclick="saveArticle('{{ hit.document.id }}')">Save</button>
                     </div>
                 </div>
-                <p class="provider-specialty">{{ provider.document.specialty }}</p>
-                <div class="provider-meta">
-                    <span class="provider-rating"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>{{ provider.document.rating }}<span>({{ provider.document.review_count }})</span></span>
-                    <span class="provider-location">{{ provider.document.city }}</span>
+            </article>
+            {% empty %}
+            <article class="provider-card">
+                <div class="provider-content" style="text-align: center; padding: 40px;">
+                    <h3 class="provider-name">No results found</h3>
+                    <p class="provider-specialty">Try adjusting your filters or search terms</p>
+                    <div class="provider-actions" style="justify-content: center; margin-top: 20px;">
+                        <a href="?" class="provider-btn btn-primary">Clear Filters</a>
+                    </div>
                 </div>
-                <div class="provider-tags">{% for tag in provider.document.tags %}<span class="provider-tag">{{ tag }}</span>{% endfor %}</div>
-                <div class="provider-actions"><a href="#" class="provider-btn btn-primary">View Profile</a><button class="provider-btn btn-secondary">Book Appointment</button></div>
+            </article>
+            {% endfor %}
+
+            <!-- Pagination -->
+            {% if total > 20 %}
+            <div class="pagination">
+                {% if page > 1 %}
+                <a href="?page={{ page|add:'-1' }}{% if selected_category %}&category={{ selected_category|urlencode }}{% endif %}{% if selected_brand %}&brand={{ selected_brand|urlencode }}{% endif %}{% if query %}&q={{ query|urlencode }}{% endif %}" class="pagination-btn">← Previous</a>
+                {% endif %}
+                
+                <span class="pagination-btn active">{{ page|default:1 }}</span>
+                
+                {% if has_more %}
+                <a href="?page={{ page|add:'1' }}{% if selected_category %}&category={{ selected_category|urlencode }}{% endif %}{% if selected_brand %}&brand={{ selected_brand|urlencode }}{% endif %}{% if query %}&q={{ query|urlencode }}{% endif %}" class="pagination-btn">Next →</a>
+                {% endif %}
             </div>
-        </article>
-        {% empty %}
-        <article class="provider-card">
-            <div class="provider-photo"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg></div>
-            <div class="provider-content">
-                <div class="provider-header"><h3 class="provider-name">Dr. Angela Williams, LCSW</h3><div class="provider-badges"><span class="provider-badge badge-verified">✓ Verified</span><span class="provider-badge badge-accepting">Accepting Patients</span></div></div>
-                <p class="provider-specialty">Licensed Clinical Social Worker · Therapist</p>
-                <div class="provider-meta"><span class="provider-rating"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>4.9<span>(87 reviews)</span></span><span class="provider-location">3.2 miles · Atlanta</span></div>
-                <div class="provider-tags"><span class="provider-tag">Anxiety</span><span class="provider-tag">Depression</span><span class="provider-tag">Trauma</span></div>
-                <p class="provider-quote">"Dr. Williams changed my life. She truly understands the unique challenges we face."</p>
-                <div class="provider-actions"><a href="#" class="provider-btn btn-primary">View Profile</a><button class="provider-btn btn-secondary">Book Appointment</button></div>
+            {% endif %}
+
+        </section>
+    </div>
+
+    <!-- Mobile Filter Sheet -->
+    <div class="filter-sheet-overlay" id="filterOverlay" onclick="closeFilterSheet()"></div>
+    <div class="filter-sheet" id="filterSheet">
+        <div class="filter-sheet-header">
+            <h3 class="filter-sheet-title">Filters</h3>
+            <button class="filter-sheet-close" onclick="closeFilterSheet()">×</button>
+        </div>
+        <div class="filter-sheet-content">
+            <!-- Category Facet -->
+            <div class="filter-group">
+                <h4 class="filter-group-title">Category</h4>
+                {% for facet in facets.category %}
+                <a href="?category={{ facet.value|urlencode }}{% if selected_brand %}&brand={{ selected_brand|urlencode }}{% endif %}{% if query %}&q={{ query|urlencode }}{% endif %}" 
+                   class="filter-option {% if selected_category == facet.value %}active{% endif %}">
+                    <div class="filter-option-left">
+                        <div class="filter-checkbox"></div>
+                        <span class="filter-label">{{ facet.value|title }}</span>
+                    </div>
+                    <span class="filter-count">{{ facet.count }}</span>
+                </a>
+                {% empty %}
+                <a href="?category=mental+health" class="filter-option"><div class="filter-option-left"><div class="filter-checkbox"></div><span class="filter-label">Mental Health</span></div><span class="filter-count">45</span></a>
+                <a href="?category=fitness" class="filter-option"><div class="filter-option-left"><div class="filter-checkbox"></div><span class="filter-label">Fitness</span></div><span class="filter-count">22</span></a>
+                <a href="?category=womens+health" class="filter-option"><div class="filter-option-left"><div class="filter-checkbox"></div><span class="filter-label">Women's Health</span></div><span class="filter-count">22</span></a>
+                <a href="?category=therapy" class="filter-option"><div class="filter-option-left"><div class="filter-checkbox"></div><span class="filter-label">Therapy</span></div><span class="filter-count">22</span></a>
+                {% endfor %}
             </div>
-        </article>
-        <article class="provider-card">
-            <div class="provider-photo"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg></div>
-            <div class="provider-content">
-                <div class="provider-header"><h3 class="provider-name">Dr. Marcus Johnson, MD</h3><div class="provider-badges"><span class="provider-badge badge-verified">✓ Verified</span></div></div>
-                <p class="provider-specialty">Family Medicine · Primary Care Physician</p>
-                <div class="provider-meta"><span class="provider-rating"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>4.8<span>(142 reviews)</span></span><span class="provider-location">5.1 miles · Atlanta</span></div>
-                <div class="provider-tags"><span class="provider-tag">Annual Physicals</span><span class="provider-tag">Chronic Disease</span><span class="provider-tag">Preventive Care</span></div>
-                <div class="provider-actions"><a href="#" class="provider-btn btn-primary">View Profile</a><button class="provider-btn btn-secondary">Book Appointment</button></div>
+
+            <!-- Source/Brand Facet -->
+            <div class="filter-group">
+                <h4 class="filter-group-title">Source</h4>
+                {% for facet in facets.brand %}
+                <a href="?brand={{ facet.value|urlencode }}{% if selected_category %}&category={{ selected_category|urlencode }}{% endif %}{% if query %}&q={{ query|urlencode }}{% endif %}" 
+                   class="filter-option {% if selected_brand == facet.value %}active{% endif %}">
+                    <div class="filter-option-left">
+                        <div class="filter-checkbox"></div>
+                        <span class="filter-label">{{ facet.value }}</span>
+                    </div>
+                    <span class="filter-count">{{ facet.count }}</span>
+                </a>
+                {% empty %}
+                <a href="?brand=BlackDoctor.org" class="filter-option"><div class="filter-option-left"><div class="filter-checkbox"></div><span class="filter-label">BlackDoctor.org</span></div><span class="filter-count">185</span></a>
+                <a href="?brand=Black+Health+Matters" class="filter-option"><div class="filter-option-left"><div class="filter-checkbox"></div><span class="filter-label">Black Health Matters</span></div><span class="filter-count">32</span></a>
+                {% endfor %}
             </div>
-        </article>
-        {% endfor %}
-    </section>
+        </div>
+        <div class="filter-sheet-footer">
+            <a href="?" class="filter-sheet-btn secondary">Clear All</a>
+            <button class="filter-sheet-btn primary" onclick="closeFilterSheet()">Show Results</button>
+        </div>
+    </div>
 
     <section class="resources-section">
         <div class="resources-inner">
             <div class="resources-card">
                 <h3 class="resources-title">📋 Health Topics</h3>
                 <ul class="resource-list">
-                    <li class="resource-item"><a href="#">Mental Health Matters →</a></li>
-                    <li class="resource-item"><a href="#">Managing Diabetes →</a></li>
-                    <li class="resource-item"><a href="#">Heart Health →</a></li>
-                    <li class="resource-item"><a href="#">Sickle Cell Resources →</a></li>
+                    <li class="resource-item"><a href="?q=mental+health">Mental Health Matters →</a></li>
+                    <li class="resource-item"><a href="?q=diabetes">Managing Diabetes →</a></li>
+                    <li class="resource-item"><a href="?q=heart">Heart Health →</a></li>
+                    <li class="resource-item"><a href="?q=sickle+cell">Sickle Cell Resources →</a></li>
                 </ul>
             </div>
             <div class="resources-card">
@@ -281,5 +812,33 @@
             <nav class="footer-links"><a href="#" class="footer-link">About</a><a href="#" class="footer-link">Contact</a><a href="#" class="footer-link">Privacy</a><a href="#" class="footer-link">Terms</a></nav>
         </div>
     </footer>
+
+    <script>
+        // Mobile Filter Sheet Controls
+        function openFilterSheet() {
+            document.getElementById('filterOverlay').classList.add('active');
+            document.getElementById('filterSheet').classList.add('active');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeFilterSheet() {
+            document.getElementById('filterOverlay').classList.remove('active');
+            document.getElementById('filterSheet').classList.remove('active');
+            document.body.style.overflow = '';
+        }
+
+        // Save article function (placeholder)
+        function saveArticle(id) {
+            // Implement save functionality
+            alert('Article saved! (implement with your backend)');
+        }
+
+        // Close filter sheet on escape key
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closeFilterSheet();
+            }
+        });
+    </script>
 </body>
 </html>

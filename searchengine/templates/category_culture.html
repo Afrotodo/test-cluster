@@ -60,9 +60,11 @@
         .topics-section { padding: 64px 24px; max-width: 1400px; margin: 0 auto; }
         .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 32px; }
         .section-title { font-family: var(--font-display); font-size: 28px; font-weight: 700; }
+        .section-link { font-size: 14px; font-weight: 600; color: var(--gold); }
         .topics-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; }
         .topic-card { background: var(--warm-white); border: 1px solid var(--gray-200); border-radius: 16px; padding: 28px 20px; text-align: center; transition: all var(--transition-base); cursor: pointer; }
         .topic-card:hover { border-color: var(--gold); transform: translateY(-4px); box-shadow: var(--shadow-md); }
+        .topic-card.active { border-color: var(--gold); background: var(--gold-pale); }
         .topic-icon { width: 56px; height: 56px; background: var(--gold-pale); border-radius: 16px; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px; font-size: 28px; }
         .topic-name { font-weight: 600; font-size: 15px; color: var(--black); }
 
@@ -79,7 +81,8 @@
         .hbcu-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; }
         .hbcu-card { background: var(--warm-white); border: 1px solid var(--gray-200); border-radius: 16px; overflow: hidden; transition: all var(--transition-base); }
         .hbcu-card:hover { box-shadow: var(--shadow-lg); transform: translateY(-4px); }
-        .hbcu-image { height: 160px; background: linear-gradient(135deg, var(--gray-200) 0%, var(--gray-300) 100%); position: relative; }
+        .hbcu-image { height: 160px; background: linear-gradient(135deg, var(--gray-200) 0%, var(--gray-300) 100%); position: relative; overflow: hidden; }
+        .hbcu-image img { width: 100%; height: 100%; object-fit: cover; }
         .hbcu-badge { position: absolute; top: 12px; left: 12px; padding: 4px 10px; background: var(--gold); color: var(--black); font-size: 11px; font-weight: 700; text-transform: uppercase; border-radius: 4px; }
         .hbcu-content { padding: 20px; }
         .hbcu-name { font-family: var(--font-display); font-size: 18px; font-weight: 700; margin-bottom: 4px; }
@@ -87,6 +90,85 @@
         .hbcu-stats { display: flex; gap: 16px; }
         .hbcu-stat { font-size: 13px; color: var(--gray-600); }
         .hbcu-stat strong { color: var(--black); }
+
+        /* ==================== FACETED SEARCH SECTION ==================== */
+        .browse-section { padding: 64px 24px; max-width: 1400px; margin: 0 auto; }
+        .browse-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 32px; flex-wrap: wrap; gap: 16px; }
+        .search-box { position: relative; flex: 1; max-width: 400px; }
+        .search-input { width: 100%; padding: 14px 20px 14px 48px; font-family: var(--font-body); font-size: 15px; border: 2px solid var(--gray-200); border-radius: 12px; background: var(--warm-white); outline: none; }
+        .search-input:focus { border-color: var(--gold); box-shadow: 0 0 0 4px var(--gold-pale); }
+        .search-icon { position: absolute; left: 16px; top: 50%; transform: translateY(-50%); width: 20px; height: 20px; color: var(--gray-400); }
+        .browse-layout { display: flex; gap: 32px; }
+
+        /* Desktop Sidebar */
+        .filters-sidebar { width: 260px; flex-shrink: 0; position: sticky; top: 100px; height: fit-content; max-height: calc(100vh - 120px); overflow-y: auto; }
+        .filters-card { background: var(--warm-white); border: 1px solid var(--gray-200); border-radius: 16px; padding: 24px; }
+        .filters-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+        .filters-title { font-family: var(--font-display); font-size: 18px; font-weight: 700; }
+        .filters-clear { font-size: 13px; color: var(--gold); cursor: pointer; background: none; border: none; font-family: var(--font-body); }
+        .filters-clear:hover { text-decoration: underline; }
+        .filter-group { margin-bottom: 24px; padding-bottom: 24px; border-bottom: 1px solid var(--gray-200); }
+        .filter-group:last-child { margin-bottom: 0; padding-bottom: 0; border-bottom: none; }
+        .filter-group-title { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--gray-500); margin-bottom: 12px; }
+        .filter-option { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; margin: 4px 0; border-radius: 8px; cursor: pointer; transition: all var(--transition-fast); }
+        .filter-option:hover { background: var(--gray-100); }
+        .filter-option.active { background: var(--gold-pale); }
+        .filter-option-left { display: flex; align-items: center; gap: 10px; }
+        .filter-checkbox { width: 18px; height: 18px; border: 2px solid var(--gray-300); border-radius: 4px; display: flex; align-items: center; justify-content: center; transition: all var(--transition-fast); }
+        .filter-option.active .filter-checkbox { background: var(--gold); border-color: var(--gold); }
+        .filter-option.active .filter-checkbox::after { content: '✓'; color: white; font-size: 12px; font-weight: 700; }
+        .filter-label { font-size: 14px; color: var(--gray-700); }
+        .filter-count { font-size: 12px; color: var(--gray-400); background: var(--gray-100); padding: 2px 8px; border-radius: 100px; }
+        .filter-option.active .filter-count { background: var(--gold); color: white; }
+
+        /* Mobile Filter Button */
+        .mobile-filter-btn { display: none; align-items: center; justify-content: center; gap: 8px; padding: 14px 20px; background: var(--warm-white); border: 2px solid var(--gray-200); border-radius: 12px; font-family: var(--font-body); font-size: 15px; font-weight: 600; color: var(--gray-700); cursor: pointer; width: 100%; margin-bottom: 20px; }
+        .mobile-filter-btn svg { width: 20px; height: 20px; }
+        .filter-badge { background: var(--gold); color: var(--black); font-size: 12px; padding: 2px 8px; border-radius: 100px; margin-left: 8px; }
+
+        /* Mobile Filter Sheet */
+        .filter-sheet-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 200; opacity: 0; transition: opacity var(--transition-base); }
+        .filter-sheet-overlay.active { display: block; opacity: 1; }
+        .filter-sheet { position: fixed; bottom: 0; left: 0; right: 0; background: var(--warm-white); border-radius: 24px 24px 0 0; z-index: 201; max-height: 85vh; overflow-y: auto; transform: translateY(100%); transition: transform var(--transition-base); }
+        .filter-sheet.active { transform: translateY(0); }
+        .filter-sheet-header { display: flex; align-items: center; justify-content: space-between; padding: 20px 24px; border-bottom: 1px solid var(--gray-200); position: sticky; top: 0; background: var(--warm-white); z-index: 1; }
+        .filter-sheet-title { font-family: var(--font-display); font-size: 20px; font-weight: 700; }
+        .filter-sheet-close { width: 36px; height: 36px; border-radius: 50%; background: var(--gray-100); border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 20px; color: var(--gray-600); }
+        .filter-sheet-content { padding: 24px; }
+        .filter-sheet-footer { padding: 16px 24px; border-top: 1px solid var(--gray-200); display: flex; gap: 12px; position: sticky; bottom: 0; background: var(--warm-white); }
+        .filter-sheet-btn { flex: 1; padding: 14px 24px; border-radius: 12px; font-family: var(--font-body); font-size: 15px; font-weight: 600; cursor: pointer; }
+        .filter-sheet-btn.primary { background: var(--gold); color: var(--black); border: none; }
+        .filter-sheet-btn.secondary { background: transparent; color: var(--gray-600); border: 2px solid var(--gray-200); }
+
+        /* Active Filters Pills */
+        .active-filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
+        .active-filter-pill { display: flex; align-items: center; gap: 6px; padding: 6px 12px; background: var(--gold-pale); border: 1px solid var(--gold); border-radius: 100px; font-size: 13px; color: var(--gold); }
+        .active-filter-pill button { background: none; border: none; cursor: pointer; color: var(--gold); font-size: 16px; line-height: 1; padding: 0; }
+
+        /* Results Section */
+        .results-section { flex: 1; min-width: 0; }
+        .results-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; flex-wrap: wrap; gap: 16px; }
+        .results-info { font-size: 15px; color: var(--gray-600); }
+        .results-info strong { color: var(--black); }
+        .sort-select { padding: 10px 16px; font-family: var(--font-body); font-size: 14px; border: 1px solid var(--gray-300); border-radius: 8px; background: var(--warm-white); }
+        .results-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+        .result-card { background: var(--warm-white); border: 1px solid var(--gray-200); border-radius: 16px; overflow: hidden; transition: all var(--transition-base); }
+        .result-card:hover { border-color: var(--gold); box-shadow: var(--shadow-md); transform: translateY(-4px); }
+        .result-image { height: 160px; background: linear-gradient(135deg, var(--gray-200) 0%, var(--gray-300) 100%); position: relative; overflow: hidden; }
+        .result-image img { width: 100%; height: 100%; object-fit: cover; }
+        .result-category { position: absolute; top: 12px; left: 12px; padding: 4px 10px; background: var(--gold); color: var(--black); font-size: 11px; font-weight: 700; text-transform: uppercase; border-radius: 4px; }
+        .result-content { padding: 20px; }
+        .result-title { font-family: var(--font-display); font-size: 18px; font-weight: 700; margin-bottom: 8px; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+        .result-meta { font-size: 13px; color: var(--gray-500); margin-bottom: 12px; }
+        .result-description { font-size: 14px; color: var(--gray-600); line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+        .result-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+        .result-tag { padding: 4px 10px; background: var(--gray-100); border-radius: 100px; font-size: 12px; color: var(--gray-600); }
+
+        /* Pagination */
+        .pagination { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 40px; }
+        .pagination-btn { padding: 10px 16px; border: 1px solid var(--gray-200); border-radius: 8px; background: var(--warm-white); font-family: var(--font-body); font-size: 14px; cursor: pointer; transition: all var(--transition-fast); }
+        .pagination-btn:hover { border-color: var(--gold); color: var(--gold); }
+        .pagination-btn.active { background: var(--gold); border-color: var(--gold); color: var(--black); }
 
         .two-column-section { padding: 64px 24px; max-width: 1400px; margin: 0 auto; display: grid; grid-template-columns: 1fr 1fr; gap: 48px; }
         .column-section { background: var(--warm-white); border: 1px solid var(--gray-200); border-radius: 16px; padding: 28px; }
@@ -109,7 +191,8 @@
         .books-scroll { display: flex; gap: 24px; overflow-x: auto; padding-bottom: 16px; scrollbar-width: none; }
         .books-scroll::-webkit-scrollbar { display: none; }
         .book-card { flex-shrink: 0; width: 160px; cursor: pointer; }
-        .book-cover { width: 160px; height: 240px; background: linear-gradient(135deg, var(--gray-300) 0%, var(--gray-400) 100%); border-radius: 8px; margin-bottom: 12px; box-shadow: var(--shadow-md); transition: all var(--transition-fast); }
+        .book-cover { width: 160px; height: 240px; background: linear-gradient(135deg, var(--gray-300) 0%, var(--gray-400) 100%); border-radius: 8px; margin-bottom: 12px; box-shadow: var(--shadow-md); transition: all var(--transition-fast); overflow: hidden; }
+        .book-cover img { width: 100%; height: 100%; object-fit: cover; }
         .book-card:hover .book-cover { transform: translateY(-8px); box-shadow: var(--shadow-lg); }
         .book-title { font-weight: 600; font-size: 14px; margin-bottom: 4px; line-height: 1.3; }
         .book-author { font-size: 13px; color: var(--gray-500); }
@@ -121,6 +204,7 @@
         .footer-link { font-size: 14px; color: var(--gray-400); }
         .footer-link:hover { color: white; }
 
+        /* ==================== RESPONSIVE ==================== */
         @media (max-width: 1024px) {
             .hero-feature { grid-template-columns: 1fr; }
             .hero-image { height: 300px; }
@@ -128,12 +212,22 @@
             .hbcu-grid { grid-template-columns: repeat(2, 1fr); }
             .two-column-section { grid-template-columns: 1fr; }
             .history-inner { grid-template-columns: 1fr; text-align: center; }
+            .results-grid { grid-template-columns: repeat(2, 1fr); }
+            .filters-sidebar { display: none; }
+            .mobile-filter-btn { display: flex; }
         }
         @media (max-width: 768px) {
             .nav-links { display: none; }
             .hero-content { padding: 40px 24px; }
             .topics-grid { grid-template-columns: repeat(2, 1fr); }
             .hbcu-grid { grid-template-columns: 1fr; }
+            .results-grid { grid-template-columns: 1fr; }
+            .browse-header { flex-direction: column; align-items: stretch; }
+            .search-box { max-width: none; }
+        }
+        @media (min-width: 1025px) {
+            .mobile-filter-btn { display: none; }
+            .filter-sheet-overlay, .filter-sheet { display: none !important; }
         }
     </style>
 </head>
@@ -169,16 +263,16 @@
     <section class="topics-section">
         <div class="section-header"><h2 class="section-title">Explore by Topic</h2></div>
         <div class="topics-grid">
-            <a href="?topic=music" class="topic-card"><div class="topic-icon">🎵</div><div class="topic-name">Music</div></a>
-            <a href="?topic=art" class="topic-card"><div class="topic-icon">🎨</div><div class="topic-name">Art</div></a>
-            <a href="?topic=literature" class="topic-card"><div class="topic-icon">📚</div><div class="topic-name">Literature</div></a>
-            <a href="?topic=film" class="topic-card"><div class="topic-icon">🎬</div><div class="topic-name">Film & TV</div></a>
-            <a href="?topic=hbcus" class="topic-card"><div class="topic-icon">🎓</div><div class="topic-name">HBCUs</div></a>
-            <a href="?topic=food" class="topic-card"><div class="topic-icon">🍽️</div><div class="topic-name">Food</div></a>
-            <a href="?topic=fashion" class="topic-card"><div class="topic-icon">👗</div><div class="topic-name">Fashion</div></a>
-            <a href="?topic=history" class="topic-card"><div class="topic-icon">🏛️</div><div class="topic-name">History</div></a>
-            <a href="?topic=theater" class="topic-card"><div class="topic-icon">🎭</div><div class="topic-name">Theater</div></a>
-            <a href="?topic=events" class="topic-card"><div class="topic-icon">📅</div><div class="topic-name">Events</div></a>
+            <a href="?topic=music" class="topic-card {% if selected_topic == 'music' %}active{% endif %}"><div class="topic-icon">🎵</div><div class="topic-name">Music</div></a>
+            <a href="?topic=art" class="topic-card {% if selected_topic == 'art' %}active{% endif %}"><div class="topic-icon">🎨</div><div class="topic-name">Art</div></a>
+            <a href="?topic=literature" class="topic-card {% if selected_topic == 'literature' %}active{% endif %}"><div class="topic-icon">📚</div><div class="topic-name">Literature</div></a>
+            <a href="?topic=film" class="topic-card {% if selected_topic == 'film' %}active{% endif %}"><div class="topic-icon">🎬</div><div class="topic-name">Film & TV</div></a>
+            <a href="?topic=hbcus" class="topic-card {% if selected_topic == 'hbcus' %}active{% endif %}"><div class="topic-icon">🎓</div><div class="topic-name">HBCUs</div></a>
+            <a href="?topic=food" class="topic-card {% if selected_topic == 'food' %}active{% endif %}"><div class="topic-icon">🍽️</div><div class="topic-name">Food</div></a>
+            <a href="?topic=fashion" class="topic-card {% if selected_topic == 'fashion' %}active{% endif %}"><div class="topic-icon">👗</div><div class="topic-name">Fashion</div></a>
+            <a href="?topic=history" class="topic-card {% if selected_topic == 'history' %}active{% endif %}"><div class="topic-icon">🏛️</div><div class="topic-name">History</div></a>
+            <a href="?topic=theater" class="topic-card {% if selected_topic == 'theater' %}active{% endif %}"><div class="topic-icon">🎭</div><div class="topic-name">Theater</div></a>
+            <a href="?topic=events" class="topic-card {% if selected_topic == 'events' %}active{% endif %}"><div class="topic-icon">📅</div><div class="topic-name">Events</div></a>
         </div>
     </section>
 
@@ -198,16 +292,12 @@
     </section>
 
     <section class="hbcu-section">
-        <div class="section-header"><h2 class="section-title">HBCU Spotlight</h2></div>
+        <div class="section-header"><h2 class="section-title">HBCU Spotlight</h2><a href="?topic=hbcus" class="section-link">View All HBCUs →</a></div>
         <div class="hbcu-grid">
             {% for hbcu in hbcus %}
-            <a href="#" class="hbcu-card">
-                <div class="hbcu-image">{% if hbcu.type %}<span class="hbcu-badge">{{ hbcu.type }}</span>{% endif %}</div>
-                <div class="hbcu-content">
-                    <h3 class="hbcu-name">{{ hbcu.name }}</h3>
-                    <p class="hbcu-location">{{ hbcu.city }}, {{ hbcu.state }}</p>
-                    <div class="hbcu-stats"><span class="hbcu-stat">Est. <strong>{{ hbcu.founded }}</strong></span></div>
-                </div>
+            <a href="{{ hbcu.document.document_url }}" target="_blank" class="hbcu-card">
+                <div class="hbcu-image">{% if hbcu.document.image_url %}<img src="{{ hbcu.document.image_url.0 }}" alt="{{ hbcu.document.document_title }}">{% endif %}<span class="hbcu-badge">HBCU</span></div>
+                <div class="hbcu-content"><h3 class="hbcu-name">{{ hbcu.document.document_title }}</h3><p class="hbcu-location">{{ hbcu.document.document_brand }}</p></div>
             </a>
             {% empty %}
             <a href="#" class="hbcu-card"><div class="hbcu-image"><span class="hbcu-badge">Private</span></div><div class="hbcu-content"><h3 class="hbcu-name">Spelman College</h3><p class="hbcu-location">Atlanta, GA</p><div class="hbcu-stats"><span class="hbcu-stat">Est. <strong>1881</strong></span></div></div></a>
@@ -218,26 +308,158 @@
         </div>
     </section>
 
+    <!-- Browse All Content Section with Faceted Search -->
+    <section class="browse-section">
+        <div class="browse-header">
+            <h2 class="section-title">Browse All Culture</h2>
+            <form class="search-box" method="GET">
+                {% if selected_topic %}<input type="hidden" name="topic" value="{{ selected_topic }}">{% endif %}
+                {% if selected_category %}<input type="hidden" name="category" value="{{ selected_category }}">{% endif %}
+                {% if selected_brand %}<input type="hidden" name="brand" value="{{ selected_brand }}">{% endif %}
+                <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                <input type="text" name="q" class="search-input" placeholder="Search culture content..." value="{{ query|default:'' }}">
+            </form>
+        </div>
+
+        <div class="browse-layout">
+            <!-- Desktop Sidebar Filters -->
+            <aside class="filters-sidebar">
+                <div class="filters-card">
+                    <div class="filters-header">
+                        <h3 class="filters-title">Filters</h3>
+                        {% if selected_category or selected_brand %}<a href="?{% if selected_topic %}topic={{ selected_topic }}{% endif %}" class="filters-clear">Clear all</a>{% endif %}
+                    </div>
+
+                    <div class="filter-group">
+                        <h4 class="filter-group-title">Category</h4>
+                        {% for facet in facets.category %}
+                        <a href="?category={{ facet.value|urlencode }}{% if selected_topic %}&topic={{ selected_topic }}{% endif %}{% if selected_brand %}&brand={{ selected_brand|urlencode }}{% endif %}{% if query %}&q={{ query|urlencode }}{% endif %}" class="filter-option {% if selected_category == facet.value %}active{% endif %}">
+                            <div class="filter-option-left"><div class="filter-checkbox"></div><span class="filter-label">{{ facet.value|title }}</span></div>
+                            <span class="filter-count">{{ facet.count }}</span>
+                        </a>
+                        {% empty %}
+                        <a href="?category=history" class="filter-option"><div class="filter-option-left"><div class="filter-checkbox"></div><span class="filter-label">History</span></div><span class="filter-count">102</span></a>
+                        <a href="?category=landmarks" class="filter-option"><div class="filter-option-left"><div class="filter-checkbox"></div><span class="filter-label">Landmarks</span></div><span class="filter-count">172</span></a>
+                        <a href="?category=media" class="filter-option"><div class="filter-option-left"><div class="filter-checkbox"></div><span class="filter-label">Media</span></div><span class="filter-count">518</span></a>
+                        {% endfor %}
+                    </div>
+
+                    <div class="filter-group">
+                        <h4 class="filter-group-title">Source</h4>
+                        {% for facet in facets.brand %}
+                        <a href="?brand={{ facet.value|urlencode }}{% if selected_topic %}&topic={{ selected_topic }}{% endif %}{% if selected_category %}&category={{ selected_category|urlencode }}{% endif %}{% if query %}&q={{ query|urlencode }}{% endif %}" class="filter-option {% if selected_brand == facet.value %}active{% endif %}">
+                            <div class="filter-option-left"><div class="filter-checkbox"></div><span class="filter-label">{{ facet.value }}</span></div>
+                            <span class="filter-count">{{ facet.count }}</span>
+                        </a>
+                        {% empty %}
+                        <a href="?brand=BlackPast.org" class="filter-option"><div class="filter-option-left"><div class="filter-checkbox"></div><span class="filter-label">BlackPast.org</span></div><span class="filter-count">246</span></a>
+                        <a href="?brand=Face2Face Africa" class="filter-option"><div class="filter-option-left"><div class="filter-checkbox"></div><span class="filter-label">Face2Face Africa</span></div><span class="filter-count">80</span></a>
+                        {% endfor %}
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Results Section -->
+            <div class="results-section">
+                <button class="mobile-filter-btn" onclick="openFilterSheet()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h7"/></svg>
+                    Filters{% if active_filter_count %}<span class="filter-badge">{{ active_filter_count }}</span>{% endif %}
+                </button>
+
+                {% if selected_category or selected_brand %}
+                <div class="active-filters">
+                    {% if selected_category %}<div class="active-filter-pill">{{ selected_category|title }}<a href="?{% if selected_topic %}topic={{ selected_topic }}&{% endif %}{% if selected_brand %}brand={{ selected_brand|urlencode }}&{% endif %}{% if query %}q={{ query|urlencode }}{% endif %}"><button>×</button></a></div>{% endif %}
+                    {% if selected_brand %}<div class="active-filter-pill">{{ selected_brand }}<a href="?{% if selected_topic %}topic={{ selected_topic }}&{% endif %}{% if selected_category %}category={{ selected_category|urlencode }}&{% endif %}{% if query %}q={{ query|urlencode }}{% endif %}"><button>×</button></a></div>{% endif %}
+                </div>
+                {% endif %}
+
+                <div class="results-header">
+                    <span class="results-info"><strong>{{ total|default:"777" }}</strong> culture resources{% if selected_category %} in <strong>{{ selected_category|title }}</strong>{% endif %}{% if selected_brand %} from <strong>{{ selected_brand }}</strong>{% endif %}</span>
+                    <select class="sort-select" onchange="window.location.href=this.value">
+                        <option value="?sort=authority{% if selected_category %}&category={{ selected_category|urlencode }}{% endif %}{% if selected_brand %}&brand={{ selected_brand|urlencode }}{% endif %}">Most Relevant</option>
+                        <option value="?sort=recent{% if selected_category %}&category={{ selected_category|urlencode }}{% endif %}{% if selected_brand %}&brand={{ selected_brand|urlencode }}{% endif %}">Most Recent</option>
+                    </select>
+                </div>
+
+                <div class="results-grid">
+                    {% for hit in results %}
+                    <a href="{{ hit.document.document_url }}" target="_blank" class="result-card">
+                        <div class="result-image">{% if hit.document.image_url %}<img src="{{ hit.document.image_url.0 }}" alt="{{ hit.document.document_title }}">{% endif %}<span class="result-category">{{ hit.document.document_category|default:"Culture" }}</span></div>
+                        <div class="result-content">
+                            <h3 class="result-title">{{ hit.document.document_title }}</h3>
+                            <p class="result-meta">{{ hit.document.document_brand }}</p>
+                            <p class="result-description">{{ hit.document.document_summary|truncatewords:20 }}</p>
+                            <div class="result-tags">{% for keyword in hit.document.primary_keywords|slice:":3" %}<span class="result-tag">{{ keyword }}</span>{% endfor %}</div>
+                        </div>
+                    </a>
+                    {% empty %}
+                    <div class="result-card" style="grid-column: 1 / -1; text-align: center; padding: 60px;">
+                        <h3 style="font-family: var(--font-display); font-size: 24px; margin-bottom: 12px;">No results found</h3>
+                        <p style="color: var(--gray-500); margin-bottom: 20px;">Try adjusting your filters or search terms</p>
+                        <a href="?" style="display: inline-block; padding: 12px 24px; background: var(--gold); color: var(--black); border-radius: 8px; font-weight: 600;">Clear Filters</a>
+                    </div>
+                    {% endfor %}
+                </div>
+
+                {% if total > 18 %}
+                <div class="pagination">
+                    {% if page > 1 %}<a href="?page={{ page|add:'-1' }}{% if selected_category %}&category={{ selected_category|urlencode }}{% endif %}{% if selected_brand %}&brand={{ selected_brand|urlencode }}{% endif %}{% if query %}&q={{ query|urlencode }}{% endif %}" class="pagination-btn">← Previous</a>{% endif %}
+                    <span class="pagination-btn active">{{ page|default:1 }}</span>
+                    {% if has_more %}<a href="?page={{ page|add:'1' }}{% if selected_category %}&category={{ selected_category|urlencode }}{% endif %}{% if selected_brand %}&brand={{ selected_brand|urlencode }}{% endif %}{% if query %}&q={{ query|urlencode }}{% endif %}" class="pagination-btn">Next →</a>{% endif %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </section>
+
+    <!-- Mobile Filter Sheet -->
+    <div class="filter-sheet-overlay" id="filterOverlay" onclick="closeFilterSheet()"></div>
+    <div class="filter-sheet" id="filterSheet">
+        <div class="filter-sheet-header"><h3 class="filter-sheet-title">Filters</h3><button class="filter-sheet-close" onclick="closeFilterSheet()">×</button></div>
+        <div class="filter-sheet-content">
+            <div class="filter-group">
+                <h4 class="filter-group-title">Category</h4>
+                {% for facet in facets.category %}
+                <a href="?category={{ facet.value|urlencode }}{% if selected_topic %}&topic={{ selected_topic }}{% endif %}{% if selected_brand %}&brand={{ selected_brand|urlencode }}{% endif %}{% if query %}&q={{ query|urlencode }}{% endif %}" class="filter-option {% if selected_category == facet.value %}active{% endif %}">
+                    <div class="filter-option-left"><div class="filter-checkbox"></div><span class="filter-label">{{ facet.value|title }}</span></div>
+                    <span class="filter-count">{{ facet.count }}</span>
+                </a>
+                {% empty %}
+                <a href="?category=history" class="filter-option"><div class="filter-option-left"><div class="filter-checkbox"></div><span class="filter-label">History</span></div><span class="filter-count">102</span></a>
+                {% endfor %}
+            </div>
+            <div class="filter-group">
+                <h4 class="filter-group-title">Source</h4>
+                {% for facet in facets.brand %}
+                <a href="?brand={{ facet.value|urlencode }}{% if selected_topic %}&topic={{ selected_topic }}{% endif %}{% if selected_category %}&category={{ selected_category|urlencode }}{% endif %}{% if query %}&q={{ query|urlencode }}{% endif %}" class="filter-option {% if selected_brand == facet.value %}active{% endif %}">
+                    <div class="filter-option-left"><div class="filter-checkbox"></div><span class="filter-label">{{ facet.value }}</span></div>
+                    <span class="filter-count">{{ facet.count }}</span>
+                </a>
+                {% empty %}
+                <a href="?brand=BlackPast.org" class="filter-option"><div class="filter-option-left"><div class="filter-checkbox"></div><span class="filter-label">BlackPast.org</span></div><span class="filter-count">246</span></a>
+                {% endfor %}
+            </div>
+        </div>
+        <div class="filter-sheet-footer">
+            <a href="?{% if selected_topic %}topic={{ selected_topic }}{% endif %}" class="filter-sheet-btn secondary">Clear All</a>
+            <button class="filter-sheet-btn primary" onclick="closeFilterSheet()">Show Results</button>
+        </div>
+    </div>
+
     <section class="two-column-section">
         <div class="column-section">
             <h3 class="column-title">🔥 Trending in Music</h3>
-            {% for item in trending_music %}
-            <div class="trending-item"><span class="trending-number">{{ forloop.counter }}</span><div class="trending-content"><h4>{{ item.title }}</h4><p>{{ item.subtitle }}</p></div></div>
-            {% empty %}
+            {% for item in trending_music %}<div class="trending-item"><span class="trending-number">{{ forloop.counter }}</span><div class="trending-content"><h4>{{ item.title }}</h4><p>{{ item.subtitle }}</p></div></div>{% empty %}
             <div class="trending-item"><span class="trending-number">1</span><div class="trending-content"><h4>New Album Release Breaks Records</h4><p>R&B · Released this week</p></div></div>
             <div class="trending-item"><span class="trending-number">2</span><div class="trending-content"><h4>Grammy Nominations Announced</h4><p>Awards · Black artists dominate</p></div></div>
-            <div class="trending-item"><span class="trending-number">3</span><div class="trending-content"><h4>Viral Track Takes Over Social Media</h4><p>Hip-Hop · 50M streams</p></div></div>
-            {% endfor %}
+            <div class="trending-item"><span class="trending-number">3</span><div class="trending-content"><h4>Viral Track Takes Over Social Media</h4><p>Hip-Hop · 50M streams</p></div></div>{% endfor %}
         </div>
         <div class="column-section">
             <h3 class="column-title">📅 Upcoming Events</h3>
-            {% for event in events %}
-            <div class="event-item"><div class="event-date"><span class="event-date-month">{{ event.month }}</span><span class="event-date-day">{{ event.day }}</span></div><div class="event-content"><h4>{{ event.title }}</h4><p>{{ event.location }}</p></div></div>
-            {% empty %}
+            {% for event in events %}<div class="event-item"><div class="event-date"><span class="event-date-month">{{ event.month }}</span><span class="event-date-day">{{ event.day }}</span></div><div class="event-content"><h4>{{ event.title }}</h4><p>{{ event.location }}</p></div></div>{% empty %}
             <div class="event-item"><div class="event-date"><span class="event-date-month">JAN</span><span class="event-date-day">15</span></div><div class="event-content"><h4>MLK Day Celebration</h4><p>Nationwide</p></div></div>
             <div class="event-item"><div class="event-date"><span class="event-date-month">FEB</span><span class="event-date-day">1</span></div><div class="event-content"><h4>Black History Month Kickoff</h4><p>Nationwide</p></div></div>
-            <div class="event-item"><div class="event-date"><span class="event-date-month">JUN</span><span class="event-date-day">19</span></div><div class="event-content"><h4>Juneteenth Celebration</h4><p>Nationwide</p></div></div>
-            {% endfor %}
+            <div class="event-item"><div class="event-date"><span class="event-date-month">JUN</span><span class="event-date-day">19</span></div><div class="event-content"><h4>Juneteenth Celebration</h4><p>Nationwide</p></div></div>{% endfor %}
         </div>
     </section>
 
@@ -245,15 +467,12 @@
         <div class="authors-inner">
             <div class="section-header"><h2 class="section-title">Black Authors to Read</h2></div>
             <div class="books-scroll">
-                {% for book in books %}
-                <a href="#" class="book-card"><div class="book-cover"></div><h4 class="book-title">{{ book.title }}</h4><p class="book-author">{{ book.author }}</p></a>
-                {% empty %}
+                {% for book in books %}<a href="#" class="book-card"><div class="book-cover"></div><h4 class="book-title">{{ book.title }}</h4><p class="book-author">{{ book.author }}</p></a>{% empty %}
                 <a href="#" class="book-card"><div class="book-cover"></div><h4 class="book-title">Beloved</h4><p class="book-author">Toni Morrison</p></a>
                 <a href="#" class="book-card"><div class="book-cover"></div><h4 class="book-title">Between the World and Me</h4><p class="book-author">Ta-Nehisi Coates</p></a>
                 <a href="#" class="book-card"><div class="book-cover"></div><h4 class="book-title">The Color Purple</h4><p class="book-author">Alice Walker</p></a>
                 <a href="#" class="book-card"><div class="book-cover"></div><h4 class="book-title">Kindred</h4><p class="book-author">Octavia Butler</p></a>
-                <a href="#" class="book-card"><div class="book-cover"></div><h4 class="book-title">Invisible Man</h4><p class="book-author">Ralph Ellison</p></a>
-                {% endfor %}
+                <a href="#" class="book-card"><div class="book-cover"></div><h4 class="book-title">Invisible Man</h4><p class="book-author">Ralph Ellison</p></a>{% endfor %}
             </div>
         </div>
     </section>
@@ -264,5 +483,19 @@
             <nav class="footer-links"><a href="#" class="footer-link">About</a><a href="#" class="footer-link">Contact</a><a href="#" class="footer-link">Privacy</a><a href="#" class="footer-link">Terms</a></nav>
         </div>
     </footer>
+
+    <script>
+        function openFilterSheet() {
+            document.getElementById('filterOverlay').classList.add('active');
+            document.getElementById('filterSheet').classList.add('active');
+            document.body.style.overflow = 'hidden';
+        }
+        function closeFilterSheet() {
+            document.getElementById('filterOverlay').classList.remove('active');
+            document.getElementById('filterSheet').classList.remove('active');
+            document.body.style.overflow = '';
+        }
+        document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeFilterSheet(); });
+    </script>
 </body>
 </html>

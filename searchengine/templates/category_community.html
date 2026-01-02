@@ -52,16 +52,22 @@
         .hero-title { font-family: var(--font-display); font-size: clamp(32px, 5vw, 48px); font-weight: 700; margin-bottom: 16px; }
         .hero-subtitle { font-size: 18px; color: var(--gray-600); margin-bottom: 32px; }
         .hero-actions { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; }
-        .hero-btn { display: inline-flex; align-items: center; gap: 8px; padding: 16px 32px; font-family: var(--font-body); font-size: 16px; font-weight: 600; border-radius: 12px; cursor: pointer; }
+        .hero-btn { display: inline-flex; align-items: center; gap: 8px; padding: 16px 32px; font-family: var(--font-body); font-size: 16px; font-weight: 600; border-radius: 12px; cursor: pointer; transition: all var(--transition-fast); }
         .hero-btn-primary { background: var(--red); color: white; border: none; }
+        .hero-btn-primary:hover { background: #a13f41; }
         .hero-btn-secondary { background: transparent; color: var(--black); border: 2px solid var(--gray-300); }
+        .hero-btn-secondary:hover { border-color: var(--black); }
+
+        /* City Selector */
+        .city-selector { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 16px; }
+        .city-selector select { padding: 8px 16px; font-family: var(--font-body); font-size: 14px; border: 2px solid var(--gray-200); border-radius: 8px; background: var(--warm-white); cursor: pointer; }
 
         .events-section { max-width: 1400px; margin: 0 auto; padding: 64px 24px; }
         .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 32px; }
         .section-title { font-family: var(--font-display); font-size: 28px; font-weight: 700; }
         .section-link { font-size: 14px; font-weight: 600; color: var(--red); }
         .events-list { display: flex; flex-direction: column; gap: 16px; }
-        .event-card { display: flex; gap: 20px; padding: 24px; background: var(--warm-white); border: 1px solid var(--gray-200); border-radius: 16px; }
+        .event-card { display: flex; gap: 20px; padding: 24px; background: var(--warm-white); border: 1px solid var(--gray-200); border-radius: 16px; transition: all var(--transition-base); }
         .event-card:hover { border-color: var(--red); box-shadow: var(--shadow-md); }
         .event-date-box { width: 80px; height: 80px; background: linear-gradient(135deg, var(--red) 0%, #a13f41 100%); border-radius: 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; flex-shrink: 0; }
         .event-date-month { font-size: 12px; font-weight: 700; text-transform: uppercase; }
@@ -71,26 +77,111 @@
         .event-name { font-family: var(--font-display); font-size: 20px; font-weight: 700; margin-bottom: 8px; }
         .event-meta { display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 12px; font-size: 14px; color: var(--gray-600); }
         .event-description { font-size: 14px; color: var(--gray-600); }
-        .event-btn { padding: 10px 20px; font-size: 14px; font-weight: 600; border-radius: 8px; background: var(--red); color: white; border: none; cursor: pointer; }
+        .event-btn { padding: 10px 20px; font-size: 14px; font-weight: 600; border-radius: 8px; background: var(--red); color: white; border: none; cursor: pointer; transition: all var(--transition-fast); }
+        .event-btn:hover { background: #a13f41; }
 
         .help-section { background: var(--gray-100); padding: 64px 24px; }
         .help-inner { max-width: 1400px; margin: 0 auto; }
         .help-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
-        .help-card { display: flex; align-items: center; gap: 16px; padding: 24px; background: var(--warm-white); border: 1px solid var(--gray-200); border-radius: 16px; cursor: pointer; }
+        .help-card { display: flex; align-items: center; gap: 16px; padding: 24px; background: var(--warm-white); border: 1px solid var(--gray-200); border-radius: 16px; cursor: pointer; transition: all var(--transition-base); }
         .help-card:hover { border-color: var(--gold); box-shadow: var(--shadow-md); }
-        .help-icon { width: 56px; height: 56px; background: var(--gold-pale); border-radius: 16px; display: flex; align-items: center; justify-content: center; font-size: 28px; }
+        .help-card.active { border-color: var(--gold); background: var(--gold-pale); }
+        .help-icon { width: 56px; height: 56px; background: var(--gold-pale); border-radius: 16px; display: flex; align-items: center; justify-content: center; font-size: 28px; flex-shrink: 0; }
         .help-content h3 { font-weight: 600; font-size: 16px; margin-bottom: 4px; }
         .help-content p { font-size: 13px; color: var(--gray-500); }
 
+        /* ==================== BROWSE SECTION WITH FACETED SEARCH ==================== */
+        .browse-section { max-width: 1400px; margin: 0 auto; padding: 64px 24px; }
+        .browse-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 32px; flex-wrap: wrap; gap: 16px; }
+        .search-box { position: relative; flex: 1; max-width: 400px; }
+        .search-input { width: 100%; padding: 14px 20px 14px 48px; font-family: var(--font-body); font-size: 15px; border: 2px solid var(--gray-200); border-radius: 12px; background: var(--warm-white); outline: none; }
+        .search-input:focus { border-color: var(--red); box-shadow: 0 0 0 4px var(--red-pale); }
+        .search-icon { position: absolute; left: 16px; top: 50%; transform: translateY(-50%); width: 20px; height: 20px; color: var(--gray-400); }
+
+        .browse-layout { display: flex; gap: 32px; }
+
+        /* Desktop Sidebar */
+        .filters-sidebar { width: 260px; flex-shrink: 0; position: sticky; top: 100px; height: fit-content; max-height: calc(100vh - 120px); overflow-y: auto; }
+        .filters-card { background: var(--warm-white); border: 1px solid var(--gray-200); border-radius: 16px; padding: 24px; }
+        .filters-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+        .filters-title { font-family: var(--font-display); font-size: 18px; font-weight: 700; }
+        .filters-clear { font-size: 13px; color: var(--red); cursor: pointer; background: none; border: none; font-family: var(--font-body); }
+        .filters-clear:hover { text-decoration: underline; }
+        .filter-group { margin-bottom: 24px; padding-bottom: 24px; border-bottom: 1px solid var(--gray-200); }
+        .filter-group:last-child { margin-bottom: 0; padding-bottom: 0; border-bottom: none; }
+        .filter-group-title { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--gray-500); margin-bottom: 12px; }
+        .filter-option { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; margin: 4px 0; border-radius: 8px; cursor: pointer; transition: all var(--transition-fast); }
+        .filter-option:hover { background: var(--gray-100); }
+        .filter-option.active { background: var(--red-pale); }
+        .filter-option-left { display: flex; align-items: center; gap: 10px; }
+        .filter-checkbox { width: 18px; height: 18px; border: 2px solid var(--gray-300); border-radius: 4px; display: flex; align-items: center; justify-content: center; transition: all var(--transition-fast); }
+        .filter-option.active .filter-checkbox { background: var(--red); border-color: var(--red); }
+        .filter-option.active .filter-checkbox::after { content: '✓'; color: white; font-size: 12px; font-weight: 700; }
+        .filter-label { font-size: 14px; color: var(--gray-700); }
+        .filter-count { font-size: 12px; color: var(--gray-400); background: var(--gray-100); padding: 2px 8px; border-radius: 100px; }
+        .filter-option.active .filter-count { background: var(--red); color: white; }
+
+        /* Mobile Filter Button */
+        .mobile-filter-btn { display: none; align-items: center; justify-content: center; gap: 8px; padding: 14px 20px; background: var(--warm-white); border: 2px solid var(--gray-200); border-radius: 12px; font-family: var(--font-body); font-size: 15px; font-weight: 600; color: var(--gray-700); cursor: pointer; width: 100%; margin-bottom: 20px; }
+        .mobile-filter-btn svg { width: 20px; height: 20px; }
+        .filter-badge { background: var(--red); color: white; font-size: 12px; padding: 2px 8px; border-radius: 100px; margin-left: 8px; }
+
+        /* Mobile Filter Sheet */
+        .filter-sheet-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 200; opacity: 0; transition: opacity var(--transition-base); }
+        .filter-sheet-overlay.active { display: block; opacity: 1; }
+        .filter-sheet { position: fixed; bottom: 0; left: 0; right: 0; background: var(--warm-white); border-radius: 24px 24px 0 0; z-index: 201; max-height: 85vh; overflow-y: auto; transform: translateY(100%); transition: transform var(--transition-base); }
+        .filter-sheet.active { transform: translateY(0); }
+        .filter-sheet-header { display: flex; align-items: center; justify-content: space-between; padding: 20px 24px; border-bottom: 1px solid var(--gray-200); position: sticky; top: 0; background: var(--warm-white); z-index: 1; }
+        .filter-sheet-title { font-family: var(--font-display); font-size: 20px; font-weight: 700; }
+        .filter-sheet-close { width: 36px; height: 36px; border-radius: 50%; background: var(--gray-100); border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 20px; color: var(--gray-600); }
+        .filter-sheet-content { padding: 24px; }
+        .filter-sheet-footer { padding: 16px 24px; border-top: 1px solid var(--gray-200); display: flex; gap: 12px; position: sticky; bottom: 0; background: var(--warm-white); }
+        .filter-sheet-btn { flex: 1; padding: 14px 24px; border-radius: 12px; font-family: var(--font-body); font-size: 15px; font-weight: 600; cursor: pointer; }
+        .filter-sheet-btn.primary { background: var(--red); color: white; border: none; }
+        .filter-sheet-btn.secondary { background: transparent; color: var(--gray-600); border: 2px solid var(--gray-200); }
+
+        /* Active Filters Pills */
+        .active-filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
+        .active-filter-pill { display: flex; align-items: center; gap: 6px; padding: 6px 12px; background: var(--red-pale); border: 1px solid var(--red); border-radius: 100px; font-size: 13px; color: var(--red); }
+        .active-filter-pill button { background: none; border: none; cursor: pointer; color: var(--red); font-size: 16px; line-height: 1; padding: 0; }
+
+        /* Results Section */
+        .results-section { flex: 1; min-width: 0; }
+        .results-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; flex-wrap: wrap; gap: 16px; }
+        .results-info { font-size: 15px; color: var(--gray-600); }
+        .results-info strong { color: var(--black); }
+        .sort-select { padding: 10px 16px; font-family: var(--font-body); font-size: 14px; border: 1px solid var(--gray-300); border-radius: 8px; background: var(--warm-white); }
+
+        /* Results Grid */
+        .results-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 24px; }
+        .result-card { background: var(--warm-white); border: 1px solid var(--gray-200); border-radius: 16px; overflow: hidden; transition: all var(--transition-base); }
+        .result-card:hover { border-color: var(--red); box-shadow: var(--shadow-md); transform: translateY(-4px); }
+        .result-image { height: 160px; background: linear-gradient(135deg, var(--gray-200) 0%, var(--gray-300) 100%); position: relative; overflow: hidden; }
+        .result-image img { width: 100%; height: 100%; object-fit: cover; }
+        .result-category { position: absolute; top: 12px; left: 12px; padding: 4px 10px; background: var(--red); color: white; font-size: 11px; font-weight: 700; text-transform: uppercase; border-radius: 4px; }
+        .result-content { padding: 20px; }
+        .result-title { font-family: var(--font-display); font-size: 18px; font-weight: 700; margin-bottom: 8px; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+        .result-meta { font-size: 13px; color: var(--gray-500); margin-bottom: 12px; }
+        .result-description { font-size: 14px; color: var(--gray-600); line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+        .result-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+        .result-tag { padding: 4px 10px; background: var(--gray-100); border-radius: 100px; font-size: 12px; color: var(--gray-600); }
+
+        /* Pagination */
+        .pagination { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 40px; }
+        .pagination-btn { padding: 10px 16px; border: 1px solid var(--gray-200); border-radius: 8px; background: var(--warm-white); font-family: var(--font-body); font-size: 14px; cursor: pointer; transition: all var(--transition-fast); }
+        .pagination-btn:hover { border-color: var(--red); color: var(--red); }
+        .pagination-btn.active { background: var(--red); border-color: var(--red); color: white; }
+
         .orgs-section { max-width: 1400px; margin: 0 auto; padding: 64px 24px; }
         .orgs-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 24px; }
-        .org-card { display: flex; gap: 20px; padding: 28px; background: var(--warm-white); border: 1px solid var(--gray-200); border-radius: 16px; }
+        .org-card { display: flex; gap: 20px; padding: 28px; background: var(--warm-white); border: 1px solid var(--gray-200); border-radius: 16px; transition: all var(--transition-base); }
         .org-card:hover { border-color: var(--green); box-shadow: var(--shadow-md); }
-        .org-logo { width: 72px; height: 72px; background: var(--gray-100); border-radius: 16px; display: flex; align-items: center; justify-content: center; font-family: var(--font-display); font-size: 24px; font-weight: 700; color: var(--gray-400); flex-shrink: 0; }
+        .org-logo { width: 72px; height: 72px; background: var(--gray-100); border-radius: 16px; display: flex; align-items: center; justify-content: center; font-family: var(--font-display); font-size: 24px; font-weight: 700; color: var(--gray-400); flex-shrink: 0; overflow: hidden; }
+        .org-logo img { width: 100%; height: 100%; object-fit: cover; }
         .org-content { flex: 1; }
         .org-name { font-family: var(--font-display); font-size: 18px; font-weight: 700; margin-bottom: 4px; }
         .org-type { font-size: 14px; color: var(--green); font-weight: 500; margin-bottom: 8px; }
-        .org-description { font-size: 14px; color: var(--gray-600); line-height: 1.5; margin-bottom: 12px; }
+        .org-description { font-size: 14px; color: var(--gray-600); line-height: 1.5; margin-bottom: 12px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
         .org-stats { display: flex; gap: 16px; font-size: 13px; color: var(--gray-500); }
         .org-stat strong { color: var(--black); }
 
@@ -102,7 +193,7 @@
         .volunteer-item:last-child { border-bottom: none; }
         .volunteer-info h4 { font-weight: 600; font-size: 15px; margin-bottom: 4px; }
         .volunteer-info p { font-size: 13px; color: var(--gray-500); }
-        .volunteer-badge { padding: 6px 12px; background: var(--green-pale); color: var(--green); font-size: 12px; font-weight: 600; border-radius: 100px; }
+        .volunteer-badge { padding: 6px 12px; background: var(--green-pale); color: var(--green); font-size: 12px; font-weight: 600; border-radius: 100px; white-space: nowrap; }
         .civic-item { padding: 20px; background: var(--gray-100); border-radius: 12px; margin-bottom: 16px; }
         .civic-item:last-child { margin-bottom: 0; }
         .civic-header { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
@@ -115,9 +206,10 @@
         .churches-inner { max-width: 1400px; margin: 0 auto; }
         .churches-scroll { display: flex; gap: 20px; overflow-x: auto; padding-bottom: 16px; scrollbar-width: none; }
         .churches-scroll::-webkit-scrollbar { display: none; }
-        .church-card { flex-shrink: 0; width: 280px; background: var(--warm-white); border: 1px solid var(--gray-200); border-radius: 16px; overflow: hidden; }
+        .church-card { flex-shrink: 0; width: 280px; background: var(--warm-white); border: 1px solid var(--gray-200); border-radius: 16px; overflow: hidden; transition: all var(--transition-base); }
         .church-card:hover { box-shadow: var(--shadow-md); }
-        .church-image { height: 140px; background: var(--gray-200); }
+        .church-image { height: 140px; background: var(--gray-200); overflow: hidden; }
+        .church-image img { width: 100%; height: 100%; object-fit: cover; }
         .church-content { padding: 20px; }
         .church-name { font-family: var(--font-display); font-size: 17px; font-weight: 700; margin-bottom: 4px; }
         .church-denomination { font-size: 13px; color: var(--gray-500); margin-bottom: 8px; }
@@ -128,11 +220,16 @@
         .footer-logo { font-family: var(--font-display); font-size: 24px; font-weight: 700; }
         .footer-links { display: flex; gap: 32px; }
         .footer-link { font-size: 14px; color: var(--gray-400); }
+        .footer-link:hover { color: white; }
 
+        /* ==================== RESPONSIVE ==================== */
         @media (max-width: 1024px) {
             .help-grid { grid-template-columns: repeat(2, 1fr); }
             .orgs-grid { grid-template-columns: 1fr; }
             .two-column-section { grid-template-columns: 1fr; }
+            .results-grid { grid-template-columns: 1fr; }
+            .filters-sidebar { display: none; }
+            .mobile-filter-btn { display: flex; }
         }
         @media (max-width: 768px) {
             .nav-links { display: none; }
@@ -141,6 +238,12 @@
             .help-grid { grid-template-columns: 1fr; }
             .event-card { flex-direction: column; }
             .event-date-box { width: 100%; flex-direction: row; gap: 12px; padding: 16px; }
+            .browse-header { flex-direction: column; align-items: stretch; }
+            .search-box { max-width: none; }
+        }
+        @media (min-width: 1025px) {
+            .mobile-filter-btn { display: none; }
+            .filter-sheet-overlay, .filter-sheet { display: none !important; }
         }
     </style>
 </head>
@@ -160,8 +263,21 @@
 
     <section class="hero">
         <div class="hero-inner">
+            <div class="city-selector">
+                <span>📍</span>
+                <select onchange="window.location.href='?city=' + this.value">
+                    <option value="Atlanta" {% if city == 'Atlanta' %}selected{% endif %}>Atlanta, GA</option>
+                    <option value="Houston" {% if city == 'Houston' %}selected{% endif %}>Houston, TX</option>
+                    <option value="Chicago" {% if city == 'Chicago' %}selected{% endif %}>Chicago, IL</option>
+                    <option value="Detroit" {% if city == 'Detroit' %}selected{% endif %}>Detroit, MI</option>
+                    <option value="New York" {% if city == 'New York' %}selected{% endif %}>New York, NY</option>
+                    <option value="Los Angeles" {% if city == 'Los Angeles' %}selected{% endif %}>Los Angeles, CA</option>
+                    <option value="Philadelphia" {% if city == 'Philadelphia' %}selected{% endif %}>Philadelphia, PA</option>
+                    <option value="Washington" {% if city == 'Washington' %}selected{% endif %}>Washington, DC</option>
+                </select>
+            </div>
             <span class="hero-badge">👥 Community Hub</span>
-            <h1 class="hero-title">Your Community in {{ city|default:"Atlanta" }}</h1>
+            <h1 class="hero-title">Your Community in {{ city }}</h1>
             <p class="hero-subtitle">Connect with local events, organizations, and resources. Get involved, get support, and build together.</p>
             <div class="hero-actions">
                 <a href="#events" class="hero-btn hero-btn-primary">📅 Browse Events</a>
@@ -171,33 +287,34 @@
     </section>
 
     <section class="events-section" id="events">
-        <div class="section-header"><h2 class="section-title">📅 Upcoming Events</h2><a href="#" class="section-link">Full Calendar →</a></div>
+        <div class="section-header"><h2 class="section-title">📅 Upcoming Events in {{ city }}</h2><a href="#browse" class="section-link">View All →</a></div>
         <div class="events-list">
-            {% for event in events %}
+            {% for event in upcoming_events %}
             <article class="event-card">
-                <div class="event-date-box"><span class="event-date-month">{{ event.month }}</span><span class="event-date-day">{{ event.day }}</span></div>
-                <div class="event-content">
-                    <span class="event-type">{{ event.type }}</span>
-                    <h3 class="event-name">{{ event.title }}</h3>
-                    <div class="event-meta"><span>📍 {{ event.location }}</span><span>🕐 {{ event.time }}</span><span>{{ event.price|default:"Free" }}</span></div>
-                    <p class="event-description">{{ event.description }}</p>
+                <div class="event-date-box">
+                    <span class="event-date-month">{{ event.month|default:"JAN" }}</span>
+                    <span class="event-date-day">{{ event.day|default:"15" }}</span>
                 </div>
-                <div><a href="{{ event.url }}" class="event-btn">RSVP</a></div>
+                <div class="event-content">
+                    <span class="event-type">{{ event.document.document_category|default:"Event"|title }}</span>
+                    <h3 class="event-name">{{ event.document.document_title }}</h3>
+                    <div class="event-meta">
+                        <span>📍 {{ event.document.document_brand|default:city }}</span>
+                        <span>🕐 {{ event.time|default:"TBA" }}</span>
+                    </div>
+                    <p class="event-description">{{ event.document.document_summary|truncatewords:20 }}</p>
+                </div>
+                <div><a href="{{ event.document.document_url }}" target="_blank" class="event-btn">View Details</a></div>
             </article>
             {% empty %}
             <article class="event-card">
                 <div class="event-date-box"><span class="event-date-month">JAN</span><span class="event-date-day">15</span></div>
-                <div class="event-content"><span class="event-type">Volunteer</span><h3 class="event-name">MLK Day of Service</h3><div class="event-meta"><span>📍 Ebenezer Baptist Church</span><span>🕐 9 AM - 2 PM</span><span>Free</span></div><p class="event-description">Join us for a day of community service honoring Dr. Martin Luther King Jr.'s legacy.</p></div>
+                <div class="event-content"><span class="event-type">Volunteer</span><h3 class="event-name">MLK Day of Service</h3><div class="event-meta"><span>📍 {{ city }}</span><span>🕐 9 AM - 2 PM</span><span>Free</span></div><p class="event-description">Join us for a day of community service honoring Dr. Martin Luther King Jr.'s legacy.</p></div>
                 <div><a href="#" class="event-btn">RSVP</a></div>
             </article>
             <article class="event-card">
                 <div class="event-date-box"><span class="event-date-month">JAN</span><span class="event-date-day">20</span></div>
-                <div class="event-content"><span class="event-type">Networking</span><h3 class="event-name">Black Business Networking Mixer</h3><div class="event-meta"><span>📍 Ponce City Market</span><span>🕐 6 PM - 9 PM</span><span>$15</span></div><p class="event-description">Connect with local Black entrepreneurs, business owners, and professionals.</p></div>
-                <div><a href="#" class="event-btn">RSVP</a></div>
-            </article>
-            <article class="event-card">
-                <div class="event-date-box"><span class="event-date-month">JAN</span><span class="event-date-day">27</span></div>
-                <div class="event-content"><span class="event-type">Educational</span><h3 class="event-name">First-Time Homebuyer Workshop</h3><div class="event-meta"><span>📍 Atlanta Urban League</span><span>🕐 10 AM - 1 PM</span><span>Free</span></div><p class="event-description">Learn about down payment assistance programs, credit repair, and the home buying process.</p></div>
+                <div class="event-content"><span class="event-type">Networking</span><h3 class="event-name">Black Business Networking Mixer</h3><div class="event-meta"><span>📍 {{ city }}</span><span>🕐 6 PM - 9 PM</span><span>$15</span></div><p class="event-description">Connect with local Black entrepreneurs, business owners, and professionals.</p></div>
                 <div><a href="#" class="event-btn">RSVP</a></div>
             </article>
             {% endfor %}
@@ -208,26 +325,184 @@
         <div class="help-inner">
             <div class="section-header"><h2 class="section-title">🤝 I Need Help With...</h2></div>
             <div class="help-grid">
-                <a href="?category=housing" class="help-card"><div class="help-icon">🏠</div><div class="help-content"><h3>Housing Assistance</h3><p>Rental help, homebuyer programs</p></div></a>
-                <a href="?category=legal" class="help-card"><div class="help-icon">⚖️</div><div class="help-content"><h3>Legal Aid</h3><p>Free consultations, know your rights</p></div></a>
-                <a href="?category=jobs" class="help-card"><div class="help-icon">💼</div><div class="help-content"><h3>Jobs & Training</h3><p>Employment, skills training</p></div></a>
-                <a href="?category=food" class="help-card"><div class="help-icon">🍎</div><div class="help-content"><h3>Food & Essentials</h3><p>Food banks, pantries, supplies</p></div></a>
-                <a href="?category=family" class="help-card"><div class="help-icon">👨‍👩‍👧</div><div class="help-content"><h3>Family Services</h3><p>Childcare, parenting support</p></div></a>
-                <a href="?category=youth" class="help-card"><div class="help-icon">🎓</div><div class="help-content"><h3>Youth Programs</h3><p>After-school, mentorship, camps</p></div></a>
+                <a href="?category=housing{% if city %}&city={{ city }}{% endif %}" class="help-card {% if selected_category == 'housing' %}active{% endif %}"><div class="help-icon">🏠</div><div class="help-content"><h3>Housing Assistance</h3><p>Rental help, homebuyer programs</p></div></a>
+                <a href="?category=legal{% if city %}&city={{ city }}{% endif %}" class="help-card {% if selected_category == 'legal' %}active{% endif %}"><div class="help-icon">⚖️</div><div class="help-content"><h3>Legal Aid</h3><p>Free consultations, know your rights</p></div></a>
+                <a href="?category=jobs{% if city %}&city={{ city }}{% endif %}" class="help-card {% if selected_category == 'jobs' %}active{% endif %}"><div class="help-icon">💼</div><div class="help-content"><h3>Jobs & Training</h3><p>Employment, skills training</p></div></a>
+                <a href="?category=food{% if city %}&city={{ city }}{% endif %}" class="help-card {% if selected_category == 'food' %}active{% endif %}"><div class="help-icon">🍎</div><div class="help-content"><h3>Food & Essentials</h3><p>Food banks, pantries, supplies</p></div></a>
+                <a href="?category=family{% if city %}&city={{ city }}{% endif %}" class="help-card {% if selected_category == 'family' %}active{% endif %}"><div class="help-icon">👨‍👩‍👧</div><div class="help-content"><h3>Family Services</h3><p>Childcare, parenting support</p></div></a>
+                <a href="?category=youth{% if city %}&city={{ city }}{% endif %}" class="help-card {% if selected_category == 'youth' %}active{% endif %}"><div class="help-icon">🎓</div><div class="help-content"><h3>Youth Programs</h3><p>After-school, mentorship, camps</p></div></a>
             </div>
         </div>
     </section>
 
+    <!-- Browse All Community Resources Section with Faceted Search -->
+    <section class="browse-section" id="browse">
+        <div class="browse-header">
+            <h2 class="section-title">Browse Community Resources</h2>
+            <form class="search-box" method="GET">
+                {% if city %}<input type="hidden" name="city" value="{{ city }}">{% endif %}
+                {% if selected_category %}<input type="hidden" name="category" value="{{ selected_category }}">{% endif %}
+                {% if selected_brand %}<input type="hidden" name="brand" value="{{ selected_brand }}">{% endif %}
+                <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                <input type="text" name="q" class="search-input" placeholder="Search community resources..." value="{{ query|default:'' }}">
+            </form>
+        </div>
+
+        <div class="browse-layout">
+            <!-- Desktop Sidebar Filters -->
+            <aside class="filters-sidebar">
+                <div class="filters-card">
+                    <div class="filters-header">
+                        <h3 class="filters-title">Filters</h3>
+                        {% if selected_category or selected_brand %}<a href="?{% if city %}city={{ city }}{% endif %}" class="filters-clear">Clear all</a>{% endif %}
+                    </div>
+
+                    <div class="filter-group">
+                        <h4 class="filter-group-title">Category</h4>
+                        {% for facet in facets.category %}
+                        <a href="?category={{ facet.value|urlencode }}{% if city %}&city={{ city }}{% endif %}{% if selected_brand %}&brand={{ selected_brand|urlencode }}{% endif %}{% if query %}&q={{ query|urlencode }}{% endif %}" class="filter-option {% if selected_category == facet.value %}active{% endif %}">
+                            <div class="filter-option-left"><div class="filter-checkbox"></div><span class="filter-label">{{ facet.value|title }}</span></div>
+                            <span class="filter-count">{{ facet.count }}</span>
+                        </a>
+                        {% empty %}
+                        <a href="?category=faith" class="filter-option"><div class="filter-option-left"><div class="filter-checkbox"></div><span class="filter-label">Faith & Churches</span></div><span class="filter-count">45</span></a>
+                        <a href="?category=nonprofit" class="filter-option"><div class="filter-option-left"><div class="filter-checkbox"></div><span class="filter-label">Nonprofits</span></div><span class="filter-count">78</span></a>
+                        <a href="?category=social_justice" class="filter-option"><div class="filter-option-left"><div class="filter-checkbox"></div><span class="filter-label">Social Justice</span></div><span class="filter-count">32</span></a>
+                        <a href="?category=community" class="filter-option"><div class="filter-option-left"><div class="filter-checkbox"></div><span class="filter-label">Community Orgs</span></div><span class="filter-count">56</span></a>
+                        {% endfor %}
+                    </div>
+
+                    <div class="filter-group">
+                        <h4 class="filter-group-title">Organization</h4>
+                        {% for facet in facets.brand %}
+                        <a href="?brand={{ facet.value|urlencode }}{% if city %}&city={{ city }}{% endif %}{% if selected_category %}&category={{ selected_category|urlencode }}{% endif %}{% if query %}&q={{ query|urlencode }}{% endif %}" class="filter-option {% if selected_brand == facet.value %}active{% endif %}">
+                            <div class="filter-option-left"><div class="filter-checkbox"></div><span class="filter-label">{{ facet.value }}</span></div>
+                            <span class="filter-count">{{ facet.count }}</span>
+                        </a>
+                        {% empty %}
+                        <a href="?brand=NAACP" class="filter-option"><div class="filter-option-left"><div class="filter-checkbox"></div><span class="filter-label">NAACP</span></div><span class="filter-count">24</span></a>
+                        <a href="?brand=Urban League" class="filter-option"><div class="filter-option-left"><div class="filter-checkbox"></div><span class="filter-label">Urban League</span></div><span class="filter-count">18</span></a>
+                        {% endfor %}
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Results Section -->
+            <div class="results-section">
+                <button class="mobile-filter-btn" onclick="openFilterSheet()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h7"/></svg>
+                    Filters{% if active_filter_count %}<span class="filter-badge">{{ active_filter_count }}</span>{% endif %}
+                </button>
+
+                {% if selected_category or selected_brand %}
+                <div class="active-filters">
+                    {% if selected_category %}<div class="active-filter-pill">{{ selected_category|title }}<a href="?{% if city %}city={{ city }}&{% endif %}{% if selected_brand %}brand={{ selected_brand|urlencode }}&{% endif %}{% if query %}q={{ query|urlencode }}{% endif %}"><button>×</button></a></div>{% endif %}
+                    {% if selected_brand %}<div class="active-filter-pill">{{ selected_brand }}<a href="?{% if city %}city={{ city }}&{% endif %}{% if selected_category %}category={{ selected_category|urlencode }}&{% endif %}{% if query %}q={{ query|urlencode }}{% endif %}"><button>×</button></a></div>{% endif %}
+                </div>
+                {% endif %}
+
+                <div class="results-header">
+                    <span class="results-info"><strong>{{ total|default:"240" }}</strong> community resources{% if city %} near <strong>{{ city }}</strong>{% endif %}{% if selected_category %} in <strong>{{ selected_category|title }}</strong>{% endif %}</span>
+                    <select class="sort-select" onchange="window.location.href=this.value">
+                        <option value="?sort=authority{% if city %}&city={{ city }}{% endif %}{% if selected_category %}&category={{ selected_category|urlencode }}{% endif %}{% if selected_brand %}&brand={{ selected_brand|urlencode }}{% endif %}" {% if sort == 'authority' %}selected{% endif %}>Most Relevant</option>
+                        <option value="?sort=recent{% if city %}&city={{ city }}{% endif %}{% if selected_category %}&category={{ selected_category|urlencode }}{% endif %}{% if selected_brand %}&brand={{ selected_brand|urlencode }}{% endif %}" {% if sort == 'recent' %}selected{% endif %}>Most Recent</option>
+                        <option value="?sort=name{% if city %}&city={{ city }}{% endif %}{% if selected_category %}&category={{ selected_category|urlencode }}{% endif %}{% if selected_brand %}&brand={{ selected_brand|urlencode }}{% endif %}" {% if sort == 'name' %}selected{% endif %}>Alphabetical</option>
+                    </select>
+                </div>
+
+                <div class="results-grid">
+                    {% for hit in results %}
+                    <a href="{{ hit.document.document_url }}" target="_blank" class="result-card">
+                        <div class="result-image">
+                            {% if hit.document.image_url %}<img src="{{ hit.document.image_url.0 }}" alt="{{ hit.document.document_title }}">{% endif %}
+                            <span class="result-category">{{ hit.document.document_category|default:"Community" }}</span>
+                        </div>
+                        <div class="result-content">
+                            <h3 class="result-title">{{ hit.document.document_title }}</h3>
+                            <p class="result-meta">{{ hit.document.document_brand }}</p>
+                            <p class="result-description">{{ hit.document.document_summary|truncatewords:20 }}</p>
+                            <div class="result-tags">
+                                {% for keyword in hit.document.primary_keywords|slice:":3" %}
+                                <span class="result-tag">{{ keyword }}</span>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </a>
+                    {% empty %}
+                    <div class="result-card" style="grid-column: 1 / -1; text-align: center; padding: 60px;">
+                        <h3 style="font-family: var(--font-display); font-size: 24px; margin-bottom: 12px;">No results found</h3>
+                        <p style="color: var(--gray-500); margin-bottom: 20px;">Try adjusting your filters or search terms</p>
+                        <a href="?{% if city %}city={{ city }}{% endif %}" style="display: inline-block; padding: 12px 24px; background: var(--red); color: white; border-radius: 8px; font-weight: 600;">Clear Filters</a>
+                    </div>
+                    {% endfor %}
+                </div>
+
+                {% if total > 20 %}
+                <div class="pagination">
+                    {% if page > 1 %}<a href="?page={{ page|add:'-1' }}{% if city %}&city={{ city }}{% endif %}{% if selected_category %}&category={{ selected_category|urlencode }}{% endif %}{% if selected_brand %}&brand={{ selected_brand|urlencode }}{% endif %}{% if query %}&q={{ query|urlencode }}{% endif %}" class="pagination-btn">← Previous</a>{% endif %}
+                    <span class="pagination-btn active">{{ page|default:1 }}</span>
+                    {% if has_more %}<a href="?page={{ page|add:'1' }}{% if city %}&city={{ city }}{% endif %}{% if selected_category %}&category={{ selected_category|urlencode }}{% endif %}{% if selected_brand %}&brand={{ selected_brand|urlencode }}{% endif %}{% if query %}&q={{ query|urlencode }}{% endif %}" class="pagination-btn">Next →</a>{% endif %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </section>
+
+    <!-- Mobile Filter Sheet -->
+    <div class="filter-sheet-overlay" id="filterOverlay" onclick="closeFilterSheet()"></div>
+    <div class="filter-sheet" id="filterSheet">
+        <div class="filter-sheet-header"><h3 class="filter-sheet-title">Filters</h3><button class="filter-sheet-close" onclick="closeFilterSheet()">×</button></div>
+        <div class="filter-sheet-content">
+            <div class="filter-group">
+                <h4 class="filter-group-title">Category</h4>
+                {% for facet in facets.category %}
+                <a href="?category={{ facet.value|urlencode }}{% if city %}&city={{ city }}{% endif %}{% if selected_brand %}&brand={{ selected_brand|urlencode }}{% endif %}{% if query %}&q={{ query|urlencode }}{% endif %}" class="filter-option {% if selected_category == facet.value %}active{% endif %}">
+                    <div class="filter-option-left"><div class="filter-checkbox"></div><span class="filter-label">{{ facet.value|title }}</span></div>
+                    <span class="filter-count">{{ facet.count }}</span>
+                </a>
+                {% empty %}
+                <a href="?category=faith" class="filter-option"><div class="filter-option-left"><div class="filter-checkbox"></div><span class="filter-label">Faith & Churches</span></div><span class="filter-count">45</span></a>
+                <a href="?category=nonprofit" class="filter-option"><div class="filter-option-left"><div class="filter-checkbox"></div><span class="filter-label">Nonprofits</span></div><span class="filter-count">78</span></a>
+                {% endfor %}
+            </div>
+            <div class="filter-group">
+                <h4 class="filter-group-title">Organization</h4>
+                {% for facet in facets.brand %}
+                <a href="?brand={{ facet.value|urlencode }}{% if city %}&city={{ city }}{% endif %}{% if selected_category %}&category={{ selected_category|urlencode }}{% endif %}{% if query %}&q={{ query|urlencode }}{% endif %}" class="filter-option {% if selected_brand == facet.value %}active{% endif %}">
+                    <div class="filter-option-left"><div class="filter-checkbox"></div><span class="filter-label">{{ facet.value }}</span></div>
+                    <span class="filter-count">{{ facet.count }}</span>
+                </a>
+                {% empty %}
+                <a href="?brand=NAACP" class="filter-option"><div class="filter-option-left"><div class="filter-checkbox"></div><span class="filter-label">NAACP</span></div><span class="filter-count">24</span></a>
+                {% endfor %}
+            </div>
+        </div>
+        <div class="filter-sheet-footer">
+            <a href="?{% if city %}city={{ city }}{% endif %}" class="filter-sheet-btn secondary">Clear All</a>
+            <button class="filter-sheet-btn primary" onclick="closeFilterSheet()">Show Results</button>
+        </div>
+    </div>
+
     <section class="orgs-section">
-        <div class="section-header"><h2 class="section-title">🏛️ Local Organizations</h2><a href="#" class="section-link">View All →</a></div>
+        <div class="section-header"><h2 class="section-title">🏛️ Local Organizations in {{ city }}</h2><a href="#browse" class="section-link">View All →</a></div>
         <div class="orgs-grid">
             {% for org in organizations %}
-            <a href="{{ org.url }}" class="org-card"><div class="org-logo">{{ org.initials }}</div><div class="org-content"><h3 class="org-name">{{ org.name }}</h3><p class="org-type">{{ org.type }}</p><p class="org-description">{{ org.description }}</p><div class="org-stats">{% if org.founded %}<span class="org-stat">Founded <strong>{{ org.founded }}</strong></span>{% endif %}</div></div></a>
+            <a href="{{ org.document.document_url }}" target="_blank" class="org-card">
+                <div class="org-logo">
+                    {% if org.document.image_url %}<img src="{{ org.document.image_url.0 }}" alt="">{% else %}{{ org.initials|default:"ORG" }}{% endif %}
+                </div>
+                <div class="org-content">
+                    <h3 class="org-name">{{ org.document.document_title }}</h3>
+                    <p class="org-type">{{ org.document.document_category|default:"Community"|title }}</p>
+                    <p class="org-description">{{ org.document.document_summary|truncatewords:20 }}</p>
+                    <div class="org-stats"><span class="org-stat">{{ org.document.document_brand }}</span></div>
+                </div>
+            </a>
             {% empty %}
-            <a href="#" class="org-card"><div class="org-logo">NA</div><div class="org-content"><h3 class="org-name">NAACP Atlanta Chapter</h3><p class="org-type">Civil Rights · Advocacy</p><p class="org-description">Advancing equity and justice through advocacy, education, and community empowerment since 1917.</p><div class="org-stats"><span class="org-stat">Founded <strong>1917</strong></span></div></div></a>
-            <a href="#" class="org-card"><div class="org-logo">UL</div><div class="org-content"><h3 class="org-name">Atlanta Urban League</h3><p class="org-type">Economic Empowerment</p><p class="org-description">Enabling African Americans to secure economic self-reliance through job training, housing, and education.</p><div class="org-stats"><span class="org-stat">Founded <strong>1920</strong></span></div></div></a>
-            <a href="#" class="org-card"><div class="org-logo">100</div><div class="org-content"><h3 class="org-name">100 Black Men of Atlanta</h3><p class="org-type">Mentorship · Youth Development</p><p class="org-description">Mentoring and educating young Black men through academic support, leadership, and life skills programs.</p><div class="org-stats"><span class="org-stat">Founded <strong>1987</strong></span></div></div></a>
-            <a href="#" class="org-card"><div class="org-logo">GI</div><div class="org-content"><h3 class="org-name">Girls Inc. Atlanta</h3><p class="org-type">Youth · Women's Empowerment</p><p class="org-description">Inspiring all girls to be strong, smart, and bold through mentoring and educational programs.</p></div></a>
+            <a href="#" class="org-card"><div class="org-logo">NA</div><div class="org-content"><h3 class="org-name">NAACP {{ city }} Chapter</h3><p class="org-type">Civil Rights · Advocacy</p><p class="org-description">Advancing equity and justice through advocacy, education, and community empowerment.</p><div class="org-stats"><span class="org-stat">Founded <strong>1917</strong></span></div></div></a>
+            <a href="#" class="org-card"><div class="org-logo">UL</div><div class="org-content"><h3 class="org-name">{{ city }} Urban League</h3><p class="org-type">Economic Empowerment</p><p class="org-description">Enabling African Americans to secure economic self-reliance through job training, housing, and education.</p><div class="org-stats"><span class="org-stat">Founded <strong>1920</strong></span></div></div></a>
+            <a href="#" class="org-card"><div class="org-logo">100</div><div class="org-content"><h3 class="org-name">100 Black Men of {{ city }}</h3><p class="org-type">Mentorship · Youth Development</p><p class="org-description">Mentoring and educating young Black men through academic support, leadership, and life skills programs.</p></div></a>
+            <a href="#" class="org-card"><div class="org-logo">GI</div><div class="org-content"><h3 class="org-name">Girls Inc. {{ city }}</h3><p class="org-type">Youth · Women's Empowerment</p><p class="org-description">Inspiring all girls to be strong, smart, and bold through mentoring and educational programs.</p></div></a>
             {% endfor %}
         </div>
     </section>
@@ -237,9 +512,15 @@
             <h3 class="column-title">✋ Volunteer Opportunities</h3>
             <ul class="volunteer-list">
                 {% for item in volunteer_ops %}
-                <li class="volunteer-item"><div class="volunteer-info"><h4>{{ item.title }}</h4><p>{{ item.organization }} · {{ item.schedule }}</p></div><span class="volunteer-badge">{{ item.type }}</span></li>
+                <li class="volunteer-item">
+                    <div class="volunteer-info">
+                        <h4>{{ item.document.document_title|truncatewords:6 }}</h4>
+                        <p>{{ item.document.document_brand }} · {{ item.schedule|default:"Flexible" }}</p>
+                    </div>
+                    <span class="volunteer-badge">{{ item.type|default:"Ongoing" }}</span>
+                </li>
                 {% empty %}
-                <li class="volunteer-item"><div class="volunteer-info"><h4>Food Bank Sorting</h4><p>Atlanta Community Food Bank · Sat mornings</p></div><span class="volunteer-badge">Weekly</span></li>
+                <li class="volunteer-item"><div class="volunteer-info"><h4>Food Bank Sorting</h4><p>{{ city }} Community Food Bank · Sat mornings</p></div><span class="volunteer-badge">Weekly</span></li>
                 <li class="volunteer-item"><div class="volunteer-info"><h4>Youth Tutoring</h4><p>Boys & Girls Club · After school</p></div><span class="volunteer-badge">Ongoing</span></li>
                 <li class="volunteer-item"><div class="volunteer-info"><h4>Senior Home Visits</h4><p>Meals on Wheels · Flexible</p></div><span class="volunteer-badge">Flexible</span></li>
                 <li class="volunteer-item"><div class="volunteer-info"><h4>Habitat Build Day</h4><p>Habitat for Humanity · Jan 28</p></div><span class="volunteer-badge">One-time</span></li>
@@ -249,22 +530,31 @@
         <div class="column-card">
             <h3 class="column-title">📣 Civic Action</h3>
             <div class="civic-item"><div class="civic-header"><div class="civic-icon">🗳️</div><h4>Voter Registration</h4></div><p>Make sure you're registered and ready for upcoming elections.</p><a href="#" class="civic-link">Check Your Status →</a></div>
-            <div class="civic-item"><div class="civic-header"><div class="civic-icon">🏛️</div><h4>Town Hall Meeting</h4></div><p>City budget meeting on January 22nd. Your voice matters.</p><a href="#" class="civic-link">RSVP Now →</a></div>
-            <div class="civic-item"><div class="civic-header"><div class="civic-icon">📝</div><h4>Active Petitions</h4></div><p>3 local campaigns need your signature to move forward.</p><a href="#" class="civic-link">View Petitions →</a></div>
+            <div class="civic-item"><div class="civic-header"><div class="civic-icon">🏛️</div><h4>Town Hall Meeting</h4></div><p>City budget meeting coming soon. Your voice matters.</p><a href="#" class="civic-link">RSVP Now →</a></div>
+            <div class="civic-item"><div class="civic-header"><div class="civic-icon">📝</div><h4>Active Petitions</h4></div><p>Local campaigns need your signature to move forward.</p><a href="#" class="civic-link">View Petitions →</a></div>
         </div>
     </section>
 
     <section class="churches-section">
         <div class="churches-inner">
-            <div class="section-header"><h2 class="section-title">⛪ Churches & Faith Communities</h2><a href="#" class="section-link">View All →</a></div>
+            <div class="section-header"><h2 class="section-title">⛪ Churches & Faith Communities in {{ city }}</h2><a href="?category=faith{% if city %}&city={{ city }}{% endif %}" class="section-link">View All →</a></div>
             <div class="churches-scroll">
                 {% for church in churches %}
-                <a href="{{ church.url }}" class="church-card"><div class="church-image"></div><div class="church-content"><h3 class="church-name">{{ church.name }}</h3><p class="church-denomination">{{ church.denomination }}</p><p class="church-location">📍 {{ church.neighborhood }}</p></div></a>
+                <a href="{{ church.document.document_url }}" target="_blank" class="church-card">
+                    <div class="church-image">
+                        {% if church.document.image_url %}<img src="{{ church.document.image_url.0 }}" alt="">{% endif %}
+                    </div>
+                    <div class="church-content">
+                        <h3 class="church-name">{{ church.document.document_title }}</h3>
+                        <p class="church-denomination">{{ church.document.document_category|default:"Church"|title }}</p>
+                        <p class="church-location">📍 {{ church.document.document_brand|default:city }}</p>
+                    </div>
+                </a>
                 {% empty %}
-                <a href="#" class="church-card"><div class="church-image"></div><div class="church-content"><h3 class="church-name">Ebenezer Baptist Church</h3><p class="church-denomination">Baptist</p><p class="church-location">📍 Sweet Auburn</p></div></a>
-                <a href="#" class="church-card"><div class="church-image"></div><div class="church-content"><h3 class="church-name">Big Bethel AME</h3><p class="church-denomination">AME</p><p class="church-location">📍 Auburn Avenue</p></div></a>
-                <a href="#" class="church-card"><div class="church-image"></div><div class="church-content"><h3 class="church-name">First African Presbyterian</h3><p class="church-denomination">Presbyterian</p><p class="church-location">📍 Downtown</p></div></a>
-                <a href="#" class="church-card"><div class="church-image"></div><div class="church-content"><h3 class="church-name">Hillside Chapel</h3><p class="church-denomination">Non-denominational</p><p class="church-location">📍 Cascade Heights</p></div></a>
+                <a href="#" class="church-card"><div class="church-image"></div><div class="church-content"><h3 class="church-name">Ebenezer Baptist Church</h3><p class="church-denomination">Baptist</p><p class="church-location">📍 {{ city }}</p></div></a>
+                <a href="#" class="church-card"><div class="church-image"></div><div class="church-content"><h3 class="church-name">Big Bethel AME</h3><p class="church-denomination">AME</p><p class="church-location">📍 {{ city }}</p></div></a>
+                <a href="#" class="church-card"><div class="church-image"></div><div class="church-content"><h3 class="church-name">First African Presbyterian</h3><p class="church-denomination">Presbyterian</p><p class="church-location">📍 {{ city }}</p></div></a>
+                <a href="#" class="church-card"><div class="church-image"></div><div class="church-content"><h3 class="church-name">Hillside Chapel</h3><p class="church-denomination">Non-denominational</p><p class="church-location">📍 {{ city }}</p></div></a>
                 {% endfor %}
             </div>
         </div>
@@ -276,5 +566,19 @@
             <nav class="footer-links"><a href="#" class="footer-link">About</a><a href="#" class="footer-link">Contact</a><a href="#" class="footer-link">Privacy</a><a href="#" class="footer-link">Terms</a></nav>
         </div>
     </footer>
+
+    <script>
+        function openFilterSheet() {
+            document.getElementById('filterOverlay').classList.add('active');
+            document.getElementById('filterSheet').classList.add('active');
+            document.body.style.overflow = 'hidden';
+        }
+        function closeFilterSheet() {
+            document.getElementById('filterOverlay').classList.remove('active');
+            document.getElementById('filterSheet').classList.remove('active');
+            document.body.style.overflow = '';
+        }
+        document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeFilterSheet(); });
+    </script>
 </body>
 </html>
