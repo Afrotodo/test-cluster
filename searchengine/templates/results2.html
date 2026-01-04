@@ -569,6 +569,89 @@
             color: var(--red);
         }
 
+        /* ==================== PAGINATION ==================== */
+        .pagination {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: var(--space-md);
+            margin-top: var(--space-xl);
+            padding-top: var(--space-lg);
+            border-top: 1px solid var(--gray-200);
+        }
+
+        .pagination-info {
+            font-size: 14px;
+            color: var(--gray-500);
+        }
+
+        .pagination-controls {
+            display: flex;
+            align-items: center;
+            gap: var(--space-sm);
+        }
+
+        .pagination-btn {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            padding: var(--space-sm) var(--space-md);
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--gray-700);
+            background: var(--warm-white);
+            border: 1px solid var(--gray-200);
+            border-radius: 8px;
+            transition: all var(--transition-fast);
+        }
+
+        .pagination-btn:hover {
+            background: var(--gray-100);
+            border-color: var(--gray-300);
+        }
+
+        .pagination-btn.disabled {
+            opacity: 0.5;
+            pointer-events: none;
+        }
+
+        .pagination-pages {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .pagination-page {
+            min-width: 36px;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--gray-700);
+            background: var(--warm-white);
+            border: 1px solid var(--gray-200);
+            border-radius: 8px;
+            transition: all var(--transition-fast);
+        }
+
+        .pagination-page:hover:not(.active) {
+            background: var(--gray-100);
+            border-color: var(--gray-300);
+        }
+
+        .pagination-page.active {
+            background: var(--black);
+            color: var(--warm-white);
+            border-color: var(--black);
+        }
+
+        .pagination-ellipsis {
+            color: var(--gray-400);
+            padding: 0 var(--space-xs);
+        }
+
         /* ==================== NO RESULTS ==================== */
         .no-results {
             text-align: center;
@@ -884,6 +967,27 @@
             .footer-links {
                 gap: var(--space-md);
             }
+
+            .pagination-controls {
+                flex-wrap: wrap;
+                justify-content: center;
+            }
+
+            .pagination-first,
+            .pagination-last {
+                display: none;
+            }
+
+            .pagination-btn {
+                padding: var(--space-xs) var(--space-sm);
+                font-size: 13px;
+            }
+
+            .pagination-page {
+                min-width: 32px;
+                height: 32px;
+                font-size: 13px;
+            }
         }
     </style>
 </head>
@@ -972,6 +1076,9 @@
             <!-- Results Stats -->
             <div class="results-stats">
                 <span class="results-count">{{ total_results|default:"0" }}</span> results for "<strong>{{ query }}</strong>"
+                {% if pagination.total_pages > 1 %}
+                <span>· Page {{ pagination.current_page }} of {{ pagination.total_pages }}</span>
+                {% endif %}
             </div>
             
             <!-- Spelling Correction -->
@@ -1029,6 +1136,89 @@
                     {% endif %}
                 </article>
                 {% endfor %}
+
+                <!-- Pagination -->
+                {% if pagination.total_pages > 1 %}
+                <nav class="pagination" aria-label="Search results pagination">
+                    <div class="pagination-info">
+                        Showing {{ pagination.start_result }}-{{ pagination.end_result }} of {{ pagination.total_results }} results
+                    </div>
+                    <div class="pagination-controls">
+                        {% if pagination.has_previous %}
+                            <a href="?query={{ query|urlencode }}&page=1&per_page={{ per_page }}&session_id={{ session_id }}{% for key, value in filters.items %}&{{ key }}={{ value|urlencode }}{% endfor %}" class="pagination-btn pagination-first" title="First page">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M11 17l-5-5 5-5M18 17l-5-5 5-5"/>
+                                </svg>
+                            </a>
+                            <a href="?query={{ query|urlencode }}&page={{ pagination.previous_page }}&per_page={{ per_page }}&session_id={{ session_id }}{% for key, value in filters.items %}&{{ key }}={{ value|urlencode }}{% endfor %}" class="pagination-btn pagination-prev" title="Previous page">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M15 18l-6-6 6-6"/>
+                                </svg>
+                                Prev
+                            </a>
+                        {% else %}
+                            <span class="pagination-btn pagination-first disabled" title="First page">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M11 17l-5-5 5-5M18 17l-5-5 5-5"/>
+                                </svg>
+                            </span>
+                            <span class="pagination-btn pagination-prev disabled" title="Previous page">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M15 18l-6-6 6-6"/>
+                                </svg>
+                                Prev
+                            </span>
+                        {% endif %}
+                        
+                        <div class="pagination-pages">
+                            {% if pagination.show_first %}
+                                <a href="?query={{ query|urlencode }}&page=1&per_page={{ per_page }}&session_id={{ session_id }}{% for key, value in filters.items %}&{{ key }}={{ value|urlencode }}{% endfor %}" class="pagination-page">1</a>
+                                <span class="pagination-ellipsis">...</span>
+                            {% endif %}
+                            
+                            {% for page_num in pagination.page_range %}
+                                {% if page_num == pagination.current_page %}
+                                    <span class="pagination-page active">{{ page_num }}</span>
+                                {% else %}
+                                    <a href="?query={{ query|urlencode }}&page={{ page_num }}&per_page={{ per_page }}&session_id={{ session_id }}{% for key, value in filters.items %}&{{ key }}={{ value|urlencode }}{% endfor %}" class="pagination-page">{{ page_num }}</a>
+                                {% endif %}
+                            {% endfor %}
+                            
+                            {% if pagination.show_last %}
+                                <span class="pagination-ellipsis">...</span>
+                                <a href="?query={{ query|urlencode }}&page={{ pagination.total_pages }}&per_page={{ per_page }}&session_id={{ session_id }}{% for key, value in filters.items %}&{{ key }}={{ value|urlencode }}{% endfor %}" class="pagination-page">{{ pagination.total_pages }}</a>
+                            {% endif %}
+                        </div>
+                        
+                        {% if pagination.has_next %}
+                            <a href="?query={{ query|urlencode }}&page={{ pagination.next_page }}&per_page={{ per_page }}&session_id={{ session_id }}{% for key, value in filters.items %}&{{ key }}={{ value|urlencode }}{% endfor %}" class="pagination-btn pagination-next" title="Next page">
+                                Next
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M9 18l6-6-6-6"/>
+                                </svg>
+                            </a>
+                            <a href="?query={{ query|urlencode }}&page={{ pagination.total_pages }}&per_page={{ per_page }}&session_id={{ session_id }}{% for key, value in filters.items %}&{{ key }}={{ value|urlencode }}{% endfor %}" class="pagination-btn pagination-last" title="Last page">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M13 17l5-5-5-5M6 17l5-5-5-5"/>
+                                </svg>
+                            </a>
+                        {% else %}
+                            <span class="pagination-btn pagination-next disabled" title="Next page">
+                                Next
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M9 18l6-6-6-6"/>
+                                </svg>
+                            </span>
+                            <span class="pagination-btn pagination-last disabled" title="Last page">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M13 17l5-5-5-5M6 17l5-5-5-5"/>
+                                </svg>
+                            </span>
+                        {% endif %}
+                    </div>
+                </nav>
+                {% endif %}
+
             {% else %}
                 <!-- No Results -->
                 <div class="no-results">
@@ -1039,7 +1229,7 @@
                         </svg>
                     </div>
                     <h2>No results found for <b>{{ query }}</b></h2>
-                    <p>We couldn't find what you're looking for. Try adjusting your search.</p>
+                    <p>We couldn't find what you're looking for. We are still adding data. Try adjusting your search.</p>
                     
                     <div class="no-results-suggestions">
                         <h3>Suggestions</h3>
@@ -1065,27 +1255,39 @@
                     Related Searches
                 </h3>
                 <div class="related-searches">
-                    <a href="#" class="related-search">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <circle cx="11" cy="11" r="8"/>
-                            <path d="M21 21l-4.35-4.35"/>
-                        </svg>
-                        {{ query }} near me
-                    </a>
-                    <a href="#" class="related-search">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <circle cx="11" cy="11" r="8"/>
-                            <path d="M21 21l-4.35-4.35"/>
-                        </svg>
-                        Best {{ query }}
-                    </a>
-                    <a href="#" class="related-search">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <circle cx="11" cy="11" r="8"/>
-                            <path d="M21 21l-4.35-4.35"/>
-                        </svg>
-                        {{ query }} Black-owned
-                    </a>
+                    {% if related_searches %}
+                        {% for related in related_searches %}
+                        <a href="/search?query={{ related|urlencode }}&session_id={{ session_id }}" class="related-search">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="11" cy="11" r="8"/>
+                                <path d="M21 21l-4.35-4.35"/>
+                            </svg>
+                            {{ related }}
+                        </a>
+                        {% endfor %}
+                    {% else %}
+                        <a href="/search?query={{ query|urlencode }}+near+me&session_id={{ session_id }}" class="related-search">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="11" cy="11" r="8"/>
+                                <path d="M21 21l-4.35-4.35"/>
+                            </svg>
+                            {{ query }} near me
+                        </a>
+                        <a href="/search?query=best+{{ query|urlencode }}&session_id={{ session_id }}" class="related-search">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="11" cy="11" r="8"/>
+                                <path d="M21 21l-4.35-4.35"/>
+                            </svg>
+                            Best {{ query }}
+                        </a>
+                        <a href="/search?query={{ query|urlencode }}+Black-owned&session_id={{ session_id }}" class="related-search">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="11" cy="11" r="8"/>
+                                <path d="M21 21l-4.35-4.35"/>
+                            </svg>
+                            {{ query }} Black-owned
+                        </a>
+                    {% endif %}
                 </div>
             </div>
 
@@ -1098,21 +1300,21 @@
                     Trending Now
                 </h3>
                 <div class="trending-list">
-                    <a href="#" class="trending-item">
+                    <a href="/search?query=Black+therapists+Chicago&session_id={{ session_id }}" class="trending-item">
                         <span class="trending-number">1</span>
                         <div class="trending-content">
                             <div class="trending-query">Black therapists Chicago</div>
                             <div class="trending-meta">+120% this week</div>
                         </div>
                     </a>
-                    <a href="#" class="trending-item">
+                    <a href="/search?query=Juneteenth+events+2025&session_id={{ session_id }}" class="trending-item">
                         <span class="trending-number">2</span>
                         <div class="trending-content">
                             <div class="trending-query">Juneteenth events 2025</div>
                             <div class="trending-meta">Trending</div>
                         </div>
                     </a>
-                    <a href="#" class="trending-item">
+                    <a href="/search?query=HBCU+scholarships&session_id={{ session_id }}" class="trending-item">
                         <span class="trending-number">3</span>
                         <div class="trending-content">
                             <div class="trending-query">HBCU scholarships</div>
@@ -1157,20 +1359,14 @@
         // Make related searches dynamic
         document.querySelectorAll('.related-search').forEach(link => {
             link.addEventListener('click', function(e) {
-                e.preventDefault();
-                const query = this.textContent.trim();
-                document.querySelector('.search-input').value = query;
-                document.getElementById('search-form').submit();
+                // Allow natural link behavior now that hrefs are set properly
             });
         });
 
-        // Make trending items clickable
+        // Make trending items clickable - now using proper links
         document.querySelectorAll('.trending-item').forEach(item => {
             item.addEventListener('click', function(e) {
-                e.preventDefault();
-                const query = this.querySelector('.trending-query').textContent.trim();
-                document.querySelector('.search-input').value = query;
-                document.getElementById('search-form').submit();
+                // Allow natural link behavior now that hrefs are set properly
             });
         });
     </script>

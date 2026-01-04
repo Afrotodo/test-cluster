@@ -2636,6 +2636,8 @@
 # IMPORTS
 # =============================================================================
 
+
+
 from __future__ import annotations
 
 import hashlib
@@ -2667,6 +2669,13 @@ from django.utils.html import escape
 from django.views.decorators.http import require_GET, require_http_methods
 
 from decouple import config
+# Near the top with other imports
+try:
+    from .redis_analytics import SearchAnalytics
+    ANALYTICS_AVAILABLE = True
+except ImportError:
+    ANALYTICS_AVAILABLE = False
+    SearchAnalytics = None
 
 # Local imports - wrap in try/except for graceful degradation
 try:
@@ -2700,6 +2709,30 @@ except ImportError:
     get_featured_result = None
     get_related_searches = None
     log_search_event = None
+
+
+def get_client_ip(request):
+    """Extract client IP from request."""
+    x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+    if x_forwarded_for:
+        ip = x_forwarded_for.split(',')[0].strip()
+    else:
+        ip = request.META.get('REMOTE_ADDR', '')
+    return ip
+
+
+def get_location_from_request(request):
+    """Extract location from request."""
+    location = {}
+    city = request.GET.get('city', '')
+    if not city:
+        try:
+            city = request.session.get('user_city', '')
+        except:
+            pass
+    if city:
+        location['city'] = city
+    return location if location else None
 
 
 # =============================================================================
