@@ -1,2643 +1,3 @@
-
-# from django.views.generic import TemplateView
-# from django.conf import settings
-# import requests
-# from django.http import JsonResponse
-# from django.views.decorators.http import require_GET
-# from django.views import View
-# from django.shortcuts import render, redirect
-# from django.http import HttpResponse
-# from django.urls import reverse
-# import logging
-# import json
-# from django.utils.decorators import method_decorator
-# from django.template.loader import render_to_string
-# from django.template.exceptions import TemplateDoesNotExist
-# from django.db import connection
-# from django.http import JsonResponse
-# from django.views import View
-# from .searchapi import get_autocomplete
-# from decouple import config
-
-# def home(request):
-#     return render(request, 'home2.html')
-
-
-
-# # #########################   this is the code for the redis api. 
-
-
-# # def search_suggestions(request):
-# #     query = request.GET.get('q', '').strip()
-    
-# #     if not query or len(query) < 2:
-# #         return JsonResponse({'suggestions': []})
-    
-# #     # Get autocomplete results from Redis
-# #     results = get_autocomplete(prefix=query, limit=8)
-    
-# #     # Transform to match frontend expected format
-# #     suggestions = []
-# #     for item in results:
-# #         suggestions.append({
-# #             'text': item['term'],
-# #             'display_text': item['display'],
-# #             'source_field': item.get('entity_type', ''),
-# #             # 'data_type': item.get('category', ''),
-# #             'category': item.get('category', ''),  # Add this line
-# #         })
-    
-# #     return JsonResponse({'suggestions': suggestions})
-
-# def search_suggestions(request):
-#     query = request.GET.get('q', '').strip()
-    
-#     if not query or len(query) < 2:
-#         return JsonResponse({'suggestions': []})
-    
-#     results = get_autocomplete(prefix=query, limit=8)
-    
-#     # Only send display and description
-#     suggestions = []
-#     for item in results:
-#         suggestions.append({
-#             'text': item['term'],
-#             'display': item['display'],
-#             'description': item.get('description', ''),
-#         })
-    
-#     return JsonResponse({'suggestions': suggestions})
-
-
-# #########################   this is the code for the submission through the search bar. 
-
-# from .searchsubmission import process_search_submission
-
-
-# def form_submit(request):
-#     query = request.GET.get('query', '')
-#     session_id = request.GET.get('session_id', '')
-    
-#     # Process the submission
-#     result = process_search_submission(query, session_id)
-    
-#     return JsonResponse(result)
-
-# from django.http import JsonResponse
-# from .searchsubmission import process_search_submission
-# from .word_discovery import word_discovery_multi
-# import uuid
-# from django.shortcuts import render
-
-# from django.http import JsonResponse
-# from django.shortcuts import render
-# from django.core.cache import cache
-# from .word_discovery import word_discovery_multi
-# from .typesense_calculations import (
-#     execute_full_search,
-#     detect_query_intent,
-#     get_facets,
-#     get_related_searches,
-#     get_featured_result,
-#     log_search_event
-# )
-# import uuid
-
-
-# def search(request):
-#     """
-#     Production-quality search endpoint.
-#     Handles: correction, intent, filters, pagination, facets, features, logging
-#     """
-    
-#     # === 1. EXTRACT ALL PARAMETERS ===
-#     query = request.GET.get('query', '').strip()
-#     session_id = request.GET.get('session_id', '') or str(uuid.uuid4())
-#     page = int(request.GET.get('page', 1))
-#     per_page = int(request.GET.get('per_page', 20))
-    
-#     # Explicit filters from URL
-#     filters = {
-#         'category': request.GET.get('category'),
-#         'source': request.GET.get('source'),
-#         'data_type': request.GET.get('type'),
-#         'time_range': request.GET.get('time'),          # 'day', 'week', 'month', 'year'
-#         'location': request.GET.get('location'),
-#         'sort': request.GET.get('sort', 'relevance'),   # 'relevance', 'date', 'rating'
-#     }
-#     # Remove None values
-#     filters = {k: v for k, v in filters.items() if v}
-    
-#     # Safe search setting
-#     safe_search = request.GET.get('safe', 'on') == 'on'
-    
-#     # User location (from browser or IP)
-#     user_lat = request.GET.get('lat')
-#     user_lng = request.GET.get('lng')
-#     user_location = (float(user_lat), float(user_lng)) if user_lat and user_lng else None
-    
-#     # === 2. EMPTY QUERY - SHOW HOMEPAGE ===
-#     if not query:
-#         return render(request, 'results.html', {
-#             'query': '',
-#             'results': [],
-#             'has_results': False,
-#             'session_id': session_id,
-#             'show_trending': True,  # Show trending searches on empty query
-#         })
-    
-#     # === 3. CHECK CACHE FOR REPEATED QUERIES ===
-#     cache_key = f"search:{query}:{page}:{hash(frozenset(filters.items()))}"
-#     cached_result = cache.get(cache_key)
-    
-#     if cached_result and not filters:  # Only use cache for unfiltered searches
-#         cached_result['from_cache'] = True
-#         return render(request, 'results.html', cached_result)
-    
-#     # === 4. WORD DISCOVERY / SPELL CORRECTION ===
-#     corrections, tuple_array, corrected_query = word_discovery_multi(query)
-#     was_corrected = query.lower() != corrected_query.lower()
-    
-#     # Build word-by-word correction display
-#     word_corrections = build_word_corrections(query, corrected_query)
-    
-#     # === 5. DETECT INTENT ===
-#     intent = detect_query_intent(corrected_query, tuple_array)
-    
-#     # === 6. EXECUTE MAIN SEARCH ===
-#     result = execute_full_search(
-#         query=corrected_query,
-#         session_id=session_id,
-#         filters=filters,
-#         page=page,
-#         per_page=per_page,
-#         user_location=user_location,
-#         pos_tags=tuple_array,
-#         safe_search=safe_search
-#     )
-    
-#     results = result.get('results', [])
-#     total_results = result.get('total', 0)
-    
-#     # === 7. ZERO RESULTS HANDLING ===
-#     suggestions = []
-#     if not results:
-#         suggestions = handle_zero_results(
-#             original_query=query,
-#             corrected_query=corrected_query,
-#             filters=filters
-#         )
-    
-#     # === 8. GET FACETS (Available Filters) ===
-#     facets = get_facets(corrected_query) if results else {}
-    
-#     # === 9. GET RELATED SEARCHES ===
-#     related_searches = get_related_searches(corrected_query, intent) if results else []
-    
-#     # === 10. GET FEATURED RESULT (Knowledge Panel / Direct Answer) ===
-#     featured = None
-#     if page == 1:  # Only on first page
-#         featured = get_featured_result(corrected_query, intent, results)
-    
-#     # === 11. CATEGORIZE RESULTS BY TYPE ===
-#     categorized_results = categorize_results(results)
-    
-#     # === 12. BUILD PAGINATION ===
-#     pagination = build_pagination(page, per_page, total_results)
-    
-#     # === 13. LOG SEARCH EVENT ===
-#     log_search_event(
-#         query=query,
-#         corrected_query=corrected_query,
-#         session_id=session_id,
-#         intent=intent,
-#         total_results=total_results,
-#         filters=filters,
-#         page=page
-#     )
-    
-#     # === 14. BUILD CONTEXT ===
-#     context = {
-#         # Query info
-#         'query': query,
-#         'corrected_query': corrected_query,
-#         'was_corrected': was_corrected,
-#         'word_corrections': word_corrections,
-#         'corrections': corrections,
-#         'intent': intent,
-        
-#         # Results
-#         'results': results,
-#         'categorized_results': categorized_results,
-#         'total_results': total_results,
-#         'has_results': len(results) > 0,
-        
-#         # Featured content
-#         'featured': featured,
-#         'related_searches': related_searches,
-        
-#         # Filters & Facets
-#         'filters': filters,
-#         'facets': facets,
-#         'safe_search': safe_search,
-        
-#         # Pagination
-#         'pagination': pagination,
-#         'page': page,
-#         'per_page': per_page,
-        
-#         # Zero results
-#         'suggestions': suggestions,
-        
-#         # Meta
-#         'session_id': session_id,
-#         'search_time': result.get('search_time', 0),
-#         'from_cache': False,
-#     }
-    
-#     # === 15. CACHE RESULTS ===
-#     if not filters and total_results > 0:
-#         cache.set(cache_key, context, timeout=300)  # 5 minutes
-    
-#     return render(request, 'results.html', context)
-
-
-# # === HELPER FUNCTIONS ===
-
-# def build_word_corrections(original: str, corrected: str) -> list:
-#     """Builds word-by-word correction display"""
-#     word_corrections = []
-#     original_words = original.lower().split()
-#     corrected_words = corrected.lower().split()
-    
-#     for i, orig_word in enumerate(original_words):
-#         if i < len(corrected_words):
-#             corr_word = corrected_words[i]
-#             word_corrections.append({
-#                 'original': orig_word,
-#                 'corrected': corr_word,
-#                 'was_changed': orig_word != corr_word
-#             })
-#         else:
-#             word_corrections.append({
-#                 'original': orig_word,
-#                 'corrected': orig_word,
-#                 'was_changed': False
-#             })
-    
-#     return word_corrections
-
-
-# def handle_zero_results(original_query: str, corrected_query: str, filters: dict) -> list:
-#     """
-#     Provides helpful suggestions when no results found.
-#     Returns list of suggestion objects.
-#     """
-#     suggestions = []
-    
-#     # Suggestion 1: Try without filters
-#     if filters:
-#         suggestions.append({
-#             'type': 'remove_filters',
-#             'message': 'Try removing some filters',
-#             'action_query': corrected_query,
-#             'action_filters': {}
-#         })
-    
-#     # Suggestion 2: Try broader terms
-#     words = corrected_query.split()
-#     if len(words) > 2:
-#         shorter_query = ' '.join(words[:2])
-#         suggestions.append({
-#             'type': 'broader_search',
-#             'message': f'Try a broader search',
-#             'action_query': shorter_query
-#         })
-    
-#     # Suggestion 3: Check spelling (if already corrected, suggest original)
-#     if original_query.lower() != corrected_query.lower():
-#         suggestions.append({
-#             'type': 'try_original',
-#             'message': f'Search for "{original_query}" instead',
-#             'action_query': original_query
-#         })
-    
-#     # Suggestion 4: Related topics (would come from your keyword database)
-#     suggestions.append({
-#         'type': 'help',
-#         'message': 'Check your spelling or try different keywords'
-#     })
-    
-#     return suggestions
-
-
-# def categorize_results(results: list) -> dict:
-#     """
-#     Groups results by type for different display treatments.
-#     """
-#     categorized = {
-#         'articles': [],
-#         'videos': [],
-#         'products': [],
-#         'people': [],
-#         'places': [],
-#         'services': [],
-#         'other': []
-#     }
-    
-#     type_mapping = {
-#         'article': 'articles',
-#         'video': 'videos',
-#         'product': 'products',
-#         'person': 'people',
-#         'place': 'places',
-#         'service': 'services'
-#     }
-    
-#     for result in results:
-#         data_type = result.get('data_type', 'other')
-#         category = type_mapping.get(data_type, 'other')
-#         categorized[category].append(result)
-    
-#     # Remove empty categories
-#     return {k: v for k, v in categorized.items() if v}
-
-
-# def build_pagination(page: int, per_page: int, total: int) -> dict:
-#     """
-#     Builds pagination info for template.
-#     """
-#     total_pages = (total + per_page - 1) // per_page
-    
-#     # Build page range (show 5 pages around current)
-#     start_page = max(1, page - 2)
-#     end_page = min(total_pages, page + 2)
-    
-#     return {
-#         'current_page': page,
-#         'total_pages': total_pages,
-#         'has_previous': page > 1,
-#         'has_next': page < total_pages,
-#         'previous_page': page - 1,
-#         'next_page': page + 1,
-#         'page_range': list(range(start_page, end_page + 1)),
-#         'show_first': start_page > 1,
-#         'show_last': end_page < total_pages,
-#         'start_result': (page - 1) * per_page + 1,
-#         'end_result': min(page * per_page, total),
-#         'total_results': total
-#     }
-
-# # def search(request):
-# #     """Main search endpoint - renders HTML results like Google"""
-# #     query = request.GET.get('query', '').strip()
-# #     session_id = request.GET.get('session_id', '')
-    
-# #     # Generate session_id if not provided
-# #     if not session_id:
-# #         session_id = str(uuid.uuid4())
-    
-# #     # Empty query - show search homepage
-# #     if not query:
-# #         return render(request, 'results.html', {
-# #             'query': '',
-# #             'results': [],
-# #             'has_results': False,
-# #             'session_id': session_id,
-# #         })
-    
-# #     # Run the three-pass word discovery pipeline
-# #     corrections, tuple_array, corrected_query = word_discovery_multi(query)
-    
-# #     # Process the submission with the corrected query
-# #     result = process_search_submission(corrected_query, session_id)
-    
-# #     # Build correction info for template
-# #     was_corrected = query.lower() != corrected_query.lower()
-    
-# #     # Build word-by-word correction display
-# #     word_corrections = []
-# #     original_words = query.lower().split()
-# #     corrected_words = corrected_query.lower().split()
-    
-# #     for i, orig_word in enumerate(original_words):
-# #         if i < len(corrected_words):
-# #             corr_word = corrected_words[i]
-# #             word_corrections.append({
-# #                 'original': orig_word,
-# #                 'corrected': corr_word,
-# #                 'was_changed': orig_word != corr_word
-# #             })
-# #         else:
-# #             word_corrections.append({
-# #                 'original': orig_word,
-# #                 'corrected': orig_word,
-# #                 'was_changed': False
-# #             })
-    
-# #     context = {
-# #         'query': query,
-# #         'corrected_query': corrected_query,
-# #         'was_corrected': was_corrected,
-# #         'word_corrections': word_corrections,
-# #         'corrections': corrections,
-# #         'pos_structure': [{'position': pos, 'pos': tag} for pos, tag in tuple_array],
-# #         'results': result.get('results', []),
-# #         'total_results': result.get('total', 0),
-# #         'has_results': len(result.get('results', [])) > 0,
-# #         'session_id': session_id,
-# #         'search_time': result.get('search_time', 0),
-# #     }
-    
-# #     return render(request, 'results.html', context)
-
-
-# def search_api(request):
-#     """JSON API endpoint for programmatic access"""
-#     query = request.GET.get('q', '') or request.GET.get('query', '')
-#     session_id = request.GET.get('session_id', '')
-    
-#     if not query:
-#         return JsonResponse({'error': 'No query provided'}, status=400)
-    
-#     # Run the three-pass word discovery pipeline
-#     corrections, tuple_array, corrected_query = word_discovery_multi(query)
-    
-#     # Process the submission with the corrected query
-#     result = process_search_submission(corrected_query, session_id)
-    
-#     # Add word discovery info to the result
-#     result['word_discovery'] = {
-#         'original_query': query,
-#         'corrected_query': corrected_query,
-#         'corrections': corrections,
-#         'pos_structure': [{'position': pos, 'pos': tag} for pos, tag in tuple_array],
-#         'was_corrected': query.lower() != corrected_query.lower()
-#     }
-    
-#     return JsonResponse(result)
-
-
-# # def form_submit(request):
-# #     query = request.GET.get('query', '')
-# #     session_id = request.GET.get('session_id', '')
-    
-# #     if not query:
-# #         return JsonResponse({'error': 'No query provided'}, status=400)
-    
-# #     # Run the three-pass word discovery pipeline
-# #     corrections, tuple_array, corrected_query = word_discovery_multi(query)
-    
-# #     # Process the submission with the corrected query
-# #     result = process_search_submission(corrected_query, session_id)
-    
-# #     # Add word discovery info to the result
-# #     result['word_discovery'] = {
-# #         'original_query': query,
-# #         'corrected_query': corrected_query,
-# #         'corrections': corrections,
-# #         'pos_structure': [{'position': pos, 'pos': tag} for pos, tag in tuple_array],
-# #         'was_corrected': query.lower() != corrected_query.lower()
-# #     }
-    
-# #     return JsonResponse(result)
-
-# from django.views.generic import TemplateView
-# from django.conf import settings
-# import requests
-# from django.http import JsonResponse
-# from django.views.decorators.http import require_GET
-# from django.views import View
-# from django.shortcuts import render, redirect
-# from django.http import HttpResponse
-# from django.urls import reverse
-# import logging
-# import json
-# import time
-# import uuid
-# from django.utils.decorators import method_decorator
-# from django.template.loader import render_to_string
-# from django.template.exceptions import TemplateDoesNotExist
-# from django.db import connection
-# from django.http import JsonResponse
-# from django.views import View
-# from .searchapi import get_autocomplete
-# from decouple import config
-# from django.core.cache import cache
-# import typesense
-# import redis
-# from decouple import config
-# from django.shortcuts import render, get_object_or_404
-# from django.http import Http404
-
-
-
-# redis_client = redis.Redis(
-#     host=config('REDIS_HOST', default='localhost'),
-#     port=config('REDIS_PORT', default=6379, cast=int),
-#     db=config('REDIS_DB', default=0, cast=int),
-#     password=config('REDIS_PASSWORD', default=None),
-#     decode_responses=True,
-# )
-# logger = logging.getLogger(__name__)
-
-
-# typesense_client= typesense.Client({
-#     'api_key': config('TYPESENSE_API_KEY'),
-#     'nodes': [{
-#         'host': config('TYPESENSE_HOST'),
-#         'port': config('TYPESENSE_PORT'),
-#         'protocol': config('TYPESENSE_PROTOCOL')
-#     }],
-#     'connection_timeout_seconds': 5
-# })
-
-# COLLECTION_NAME = 'documents'
-
-
-
-
-# # =============================================================================
-# # CONFIGURATION
-# # =============================================================================
-
-# SEARCH_CONFIG = {
-#     'max_timestamp_age_seconds': 300,  # 5 minutes - reject older requests
-#     'rate_limit_per_minute': 30,       # Max requests per session per minute
-#     'min_typing_time_ms': 50,          # Bot detection - too fast is suspicious
-#     'max_query_length': 500,           # Prevent oversized queries
-#     'nonce_expiry_seconds': 60,        # Nonce can only be used once within this window
-# }
-
-
-# # =============================================================================
-# # SECURITY VALIDATION
-# # =============================================================================
-
-# class SearchSecurityValidator:
-#     """Validates security parameters from search requests"""
-    
-#     @staticmethod
-#     def validate_timestamp(timestamp_str):
-#         """
-#         Validate timestamp is recent (not replay attack)
-#         Returns: (is_valid, error_message)
-#         """
-#         if not timestamp_str:
-#             return True, None  # Optional - don't block if missing
-        
-#         try:
-#             timestamp = int(timestamp_str)
-#             current_time = int(time.time() * 1000)  # Current time in ms
-#             age_seconds = (current_time - timestamp) / 1000
-            
-#             if age_seconds < -60:  # Allow 60s clock skew
-#                 return False, "Timestamp is in the future"
-            
-#             if age_seconds > SEARCH_CONFIG['max_timestamp_age_seconds']:
-#                 return False, "Request too old"
-            
-#             return True, None
-            
-#         except (ValueError, TypeError):
-#             return True, None  # Don't block on invalid format
-    
-#     @staticmethod
-#     def validate_nonce(nonce, session_id):
-#         """
-#         Validate nonce hasn't been used before (prevent replay)
-#         Returns: (is_valid, error_message)
-#         """
-#         if not nonce or not session_id:
-#             return True, None  # Optional
-        
-#         if len(nonce) < 8:
-#             return False, "Invalid nonce"
-        
-#         # Check if nonce was already used
-#         cache_key = f"nonce:{session_id}:{nonce}"
-#         if cache.get(cache_key):
-#             return False, "Nonce already used"
-        
-#         # Mark nonce as used
-#         cache.set(cache_key, True, SEARCH_CONFIG['nonce_expiry_seconds'])
-#         return True, None
-    
-#     @staticmethod
-#     def validate_session(session_id):
-#         """
-#         Validate session ID format
-#         Returns: (is_valid, error_message)
-#         """
-#         if not session_id:
-#             return True, None  # Optional - will generate one
-        
-#         # Basic UUID format check (loose)
-#         if len(session_id) < 20 or len(session_id) > 50:
-#             return False, "Invalid session ID format"
-        
-#         return True, None
-    
-#     @staticmethod
-#     def check_rate_limit(session_id, client_fp):
-#         """
-#         Check if request is within rate limits
-#         Returns: (is_allowed, error_message)
-#         """
-#         if not session_id:
-#             return True, None
-        
-#         # Use both session_id and fingerprint for rate limiting
-#         rate_key = f"rate:{session_id}:{client_fp or 'unknown'}"
-        
-#         current_count = cache.get(rate_key, 0)
-        
-#         if current_count >= SEARCH_CONFIG['rate_limit_per_minute']:
-#             return False, "Rate limit exceeded"
-        
-#         # Increment counter with 60 second expiry
-#         cache.set(rate_key, current_count + 1, 60)
-#         return True, None
-    
-#     @staticmethod
-#     def detect_bot(typing_time_ms, request_sequence):
-#         """
-#         Simple bot detection heuristics
-#         Returns: (is_suspicious, reason)
-#         """
-#         try:
-#             typing_time = int(typing_time_ms) if typing_time_ms else 0
-#             req_seq = int(request_sequence) if request_sequence else 0
-            
-#             # Too fast typing is suspicious (but not for dropdown selections)
-#             if typing_time > 0 and typing_time < SEARCH_CONFIG['min_typing_time_ms']:
-#                 return True, "Typing too fast"
-            
-#             # Unusual request patterns
-#             if req_seq > 100:  # Too many requests in one session
-#                 return True, "Excessive requests"
-            
-#             return False, None
-            
-#         except (ValueError, TypeError):
-#             return False, None
-
-
-# # =============================================================================
-# # SEARCH PARAMETER EXTRACTION
-# # =============================================================================
-
-# class SearchParams:
-#     """Extract and hold all search parameters from request"""
-    
-#     def __init__(self, request):
-#         self.request = request
-        
-#         # Core search
-#         self.query = request.GET.get('query', '').strip()[:SEARCH_CONFIG['max_query_length']]
-#         self.alt_mode = request.GET.get('alt_mode', 'y')  # y=semantic, n=keyword
-        
-#         # Security
-#         self.session_id = request.GET.get('session_id', '') or str(uuid.uuid4())
-#         self.request_id = request.GET.get('request_id', '')
-#         self.timestamp = request.GET.get('timestamp', '')
-#         self.nonce = request.GET.get('nonce', '')
-        
-#         # Analytics
-#         self.source = request.GET.get('source', 'unknown')
-#         self.device_type = request.GET.get('device_type', 'unknown')
-#         self.result_count = request.GET.get('result_count', '0')
-#         self.typing_time_ms = request.GET.get('typing_time_ms', '0')
-        
-#         # Rate limiting
-#         self.client_fp = request.GET.get('client_fp', '')
-#         self.request_sequence = request.GET.get('req_seq', '0')
-    
-#     @property
-#     def is_keyword_search(self):
-#         """True if search came from dropdown (keyword search)"""
-#         return self.alt_mode == 'n'
-    
-#     @property
-#     def is_semantic_search(self):
-#         """True if user typed freely (semantic search)"""
-#         return self.alt_mode == 'y'
-    
-#     def to_dict(self):
-#         """Convert to dictionary for logging"""
-#         return {
-#             'query': self.query,
-#             'alt_mode': self.alt_mode,
-#             'session_id': self.session_id,
-#             'request_id': self.request_id,
-#             'source': self.source,
-#             'device_type': self.device_type,
-#             'result_count': self.result_count,
-#             'typing_time_ms': self.typing_time_ms,
-#             'client_fp': self.client_fp,
-#         }
-
-
-# # =============================================================================
-# # ANALYTICS LOGGING
-# # =============================================================================
-
-# def log_search_analytics(params, search_type, result_count, is_suspicious=False):
-#     """
-#     Log search for analytics and monitoring
-#     """
-#     try:
-#         logger.info(
-#             f"Search: query='{params.query}' type={search_type} "
-#             f"alt_mode={params.alt_mode} results={result_count} "
-#             f"session={params.session_id[:8] if params.session_id else 'none'}... "
-#             f"device={params.device_type} source={params.source} "
-#             f"typing_ms={params.typing_time_ms} suspicious={is_suspicious}"
-#         )
-        
-#         # Optional: Store in Redis for real-time analytics
-#         # analytics_data = {
-#         #     **params.to_dict(),
-#         #     'search_type': search_type,
-#         #     'result_count': result_count,
-#         #     'is_suspicious': is_suspicious,
-#         #     'timestamp': time.time()
-#         # }
-#         # cache.lpush('search_analytics', json.dumps(analytics_data))
-        
-#     except Exception as e:
-#         logger.error(f"Analytics logging error: {e}")
-
-
-# # =============================================================================
-# # VIEWS
-# # =============================================================================
-
-# def home(request):
-#     return render(request, 'home3.html')
-
-
-# def search_suggestions(request):
-#     """API endpoint for autocomplete dropdown suggestions"""
-#     query = request.GET.get('q', '').strip()
-    
-#     if not query or len(query) < 2:
-#         return JsonResponse({'suggestions': []})
-    
-#     results = get_autocomplete(prefix=query, limit=8)
-    
-#     # Only send display and description
-#     suggestions = []
-#     for item in results:
-#         suggestions.append({
-#             'text': item['term'],
-#             'display': item['display'],
-#             'description': item.get('description', ''),
-#         })
-    
-#     return JsonResponse({'suggestions': suggestions})
-
-
-# # =============================================================================
-# # MAIN SEARCH VIEW - UPDATED WITH SECURITY & ROUTING
-# # =============================================================================
-
-# from .searchsubmission import process_search_submission
-# from .word_discovery import word_discovery_multi
-# from .typesense_calculations import (
-#     execute_full_search,
-#     detect_query_intent,
-#     get_facets,
-#     get_related_searches,
-#     get_featured_result,
-#     log_search_event
-# )
-
-
-# def search(request):
-#     """
-#     Production-quality search endpoint with security validation.
-#     Routes to keyword or semantic search based on alt_mode.
-    
-#     alt_mode=n (from dropdown) -> Keyword search (skip spell correction)
-#     alt_mode=y (user typed) -> Semantic search (full pipeline)
-#     """
-    
-#     # === 1. EXTRACT ALL PARAMETERS (including security) ===
-#     params = SearchParams(request)
-    
-#     # Legacy parameter extraction (keep existing functionality)
-#     page = int(request.GET.get('page', 1))
-#     per_page = int(request.GET.get('per_page', 20))
-    
-#     # Explicit filters from URL
-#     # Note: 'source' might contain analytics value 'home' - ignore that
-#     source_filter = request.GET.get('source')
-#     if source_filter in ('home', 'results_page', 'header', None, ''):
-#         source_filter = None  # Not a real filter, just analytics
-    
-#     filters = {
-#         'category': request.GET.get('category'),
-#         'source': source_filter,
-#         'data_type': request.GET.get('type'),
-#         'time_range': request.GET.get('time'),
-#         'location': request.GET.get('location'),
-#         'sort': request.GET.get('sort', 'relevance'),
-#     }
-#     filters = {k: v for k, v in filters.items() if v}
-    
-#     safe_search = request.GET.get('safe', 'on') == 'on'
-    
-#     user_lat = request.GET.get('lat')
-#     user_lng = request.GET.get('lng')
-#     user_location = (float(user_lat), float(user_lng)) if user_lat and user_lng else None
-    
-#     # === 2. SECURITY VALIDATION ===
-#     validator = SearchSecurityValidator()
-#     is_suspicious = False
-    
-#     # Validate timestamp
-#     is_valid, error = validator.validate_timestamp(params.timestamp)
-#     if not is_valid:
-#         logger.warning(f"Timestamp validation failed: {error} - {params.session_id}")
-    
-#     # Check rate limit
-#     is_allowed, error = validator.check_rate_limit(params.session_id, params.client_fp)
-#     if not is_allowed:
-#         logger.warning(f"Rate limit exceeded: {params.session_id}")
-#         return render(request, 'results2.html', {
-#             'query': params.query,
-#             'results': [],
-#             'has_results': False,
-#             'error': 'Too many requests. Please wait a moment.',
-#             'session_id': params.session_id,
-#         })
-    
-#     # Bot detection (log only, don't block)
-#     is_suspicious, reason = validator.detect_bot(params.typing_time_ms, params.request_sequence)
-#     if is_suspicious:
-#         logger.info(f"Suspicious request: {reason} - {params.session_id}")
-    
-#     # === 3. EMPTY QUERY - SHOW HOMEPAGE ===
-#     if not params.query:
-#         return render(request, 'results2.html', {
-#             'query': '',
-#             'results': [],
-#             'has_results': False,
-#             'session_id': params.session_id,
-#             'show_trending': True,
-#         })
-    
-#     # === 4. CHECK CACHE ===
-#     cache_key = f"search:{params.query}:{page}:{params.alt_mode}:{hash(frozenset(filters.items()))}"
-#     cached_result = cache.get(cache_key)
-    
-#     if cached_result and not filters:
-#         cached_result['from_cache'] = True
-#         return render(request, 'results2.html', cached_result)
-    
-#     # === 5. ROUTE BASED ON ALT_MODE ===
-#     # DEBUG LOGGING - remove in production
-#     logger.info(f"=== SEARCH DEBUG ===")
-#     logger.info(f"Raw query from URL: '{params.query}'")
-#     logger.info(f"alt_mode: '{params.alt_mode}'")
-#     logger.info(f"is_keyword_search: {params.is_keyword_search}")
-    
-#     if params.is_keyword_search:
-#         # =====================
-#         # KEYWORD SEARCH (from dropdown)
-#         # Skip spell correction - user selected exact term
-#         # =====================
-#         search_type = 'keyword'
-#         corrected_query = params.query  # No correction needed
-#         was_corrected = False
-#         word_corrections = []
-#         corrections = {}
-#         tuple_array = []
-        
-#         logger.info(f"KEYWORD SEARCH - using query directly: '{corrected_query}'")
-        
-#         # Detect intent (optional for keyword search)
-#         intent = detect_query_intent(corrected_query, tuple_array)
-        
-#     else:
-#         # =====================
-#         # SEMANTIC SEARCH (user typed freely)
-#         # Full pipeline with spell correction
-#         # =====================
-#         search_type = 'semantic'
-        
-#         logger.info(f"SEMANTIC SEARCH - running word_discovery_multi on: '{params.query}'")
-        
-#         # Word discovery / spell correction
-#         corrections, tuple_array, corrected_query = word_discovery_multi(params.query)
-#         was_corrected = params.query.lower() != corrected_query.lower()
-#         word_corrections = build_word_corrections(params.query, corrected_query)
-        
-#         logger.info(f"After word_discovery: corrected_query='{corrected_query}', was_corrected={was_corrected}")
-        
-#         # Detect intent
-#         intent = detect_query_intent(corrected_query, tuple_array)
-    
-#     logger.info(f"Sending to execute_full_search: query='{corrected_query}'")
-    
-#     # === 6. EXECUTE SEARCH ===
-#     result = execute_full_search(
-#         query=corrected_query,
-#         session_id=params.session_id,
-#         filters=filters,
-#         page=page,
-#         per_page=per_page,
-#         user_location=user_location,
-#         pos_tags=tuple_array if params.is_semantic_search else [],
-#         safe_search=safe_search
-#     )
-    
-#     results = result.get('results', [])
-#     total_results = result.get('total', 0)
-    
-#     # === 7. ZERO RESULTS HANDLING ===
-#     suggestions = []
-#     if not results:
-#         suggestions = handle_zero_results(
-#             original_query=params.query,
-#             corrected_query=corrected_query,
-#             filters=filters
-#         )
-    
-#     # === 8. GET FACETS ===
-#     facets = get_facets(corrected_query) if results else {}
-    
-#     # === 9. GET RELATED SEARCHES ===
-#     related_searches = get_related_searches(corrected_query, intent) if results else []
-    
-#     # === 10. GET FEATURED RESULT ===
-#     featured = None
-#     if page == 1:
-#         featured = get_featured_result(corrected_query, intent, results)
-    
-#     # === 11. CATEGORIZE RESULTS ===
-#     categorized_results = categorize_results(results)
-    
-#     # === 12. BUILD PAGINATION ===
-#     pagination = build_pagination(page, per_page, total_results)
-    
-#     # === 13. LOG SEARCH EVENT (existing) ===
-#     log_search_event(
-#         query=params.query,
-#         corrected_query=corrected_query,
-#         session_id=params.session_id,
-#         intent=intent,
-#         total_results=total_results,
-#         filters=filters,
-#         page=page
-#     )
-    
-#     # === 14. LOG ANALYTICS (new - with security params) ===
-#     log_search_analytics(params, search_type, total_results, is_suspicious)
-    
-#     # === 15. BUILD CONTEXT ===
-#     context = {
-#         # Query info
-#         'query': params.query,
-#         'corrected_query': corrected_query,
-#         'was_corrected': was_corrected,
-#         'word_corrections': word_corrections,
-#         'corrections': corrections,
-#         'intent': intent,
-        
-#         # Search type (NEW)
-#         'search_type': search_type,  # 'keyword' or 'semantic'
-#         'alt_mode': params.alt_mode,
-        
-#         # Results
-#         'results': results,
-#         'categorized_results': categorized_results,
-#         'total_results': total_results,
-#         'has_results': len(results) > 0,
-        
-#         # Featured content
-#         'featured': featured,
-#         'related_searches': related_searches,
-        
-#         # Filters & Facets
-#         'filters': filters,
-#         'facets': facets,
-#         'safe_search': safe_search,
-        
-#         # Pagination
-#         'pagination': pagination,
-#         'page': page,
-#         'per_page': per_page,
-        
-#         # Zero results
-#         'suggestions': suggestions,
-        
-#         # Meta
-#         'session_id': params.session_id,
-#         'request_id': params.request_id,
-#         'search_time': result.get('search_time', 0),
-#         'from_cache': False,
-        
-#         # Device info (NEW)
-#         'device_type': params.device_type,
-#         'source': params.source,
-#     }
-    
-#     # === 16. CACHE RESULTS ===
-#     if not filters and total_results > 0:
-#         cache.set(cache_key, context, timeout=300)
-    
-#     return render(request, 'results2.html', context)
-
-
-# # =============================================================================
-# # HELPER FUNCTIONS
-# # =============================================================================
-
-# def build_word_corrections(original: str, corrected: str) -> list:
-#     """Builds word-by-word correction display"""
-#     word_corrections = []
-#     original_words = original.lower().split()
-#     corrected_words = corrected.lower().split()
-    
-#     for i, orig_word in enumerate(original_words):
-#         if i < len(corrected_words):
-#             corr_word = corrected_words[i]
-#             word_corrections.append({
-#                 'original': orig_word,
-#                 'corrected': corr_word,
-#                 'was_changed': orig_word != corr_word
-#             })
-#         else:
-#             word_corrections.append({
-#                 'original': orig_word,
-#                 'corrected': orig_word,
-#                 'was_changed': False
-#             })
-    
-#     return word_corrections
-
-
-# def handle_zero_results(original_query: str, corrected_query: str, filters: dict) -> list:
-#     """
-#     Provides helpful suggestions when no results found.
-#     """
-#     suggestions = []
-    
-#     if filters:
-#         suggestions.append({
-#             'type': 'remove_filters',
-#             'message': 'Try removing some filters',
-#             'action_query': corrected_query,
-#             'action_filters': {}
-#         })
-    
-#     words = corrected_query.split()
-#     if len(words) > 2:
-#         shorter_query = ' '.join(words[:2])
-#         suggestions.append({
-#             'type': 'broader_search',
-#             'message': f'Try a broader search',
-#             'action_query': shorter_query
-#         })
-    
-#     if original_query.lower() != corrected_query.lower():
-#         suggestions.append({
-#             'type': 'try_original',
-#             'message': f'Search for "{original_query}" instead',
-#             'action_query': original_query
-#         })
-    
-#     suggestions.append({
-#         'type': 'help',
-#         'message': 'Check your spelling or try different keywords'
-#     })
-    
-#     return suggestions
-
-
-# def categorize_results(results: list) -> dict:
-#     """Groups results by type for different display treatments."""
-#     categorized = {
-#         'articles': [],
-#         'videos': [],
-#         'products': [],
-#         'people': [],
-#         'places': [],
-#         'services': [],
-#         'other': []
-#     }
-    
-#     type_mapping = {
-#         'article': 'articles',
-#         'video': 'videos',
-#         'product': 'products',
-#         'person': 'people',
-#         'place': 'places',
-#         'service': 'services'
-#     }
-    
-#     for result in results:
-#         data_type = result.get('data_type', 'other')
-#         category = type_mapping.get(data_type, 'other')
-#         categorized[category].append(result)
-    
-#     return {k: v for k, v in categorized.items() if v}
-
-
-# def build_pagination(page: int, per_page: int, total: int) -> dict:
-#     """Builds pagination info for template."""
-#     total_pages = (total + per_page - 1) // per_page if total > 0 else 1
-    
-#     start_page = max(1, page - 2)
-#     end_page = min(total_pages, page + 2)
-    
-#     return {
-#         'current_page': page,
-#         'total_pages': total_pages,
-#         'has_previous': page > 1,
-#         'has_next': page < total_pages,
-#         'previous_page': page - 1,
-#         'next_page': page + 1,
-#         'page_range': list(range(start_page, end_page + 1)),
-#         'show_first': start_page > 1,
-#         'show_last': end_page < total_pages,
-#         'start_result': (page - 1) * per_page + 1,
-#         'end_result': min(page * per_page, total),
-#         'total_results': total
-#     }
-
-
-# # =============================================================================
-# # OTHER EXISTING VIEWS
-# # =============================================================================
-
-# def form_submit(request):
-#     """Legacy form submit endpoint"""
-#     query = request.GET.get('query', '')
-#     session_id = request.GET.get('session_id', '')
-    
-#     result = process_search_submission(query, session_id)
-    
-#     return JsonResponse(result)
-
-
-# def search_api(request):
-#     """JSON API endpoint for programmatic access"""
-#     query = request.GET.get('q', '') or request.GET.get('query', '')
-#     session_id = request.GET.get('session_id', '')
-    
-#     if not query:
-#         return JsonResponse({'error': 'No query provided'}, status=400)
-    
-#     corrections, tuple_array, corrected_query = word_discovery_multi(query)
-#     result = process_search_submission(corrected_query, session_id)
-    
-#     result['word_discovery'] = {
-#         'original_query': query,
-#         'corrected_query': corrected_query,
-#         'corrections': corrections,
-#         'pos_structure': [{'position': pos, 'pos': tag} for pos, tag in tuple_array],
-#         'was_corrected': query.lower() != corrected_query.lower()
-#     }
-    
-#     return JsonResponse(result)
-
-
-# # views.py
-
-# def category_view(request, category_slug):
-#     """Generic category view with faceted search support."""
-    
-#     city = get_user_city(request)
-    
-#     # Map URL slug to document_schema
-#     schema_map = {
-#         'business': 'business',
-#         'culture': 'culture', 
-#         'health': 'health',
-#         'news': 'news',
-#         'community': 'community',
-#         'lifestyle': 'lifestyle',
-#         'education': 'education',
-#         'media': 'media',
-#     }
-    
-#     schema = schema_map.get(category_slug)
-#     if not schema:
-#         raise Http404("Category not found")
-    
-#     # Get filter parameters
-#     query = request.GET.get('q', '*')
-#     selected_category = request.GET.get('category', '')
-#     selected_brand = request.GET.get('brand', '')
-#     sort = request.GET.get('sort', 'authority')
-#     page = int(request.GET.get('page', 1))
-    
-#     # Build filters
-#     filters = [f'document_schema:={schema}']
-    
-#     if selected_category:
-#         filters.append(f'document_category:={selected_category}')
-#     if selected_brand:
-#         filters.append(f'document_brand:={selected_brand}')
-    
-#     filter_by = ' && '.join(filters)
-    
-#     # Sort options
-#     sort_options = {
-#         'authority': 'authority_score:desc',
-#         'recent': 'created_at:desc',
-#         'relevance': '_text_match:desc',
-#     }
-#     sort_by = sort_options.get(sort, 'authority_score:desc')
-    
-#     try:
-#         results = typesense_client.collections[COLLECTION_NAME].documents.search({
-#             'q': query if query else '*',
-#             'query_by': 'document_title,document_summary,keywords,semantic_keywords',
-#             'filter_by': filter_by,
-#             'sort_by': sort_by,
-#             'facet_by': 'document_category,document_brand',
-#             'max_facet_values': 20,
-#             'per_page': 20,
-#             'page': page,
-#         })
-        
-#         # Parse facets
-#         facets = {'category': [], 'brand': []}
-#         for facet in results.get('facet_counts', []):
-#             if facet['field_name'] == 'document_category':
-#                 facets['category'] = [{'value': c['value'], 'count': c['count']} for c in facet['counts']]
-#             elif facet['field_name'] == 'document_brand':
-#                 facets['brand'] = [{'value': c['value'], 'count': c['count']} for c in facet['counts']]
-        
-#         hits = results.get('hits', [])
-#         total = results.get('found', 0)
-        
-#     except Exception as e:
-#         print(f"Typesense error: {e}")
-#         hits = []
-#         total = 0
-#         facets = {'category': [], 'brand': []}
-    
-#     context = {
-#         'city': city,
-#         'category_slug': category_slug,
-#         'query': query if query != '*' else '',
-        
-#         # Results
-#         'results': hits,
-#         'total': total,
-        
-#         # Facets
-#         'facets': facets,
-        
-#         # Active filters
-#         'selected_category': selected_category,
-#         'selected_brand': selected_brand,
-#         'active_filter_count': sum([bool(selected_category), bool(selected_brand)]),
-        
-#         # Pagination
-#         'page': page,
-#         'has_more': (page * 20) < total,
-        
-#         # Sort
-#         'sort': sort,
-#     }
-    
-#     # Route to appropriate template
-#     template_map = {
-#         'business': 'category_business.html',
-#         'culture': 'category_culture.html',
-#         'health': 'category_health.html',
-#         'news': 'category_news.html',
-#         'community': 'category_community.html',
-#         'lifestyle': 'category_lifestyle.html',
-#         'education': 'category_education.html',
-#         'media': 'category_media.html',
-#     }
-    
-#     template = template_map.get(category_slug, 'category_generic.html')
-#     return render(request, template, context)
-
-
-# # views.py
-
-# SUPPORTED_CITIES = [
-#     'Atlanta', 'Houston', 'Chicago', 'Detroit', 
-#     'New York', 'Los Angeles', 'Philadelphia', 'Washington'
-# ]
-
-# # Subcategory mappings for quick filters
-# SUBCATEGORY_MAP = {
-#     'restaurants': ['restaurant', 'food', 'dining', 'catering', 'cafe'],
-#     'beauty': ['salon', 'barber', 'beauty', 'hair', 'nails', 'spa'],
-#     'professional': ['lawyer', 'accountant', 'consultant', 'financial', 'insurance'],
-#     'contractors': ['contractor', 'plumber', 'electrician', 'construction', 'handyman'],
-#     'realestate': ['real estate', 'realtor', 'property', 'mortgage', 'housing'],
-#     'retail': ['retail', 'store', 'shop', 'boutique', 'clothing'],
-#     'creative': ['photography', 'design', 'art', 'music', 'media', 'marketing'],
-#     'tech': ['technology', 'software', 'web', 'app', 'IT', 'digital'],
-# }
-
-
-# def business_category(request):
-#     """Business directory page with faceted search and dynamic city selection."""
-    
-#     # ==================== GET PARAMETERS ====================
-#     # City: from URL param, session, or default
-#     city = request.GET.get('city', '')
-#     if not city:
-#         city = request.session.get('user_city', 'Atlanta')
-#     else:
-#         # Save selected city to session
-#         request.session['user_city'] = city
-    
-#     # Validate city
-#     if city not in SUPPORTED_CITIES:
-#         city = 'Atlanta'
-    
-#     # Filter parameters
-#     query = request.GET.get('q', '')
-#     selected_subcategory = request.GET.get('subcategory', '')
-#     selected_category = request.GET.get('category', '')
-#     selected_brand = request.GET.get('brand', '')
-#     sort = request.GET.get('sort', 'authority')
-#     page = int(request.GET.get('page', 1))
-    
-#     # ==================== BUILD FILTERS ====================
-#     filters = ['document_schema:=business']
-    
-#     # Apply category filter from facets
-#     if selected_category:
-#         filters.append(f'document_category:={selected_category}')
-    
-#     # Apply brand filter
-#     if selected_brand:
-#         filters.append(f'document_brand:={selected_brand}')
-    
-#     filter_by = ' && '.join(filters)
-    
-#     # ==================== BUILD SEARCH QUERY ====================
-#     # Start with user query or wildcard
-#     search_query = query if query else '*'
-    
-#     # If subcategory selected, add related terms to search
-#     if selected_subcategory and selected_subcategory in SUBCATEGORY_MAP:
-#         subcategory_terms = ' '.join(SUBCATEGORY_MAP[selected_subcategory])
-#         if search_query == '*':
-#             search_query = subcategory_terms
-#         else:
-#             search_query = f"{search_query} {subcategory_terms}"
-    
-#     # Add city to search for relevance boosting
-#     if search_query == '*':
-#         search_query = city
-    
-#     # ==================== SORT OPTIONS ====================
-#     sort_options = {
-#         'authority': 'authority_score:desc',
-#         'recent': 'created_at:desc',
-#         'name': 'document_title:asc',
-#     }
-#     sort_by = sort_options.get(sort, 'authority_score:desc')
-    
-#     # ==================== MAIN SEARCH WITH FACETS ====================
-#     try:
-#         results = typesense_client.collections[COLLECTION_NAME].documents.search({
-#             'q': search_query,
-#             'query_by': 'document_title,document_summary,keywords,semantic_keywords,primary_keywords',
-#             'filter_by': filter_by,
-#             'sort_by': sort_by,
-#             'facet_by': 'document_category,document_brand',
-#             'max_facet_values': 20,
-#             'per_page': 20,
-#             'page': page,
-#         })
-        
-#         # Parse facets
-#         facets = {'category': [], 'brand': []}
-#         for facet in results.get('facet_counts', []):
-#             if facet['field_name'] == 'document_category':
-#                 facets['category'] = [{'value': c['value'], 'count': c['count']} for c in facet['counts']]
-#             elif facet['field_name'] == 'document_brand':
-#                 facets['brand'] = [{'value': c['value'], 'count': c['count']} for c in facet['counts']]
-        
-#         browse_results = results.get('hits', [])
-#         total = results.get('found', 0)
-        
-#     except Exception as e:
-#         print(f"Typesense error: {e}")
-#         browse_results = []
-#         total = 0
-#         facets = {'category': [], 'brand': []}
-    
-#     # ==================== STATS ====================
-#     try:
-#         # Get total business count for stats
-#         stats_results = typesense_client.collections[COLLECTION_NAME].documents.search({
-#             'q': '*',
-#             'query_by': 'document_title',
-#             'filter_by': 'document_schema:=business',
-#             'per_page': 0,  # Just need count
-#         })
-#         business_count = stats_results.get('found', 0)
-        
-#         # Get unique categories count
-#         categories_count = len(facets['category']) if facets['category'] else 24
-        
-#         stats = {
-#             'business_count': business_count,
-#             'categories_count': categories_count,
-#             'verified_pct': 78,  # Placeholder
-#         }
-#     except Exception as e:
-#         print(f"Stats error: {e}")
-#         stats = {
-#             'business_count': 348,
-#             'categories_count': 24,
-#             'verified_pct': 78,
-#         }
-    
-#     # ==================== TRENDING SEARCHES ====================
-#     trending_searches = [
-#         'black barber near me',
-#         'soul food',
-#         'black accountant',
-#         'african restaurant',
-#         'natural hair salon',
-#         'black owned clothing',
-#     ]
-    
-#     # ==================== CONTEXT ====================
-#     active_filter_count = sum([
-#         1 if selected_subcategory else 0,
-#         1 if selected_category else 0,
-#         1 if selected_brand else 0,
-#     ])
-    
-#     context = {
-#         # City
-#         'city': city,
-#         'supported_cities': SUPPORTED_CITIES,
-        
-#         # Search
-#         'query': query,
-        
-#         # Subcategory (quick filter chips)
-#         'selected_subcategory': selected_subcategory,
-        
-#         # Browse results with facets
-#         'results': browse_results,
-#         'total': total,
-#         'facets': facets,
-        
-#         # Stats
-#         'stats': stats,
-        
-#         # Trending
-#         'trending_searches': trending_searches,
-        
-#         # Active filters
-#         'selected_category': selected_category,
-#         'selected_brand': selected_brand,
-#         'active_filter_count': active_filter_count,
-        
-#         # Pagination
-#         'page': page,
-#         'has_more': (page * 20) < total,
-        
-#         # Sort
-#         'sort': sort,
-#     }
-    
-#     return render(request, 'category_business.html', context)
-
-
-# # ==================== BUSINESS SEARCH API ====================
-# def business_search_api(request):
-#     """
-#     API endpoint for AJAX search.
-#     Returns JSON for dynamic filtering without page reload.
-#     """
-#     from django.http import JsonResponse
-    
-#     city = request.GET.get('city', 'Atlanta')
-#     query = request.GET.get('q', '*')
-#     subcategory = request.GET.get('subcategory', '')
-#     category = request.GET.get('category', '')
-#     brand = request.GET.get('brand', '')
-#     page = int(request.GET.get('page', 1))
-    
-#     # Build search query
-#     search_query = query if query else '*'
-#     if subcategory and subcategory in SUBCATEGORY_MAP:
-#         terms = ' '.join(SUBCATEGORY_MAP[subcategory])
-#         search_query = f"{search_query} {terms}" if search_query != '*' else terms
-    
-#     if search_query == '*':
-#         search_query = city
-    
-#     # Build filters
-#     filters = ['document_schema:=business']
-#     if category:
-#         filters.append(f'document_category:={category}')
-#     if brand:
-#         filters.append(f'document_brand:={brand}')
-    
-#     try:
-#         results = typesense_client.collections[COLLECTION_NAME].documents.search({
-#             'q': search_query,
-#             'query_by': 'document_title,document_summary,keywords',
-#             'filter_by': ' && '.join(filters),
-#             'facet_by': 'document_category,document_brand',
-#             'per_page': 20,
-#             'page': page,
-#         })
-        
-#         # Format response
-#         hits = []
-#         for hit in results.get('hits', []):
-#             doc = hit['document']
-#             hits.append({
-#                 'id': doc.get('id'),
-#                 'title': doc.get('document_title'),
-#                 'summary': doc.get('document_summary', '')[:150],
-#                 'url': doc.get('document_url'),
-#                 'category': doc.get('document_category'),
-#                 'brand': doc.get('document_brand'),
-#                 'image': doc.get('image_url', [None])[0] if doc.get('image_url') else None,
-#                 'keywords': doc.get('primary_keywords', [])[:3],
-#             })
-        
-#         facets = {}
-#         for facet in results.get('facet_counts', []):
-#             facets[facet['field_name']] = [
-#                 {'value': c['value'], 'count': c['count']} 
-#                 for c in facet['counts']
-#             ]
-        
-#         return JsonResponse({
-#             'success': True,
-#             'hits': hits,
-#             'total': results.get('found', 0),
-#             'facets': facets,
-#             'page': page,
-#         })
-        
-#     except Exception as e:
-#         return JsonResponse({
-#             'success': False,
-#             'error': str(e),
-#         }, status=500)
-
-
-# # ==================== BUSINESS DETAIL VIEW ====================
-# def business_detail(request, business_id):
-#     """
-#     Individual business detail page.
-#     Shows full information about a single business.
-#     """
-#     try:
-#         # Fetch the specific document
-#         doc = typesense_client.collections[COLLECTION_NAME].documents[business_id].retrieve()
-        
-#         # Get related businesses (same category)
-#         category = doc.get('document_category', '')
-#         related_results = typesense_client.collections[COLLECTION_NAME].documents.search({
-#             'q': category,
-#             'query_by': 'document_category,keywords',
-#             'filter_by': f"document_schema:=business && id:!={business_id}",
-#             'per_page': 4,
-#         })
-#         related = [hit['document'] for hit in related_results.get('hits', [])]
-        
-#         return render(request, 'business_detail.html', {
-#             'business': doc,
-#             'related': related,
-#         })
-        
-#     except Exception as e:
-#         from django.http import Http404
-#         raise Http404("Business not found")
-
-
-# # ==================== FEATURED BUSINESSES ====================
-# def get_featured_businesses(city='Atlanta', limit=6):
-#     """
-#     Get featured/top-rated businesses for homepage or sidebar.
-#     """
-#     try:
-#         results = typesense_client.collections[COLLECTION_NAME].documents.search({
-#             'q': city,
-#             'query_by': 'document_title,document_summary,keywords',
-#             'filter_by': 'document_schema:=business',
-#             'sort_by': 'authority_score:desc',
-#             'per_page': limit,
-#         })
-#         return [hit['document'] for hit in results.get('hits', [])]
-#     except Exception as e:
-#         print(f"Featured businesses error: {e}")
-#         return []
-
-
-# # ==================== BUSINESS CATEGORIES LIST ====================
-# def get_business_categories():
-#     """
-#     Get all unique business categories with counts.
-#     Useful for category index pages.
-#     """
-#     try:
-#         results = typesense_client.collections[COLLECTION_NAME].documents.search({
-#             'q': '*',
-#             'query_by': 'document_title',
-#             'filter_by': 'document_schema:=business',
-#             'facet_by': 'document_category',
-#             'max_facet_values': 50,
-#             'per_page': 0,
-#         })
-        
-#         categories = []
-#         for facet in results.get('facet_counts', []):
-#             if facet['field_name'] == 'document_category':
-#                 categories = [
-#                     {'name': c['value'], 'count': c['count']} 
-#                     for c in facet['counts']
-#                 ]
-        
-#         return categories
-#     except Exception as e:
-#         print(f"Categories error: {e}")
-#         return []
-# # _________________________________________________________________________________________________________________
-
-
-# def culture_category(request, city):
-#     """Culture & heritage page with faceted search."""
-    
-#     # Get filter parameters
-#     query = request.GET.get('q', '*')
-#     selected_topic = request.GET.get('topic', '')
-#     selected_category = request.GET.get('category', '')
-#     selected_brand = request.GET.get('brand', '')
-#     sort = request.GET.get('sort', 'authority')
-#     page = int(request.GET.get('page', 1))
-    
-#     today = date.today()
-    
-#     # ==================== BUILD FILTERS ====================
-#     # Culture schema includes: history, art, music, landmarks, movies, books
-#     filters = ['document_schema:=culture']
-    
-#     # Topic to category mapping (topics are user-friendly, categories are data values)
-#     topic_category_map = {
-#         'music': 'music',
-#         'art': 'culture',  # Art content falls under 'culture' category
-#         'literature': 'culture',
-#         'film': 'media',
-#         'hbcus': 'education',
-#         'food': 'food',
-#         'fashion': 'culture',
-#         'history': 'history',
-#         'theater': 'culture',
-#         'events': 'culture',
-#     }
-    
-#     # If topic selected, add to schema filter
-#     if selected_topic and selected_topic in topic_category_map:
-#         # For HBCUs, search education schema
-#         if selected_topic == 'hbcus':
-#             filters = ['document_schema:=education']
-#         # For film, include media schema
-#         elif selected_topic == 'film':
-#             filters = ['document_schema:=[culture,media]']
-    
-#     if selected_category:
-#         filters.append(f'document_category:={selected_category}')
-    
-#     if selected_brand:
-#         filters.append(f'document_brand:={selected_brand}')
-    
-#     filter_by = ' && '.join(filters)
-    
-#     # Sort options
-#     sort_by = 'authority_score:desc' if sort == 'authority' else 'created_at:desc'
-    
-#     # ==================== SEARCH QUERIES ====================
-#     try:
-#         # Main browse results with facets
-#         results = typesense_client.collections[COLLECTION_NAME].documents.search({
-#             'q': query if query else '*',
-#             'query_by': 'document_title,document_summary,keywords,semantic_keywords,primary_keywords',
-#             'filter_by': filter_by,
-#             'sort_by': sort_by,
-#             'facet_by': 'document_category,document_brand',
-#             'max_facet_values': 20,
-#             'per_page': 18,
-#             'page': page,
-#         })
-        
-#         # Parse facets
-#         facets = {'category': [], 'brand': []}
-#         for facet in results.get('facet_counts', []):
-#             if facet['field_name'] == 'document_category':
-#                 facets['category'] = [{'value': c['value'], 'count': c['count']} for c in facet['counts']]
-#             elif facet['field_name'] == 'document_brand':
-#                 facets['brand'] = [{'value': c['value'], 'count': c['count']} for c in facet['counts']]
-        
-#         browse_results = results.get('hits', [])
-#         total = results.get('found', 0)
-        
-#     except Exception as e:
-#         print(f"Typesense error: {e}")
-#         browse_results = []
-#         total = 0
-#         facets = {'category': [], 'brand': []}
-    
-#     # ==================== HBCU SPOTLIGHT ====================
-#     try:
-#         hbcu_results = typesense_client.collections[COLLECTION_NAME].documents.search({
-#             'q': 'university college',
-#             'query_by': 'document_title,keywords',
-#             'filter_by': 'document_schema:=education',
-#             'sort_by': 'authority_score:desc',
-#             'per_page': 4,
-#         })
-#         hbcus = hbcu_results.get('hits', [])
-#     except Exception as e:
-#         print(f"HBCU search error: {e}")
-#         hbcus = []
-    
-#     # ==================== FEATURED ARTICLE ====================
-#     try:
-#         featured_results = typesense_client.collections[COLLECTION_NAME].documents.search({
-#             'q': '*',
-#             'query_by': 'document_title,document_summary',
-#             'filter_by': 'document_schema:=culture && document_category:=history',
-#             'sort_by': 'authority_score:desc',
-#             'per_page': 1,
-#         })
-#         if featured_results.get('hits'):
-#             featured_doc = featured_results['hits'][0]['document']
-#             featured_article = {
-#                 'title': featured_doc.get('document_title'),
-#                 'excerpt': featured_doc.get('document_summary', '')[:200],
-#                 'url': featured_doc.get('document_url'),
-#                 'image': featured_doc.get('image_url', [None])[0] if featured_doc.get('image_url') else None,
-#             }
-#         else:
-#             featured_article = None
-#     except Exception as e:
-#         print(f"Featured article error: {e}")
-#         featured_article = None
-    
-#     # ==================== CONTEXT ====================
-#     active_filter_count = sum([
-#         1 if selected_category else 0,
-#         1 if selected_brand else 0,
-#     ])
-    
-#     context = {
-#         'city': city,
-#         'query': query if query != '*' else '',
-        
-#         # Today's date for "This Day in History"
-#         'today': {
-#             'day': today.day,
-#             'month': today.strftime('%b').upper(),
-#         },
-        
-#         # Featured content
-#         'featured_article': featured_article,
-#         'hbcus': hbcus,
-#         'history_event': None,  # Implement with your history database
-#         'trending_music': [],   # Implement with your trending data
-#         'events': [],           # Implement with your events data
-#         'books': [],            # Implement with your books data
-        
-#         # Browse results with facets
-#         'results': browse_results,
-#         'total': total,
-#         'facets': facets,
-        
-#         # Active filters
-#         'selected_topic': selected_topic,
-#         'selected_category': selected_category,
-#         'selected_brand': selected_brand,
-#         'active_filter_count': active_filter_count,
-        
-#         # Pagination
-#         'page': page,
-#         'has_more': (page * 18) < total,
-        
-#         # Sort
-#         'sort': sort,
-#     }
-    
-#     return render(request, 'category_culture.html', context)
-
-# # _________________________________________________________________________________________________________________
-
-
-# def health_category(request, city):
-#     """Health resources page with faceted search."""
-    
-#     # Get filter parameters from URL
-#     query = request.GET.get('q', '*')
-#     selected_category = request.GET.get('category', '')
-#     selected_brand = request.GET.get('brand', '')
-#     sort = request.GET.get('sort', 'authority')
-#     page = int(request.GET.get('page', 1))
-    
-#     # Build filter string
-#     filters = ['document_schema:=health']
-    
-#     if selected_category:
-#         filters.append(f'document_category:={selected_category}')
-    
-#     if selected_brand:
-#         filters.append(f'document_brand:={selected_brand}')
-    
-#     filter_by = ' && '.join(filters)
-    
-#     # Build sort string
-#     if sort == 'recent':
-#         sort_by = 'created_at:desc'
-#     else:
-#         sort_by = 'authority_score:desc'
-    
-#     try:
-#         # Search with facets
-#         results = typesense_client.collections[COLLECTION_NAME].documents.search({
-#             'q': query if query else '*',
-#             'query_by': 'document_title,document_summary,keywords,semantic_keywords,primary_keywords',
-#             'filter_by': filter_by,
-#             'sort_by': sort_by,
-#             'facet_by': 'document_category,document_brand',  # Enable faceting
-#             'max_facet_values': 20,  # Show top 20 values per facet
-#             'per_page': 20,
-#             'page': page,
-#         })
-        
-#         # Parse facet counts
-#         facets = {
-#             'category': [],
-#             'brand': []
-#         }
-        
-#         for facet in results.get('facet_counts', []):
-#             field = facet['field_name']
-#             if field == 'document_category':
-#                 facets['category'] = [
-#                     {'value': c['value'], 'count': c['count']} 
-#                     for c in facet['counts']
-#                 ]
-#             elif field == 'document_brand':
-#                 facets['brand'] = [
-#                     {'value': c['value'], 'count': c['count']} 
-#                     for c in facet['counts']
-#                 ]
-        
-#         providers = results.get('hits', [])
-#         total = results.get('found', 0)
-        
-#     except Exception as e:
-#         print(f"Typesense error: {e}")
-#         providers = []
-#         total = 0
-#         facets = {'category': [], 'brand': []}
-    
-#     # Count active filters for mobile badge
-#     active_filter_count = sum([
-#         1 if selected_category else 0,
-#         1 if selected_brand else 0,
-#     ])
-    
-#     context = {
-#         'city': city,
-#         'query': query if query != '*' else '',
-        
-#         # Results
-#         'providers': providers,
-#         'total': total,
-        
-#         # Facets for sidebar/filter sheet
-#         'facets': facets,
-#         'category_count': len(facets['category']),
-#         'brand_count': len(facets['brand']),
-        
-#         # Active filters
-#         'selected_category': selected_category,
-#         'selected_brand': selected_brand,
-#         'active_filter_count': active_filter_count,
-        
-#         # Pagination
-#         'page': page,
-#         'has_more': (page * 20) < total,
-        
-#         # Sort
-#         'sort': sort,
-#     }
-    
-#     return render(request, 'category_health.html', context)
-# # _________________________________________________________________________________________________________________
-
-
-# def news_category(request, city='Atlanta'):
-#     """News & media page with faceted search."""
-    
-#     # Get filter parameters
-#     query = request.GET.get('q', '*')
-#     selected_section = request.GET.get('section', '')
-#     selected_category = request.GET.get('category', '')
-#     selected_brand = request.GET.get('brand', '')
-#     sort = request.GET.get('sort', 'recent')  # News defaults to recent
-#     page = int(request.GET.get('page', 1))
-    
-#     # ==================== BUILD FILTERS ====================
-#     filters = ['document_schema:=news']
-    
-#     # Section to category mapping
-#     section_category_map = {
-#         'local': None,  # Handled separately with city filter
-#         'national': 'national',
-#         'politics': 'politics',
-#         'business': 'business',
-#         'sports': 'sports',
-#         'entertainment': 'entertainment',
-#         'opinion': 'opinion',
-#     }
-    
-#     # Apply section filter
-#     if selected_section and selected_section in section_category_map:
-#         section_cat = section_category_map[selected_section]
-#         if section_cat:
-#             filters.append(f'document_category:={section_cat}')
-    
-#     # Apply category filter from facets
-#     if selected_category:
-#         filters.append(f'document_category:={selected_category}')
-    
-#     # Apply brand filter
-#     if selected_brand:
-#         filters.append(f'document_brand:={selected_brand}')
-    
-#     filter_by = ' && '.join(filters)
-    
-#     # Sort options - news defaults to recent
-#     sort_by = 'created_at:desc' if sort == 'recent' else 'authority_score:desc'
-    
-#     # ==================== MAIN SEARCH WITH FACETS ====================
-#     try:
-#         results = typesense_client.collections[COLLECTION_NAME].documents.search({
-#             'q': query if query else '*',
-#             'query_by': 'document_title,document_summary,keywords,semantic_keywords,primary_keywords',
-#             'filter_by': filter_by,
-#             'sort_by': sort_by,
-#             'facet_by': 'document_category,document_brand',
-#             'max_facet_values': 20,
-#             'per_page': 20,
-#             'page': page,
-#         })
-        
-#         # Parse facets
-#         facets = {'category': [], 'brand': []}
-#         for facet in results.get('facet_counts', []):
-#             if facet['field_name'] == 'document_category':
-#                 facets['category'] = [{'value': c['value'], 'count': c['count']} for c in facet['counts']]
-#             elif facet['field_name'] == 'document_brand':
-#                 facets['brand'] = [{'value': c['value'], 'count': c['count']} for c in facet['counts']]
-        
-#         browse_results = results.get('hits', [])
-#         total = results.get('found', 0)
-        
-#     except Exception as e:
-#         print(f"Typesense error: {e}")
-#         browse_results = []
-#         total = 0
-#         facets = {'category': [], 'brand': []}
-    
-#     # ==================== TOP STORY ====================
-#     try:
-#         top_results = typesense_client.collections[COLLECTION_NAME].documents.search({
-#             'q': '*',
-#             'query_by': 'document_title,document_summary',
-#             'filter_by': 'document_schema:=news',
-#             'sort_by': 'authority_score:desc',
-#             'per_page': 1,
-#         })
-#         top_story = top_results['hits'][0]['document'] if top_results.get('hits') else None
-#     except Exception as e:
-#         print(f"Top story error: {e}")
-#         top_story = None
-    
-#     # ==================== SIDEBAR STORIES ====================
-#     try:
-#         sidebar_results = typesense_client.collections[COLLECTION_NAME].documents.search({
-#             'q': '*',
-#             'query_by': 'document_title,document_summary',
-#             'filter_by': 'document_schema:=news',
-#             'sort_by': 'created_at:desc',
-#             'per_page': 4,
-#             'offset': 1,  # Skip top story
-#         })
-#         sidebar_stories = [hit['document'] for hit in sidebar_results.get('hits', [])]
-#     except Exception as e:
-#         print(f"Sidebar stories error: {e}")
-#         sidebar_stories = []
-    
-#     # ==================== LOCAL NEWS ====================
-#     try:
-#         # Search for news mentioning the city
-#         local_results = typesense_client.collections[COLLECTION_NAME].documents.search({
-#             'q': city,
-#             'query_by': 'document_title,document_summary,keywords',
-#             'filter_by': 'document_schema:=news',
-#             'sort_by': 'created_at:desc',
-#             'per_page': 5,
-#         })
-#         local_news = [hit['document'] for hit in local_results.get('hits', [])]
-#     except Exception as e:
-#         print(f"Local news error: {e}")
-#         local_news = []
-    
-#     # ==================== GOOD NEWS ====================
-#     try:
-#         # Search for positive/uplifting news
-#         good_results = typesense_client.collections[COLLECTION_NAME].documents.search({
-#             'q': 'success achievement award grant scholarship wins first',
-#             'query_by': 'document_title,document_summary,keywords',
-#             'filter_by': 'document_schema:=news',
-#             'sort_by': 'created_at:desc',
-#             'per_page': 5,
-#         })
-#         good_news = [hit['document'] for hit in good_results.get('hits', [])]
-#     except Exception as e:
-#         print(f"Good news error: {e}")
-#         good_news = []
-    
-#     # ==================== OPINIONS ====================
-#     try:
-#         opinion_results = typesense_client.collections[COLLECTION_NAME].documents.search({
-#             'q': '*',
-#             'query_by': 'document_title,document_summary',
-#             'filter_by': 'document_schema:=news && document_category:=opinion',
-#             'sort_by': 'created_at:desc',
-#             'per_page': 3,
-#         })
-#         opinions = [hit['document'] for hit in opinion_results.get('hits', [])]
-#     except Exception as e:
-#         print(f"Opinions error: {e}")
-#         opinions = []
-    
-#     # ==================== NEWS SOURCES ====================
-#     # Get unique sources from facets
-#     news_sources = [f['value'] for f in facets['brand'][:12]] if facets['brand'] else []
-    
-#     # ==================== CONTEXT ====================
-#     active_filter_count = sum([
-#         1 if selected_category else 0,
-#         1 if selected_brand else 0,
-#     ])
-    
-#     context = {
-#         'city': city,
-#         'query': query if query != '*' else '',
-        
-#         # Hero section
-#         'top_story': top_story,
-#         'sidebar_stories': sidebar_stories,
-        
-#         # Browse results with facets
-#         'results': browse_results,
-#         'total': total,
-#         'facets': facets,
-        
-#         # Sidebar content
-#         'local_news': local_news,
-#         'good_news': good_news,
-#         'opinions': opinions,
-#         'news_sources': news_sources,
-        
-#         # Active filters
-#         'selected_section': selected_section,
-#         'selected_category': selected_category,
-#         'selected_brand': selected_brand,
-#         'active_filter_count': active_filter_count,
-        
-#         # Pagination
-#         'page': page,
-#         'has_more': (page * 20) < total,
-        
-#         # Sort
-#         'sort': sort,
-#     }
-    
-#     return render(request, 'category_news.html', context)
-
-
-# # ==================== URL CONFIGURATION ====================
-# # In urls.py:
-# # path('news/', views.news_category, name='news'),
-# # Or within category_view router:
-# # if category_slug == 'news':
-# #     return news_category(request, city)
-
-
-# # ==================== HELPER: TIME AGO ====================
-# def add_time_ago(documents):
-#     """Add time_ago field to documents for display."""
-#     from datetime import datetime, timezone
-    
-#     now = datetime.now(timezone.utc)
-    
-#     for doc in documents:
-#         if 'created_at' in doc:
-#             try:
-#                 # Parse timestamp (adjust format as needed)
-#                 created = datetime.fromisoformat(doc['created_at'].replace('Z', '+00:00'))
-#                 diff = now - created
-                
-#                 if diff.days > 0:
-#                     doc['time_ago'] = f"{diff.days}d ago"
-#                 elif diff.seconds >= 3600:
-#                     hours = diff.seconds // 3600
-#                     doc['time_ago'] = f"{hours}h ago"
-#                 else:
-#                     minutes = diff.seconds // 60
-#                     doc['time_ago'] = f"{minutes}m ago"
-#             except:
-#                 doc['time_ago'] = "Today"
-#         else:
-#             doc['time_ago'] = "Today"
-    
-#     return documents
-
-
-# # _________________________________________________________________________________________________________________
-
-# # Supported cities for community pages
-# SUPPORTED_CITIES = [
-#     'Atlanta', 'Houston', 'Chicago', 'Detroit', 
-#     'New York', 'Los Angeles', 'Philadelphia', 'Washington'
-# ]
-
-
-# def community_category(request):
-#     """Community hub page with faceted search and dynamic city selection."""
-    
-#     # ==================== GET PARAMETERS ====================
-#     # City: from URL param, session, or default
-#     city = request.GET.get('city', '')
-#     if not city:
-#         city = request.session.get('user_city', 'Atlanta')
-#     else:
-#         # Save selected city to session
-#         request.session['user_city'] = city
-    
-#     # Validate city
-#     if city not in SUPPORTED_CITIES:
-#         city = 'Atlanta'
-    
-#     # Filter parameters
-#     query = request.GET.get('q', '*')
-#     selected_category = request.GET.get('category', '')
-#     selected_brand = request.GET.get('brand', '')
-#     sort = request.GET.get('sort', 'authority')
-#     page = int(request.GET.get('page', 1))
-    
-#     # ==================== BUILD FILTERS ====================
-#     filters = ['document_schema:=community']
-    
-#     # Category mapping for help cards
-#     help_category_map = {
-#         'housing': 'housing',
-#         'legal': 'legal',
-#         'jobs': 'employment',
-#         'food': 'food',
-#         'family': 'family',
-#         'youth': 'youth',
-#         'faith': 'faith',
-#         'nonprofit': 'nonprofit',
-#         'social_justice': 'social_justice',
-#     }
-    
-#     if selected_category:
-#         # Map friendly names to data values
-#         mapped_category = help_category_map.get(selected_category, selected_category)
-#         filters.append(f'document_category:={mapped_category}')
-    
-#     if selected_brand:
-#         filters.append(f'document_brand:={selected_brand}')
-    
-#     filter_by = ' && '.join(filters)
-    
-#     # ==================== SORT OPTIONS ====================
-#     sort_options = {
-#         'authority': 'authority_score:desc',
-#         'recent': 'created_at:desc',
-#         'name': 'document_title:asc',
-#     }
-#     sort_by = sort_options.get(sort, 'authority_score:desc')
-    
-#     # ==================== MAIN SEARCH WITH FACETS ====================
-#     try:
-#         # Add city to search query if searching
-#         search_query = query if query != '*' else '*'
-#         if city and search_query == '*':
-#             # Boost results mentioning the city
-#             search_query = city
-        
-#         results = typesense_client.collections[COLLECTION_NAME].documents.search({
-#             'q': search_query,
-#             'query_by': 'document_title,document_summary,keywords,semantic_keywords,primary_keywords',
-#             'filter_by': filter_by,
-#             'sort_by': sort_by,
-#             'facet_by': 'document_category,document_brand',
-#             'max_facet_values': 20,
-#             'per_page': 20,
-#             'page': page,
-#         })
-        
-#         # Parse facets
-#         facets = {'category': [], 'brand': []}
-#         for facet in results.get('facet_counts', []):
-#             if facet['field_name'] == 'document_category':
-#                 facets['category'] = [{'value': c['value'], 'count': c['count']} for c in facet['counts']]
-#             elif facet['field_name'] == 'document_brand':
-#                 facets['brand'] = [{'value': c['value'], 'count': c['count']} for c in facet['counts']]
-        
-#         browse_results = results.get('hits', [])
-#         total = results.get('found', 0)
-        
-#     except Exception as e:
-#         print(f"Typesense error: {e}")
-#         browse_results = []
-#         total = 0
-#         facets = {'category': [], 'brand': []}
-    
-#     # ==================== UPCOMING EVENTS ====================
-#     # Search for event-related content
-#     try:
-#         event_results = typesense_client.collections[COLLECTION_NAME].documents.search({
-#             'q': f'{city} event meeting workshop conference',
-#             'query_by': 'document_title,document_summary,keywords',
-#             'filter_by': 'document_schema:=community',
-#             'sort_by': 'created_at:desc',
-#             'per_page': 5,
-#         })
-#         upcoming_events = event_results.get('hits', [])
-        
-#         # Add parsed date info (you'd normally extract from document)
-#         import datetime
-#         today = datetime.date.today()
-#         for i, event in enumerate(upcoming_events):
-#             future_date = today + datetime.timedelta(days=i * 5 + 3)
-#             event['month'] = future_date.strftime('%b').upper()
-#             event['day'] = future_date.day
-#             event['time'] = '10 AM - 2 PM'
-            
-#     except Exception as e:
-#         print(f"Events error: {e}")
-#         upcoming_events = []
-    
-#     # ==================== CHURCHES / FAITH COMMUNITIES ====================
-#     try:
-#         church_results = typesense_client.collections[COLLECTION_NAME].documents.search({
-#             'q': f'{city} church baptist AME methodist faith ministry',
-#             'query_by': 'document_title,document_summary,keywords',
-#             'filter_by': 'document_schema:=community',
-#             'sort_by': 'authority_score:desc',
-#             'per_page': 8,
-#         })
-#         churches = church_results.get('hits', [])
-#     except Exception as e:
-#         print(f"Churches error: {e}")
-#         churches = []
-    
-#     # ==================== LOCAL ORGANIZATIONS ====================
-#     try:
-#         org_results = typesense_client.collections[COLLECTION_NAME].documents.search({
-#             'q': f'{city} NAACP Urban League organization nonprofit foundation',
-#             'query_by': 'document_title,document_summary,keywords',
-#             'filter_by': 'document_schema:=community',
-#             'sort_by': 'authority_score:desc',
-#             'per_page': 4,
-#         })
-#         organizations = org_results.get('hits', [])
-        
-#         # Add initials for logo placeholder
-#         for org in organizations:
-#             title = org.get('document', {}).get('document_title', '')
-#             words = title.split()[:2]
-#             org['initials'] = ''.join([w[0] for w in words if w]).upper()[:3]
-            
-#     except Exception as e:
-#         print(f"Organizations error: {e}")
-#         organizations = []
-    
-#     # ==================== VOLUNTEER OPPORTUNITIES ====================
-#     try:
-#         volunteer_results = typesense_client.collections[COLLECTION_NAME].documents.search({
-#             'q': f'{city} volunteer service help mentor tutor',
-#             'query_by': 'document_title,document_summary,keywords',
-#             'filter_by': 'document_schema:=community',
-#             'sort_by': 'created_at:desc',
-#             'per_page': 5,
-#         })
-#         volunteer_ops = volunteer_results.get('hits', [])
-        
-#         # Add schedule/type info
-#         schedules = ['Weekly', 'Ongoing', 'Flexible', 'One-time', 'Monthly']
-#         for i, vol in enumerate(volunteer_ops):
-#             vol['schedule'] = 'Flexible'
-#             vol['type'] = schedules[i % len(schedules)]
-            
-#     except Exception as e:
-#         print(f"Volunteer error: {e}")
-#         volunteer_ops = []
-    
-#     # ==================== CONTEXT ====================
-#     active_filter_count = sum([
-#         1 if selected_category else 0,
-#         1 if selected_brand else 0,
-#     ])
-    
-#     context = {
-#         # City
-#         'city': city,
-#         'supported_cities': SUPPORTED_CITIES,
-        
-#         # Search
-#         'query': query if query != '*' else '',
-        
-#         # Browse results with facets
-#         'results': browse_results,
-#         'total': total,
-#         'facets': facets,
-        
-#         # Special sections
-#         'upcoming_events': upcoming_events,
-#         'churches': churches,
-#         'organizations': organizations,
-#         'volunteer_ops': volunteer_ops,
-        
-#         # Active filters
-#         'selected_category': selected_category,
-#         'selected_brand': selected_brand,
-#         'active_filter_count': active_filter_count,
-        
-#         # Pagination
-#         'page': page,
-#         'has_more': (page * 20) < total,
-        
-#         # Sort
-#         'sort': sort,
-#     }
-    
-#     return render(request, 'category_community.html', context)
-
-
-# # ==================== URL CONFIGURATION ====================
-# # In urls.py:
-# # path('community/', views.community_category, name='community'),
-
-
-# # ==================== HELPER: GET USER CITY ====================
-# def get_user_city(request, default='Atlanta'):
-#     """
-#     Get user's city from various sources:
-#     1. URL parameter
-#     2. Session
-#     3. Geolocation (if implemented)
-#     4. Default
-#     """
-#     # Check URL param first
-#     city = request.GET.get('city', '')
-    
-#     # Then session
-#     if not city:
-#         city = request.session.get('user_city', '')
-    
-#     # Validate
-#     if city not in SUPPORTED_CITIES:
-#         city = default
-    
-#     return city
-
-
-# # ==================== ALTERNATIVE: CITY-SPECIFIC VIEWS ====================
-# def community_by_city(request, city_slug):
-#     """
-#     URL pattern: /community/atlanta/
-#     Alternative routing by city in URL path.
-#     """
-#     # Map URL slug to city name
-#     city_map = {
-#         'atlanta': 'Atlanta',
-#         'houston': 'Houston',
-#         'chicago': 'Chicago',
-#         'detroit': 'Detroit',
-#         'new-york': 'New York',
-#         'los-angeles': 'Los Angeles',
-#         'philadelphia': 'Philadelphia',
-#         'washington-dc': 'Washington',
-#     }
-    
-#     city = city_map.get(city_slug.lower(), 'Atlanta')
-#     request.session['user_city'] = city
-    
-#     # Reuse main view with city set
-#     return community_category(request)
-
-
-# # ==================== API: SEARCH COMMUNITY RESOURCES ====================
-# def community_search_api(request):
-#     """
-#     API endpoint for AJAX search.
-#     Returns JSON for dynamic filtering without page reload.
-#     """
-#     from django.http import JsonResponse
-    
-#     city = request.GET.get('city', 'Atlanta')
-#     query = request.GET.get('q', '*')
-#     category = request.GET.get('category', '')
-#     brand = request.GET.get('brand', '')
-#     page = int(request.GET.get('page', 1))
-    
-#     filters = ['document_schema:=community']
-#     if category:
-#         filters.append(f'document_category:={category}')
-#     if brand:
-#         filters.append(f'document_brand:={brand}')
-    
-#     try:
-#         results = typesense_client.collections[COLLECTION_NAME].documents.search({
-#             'q': query if query else city,
-#             'query_by': 'document_title,document_summary,keywords',
-#             'filter_by': ' && '.join(filters),
-#             'facet_by': 'document_category,document_brand',
-#             'per_page': 20,
-#             'page': page,
-#         })
-        
-#         # Format response
-#         hits = []
-#         for hit in results.get('hits', []):
-#             doc = hit['document']
-#             hits.append({
-#                 'id': doc.get('id'),
-#                 'title': doc.get('document_title'),
-#                 'summary': doc.get('document_summary', '')[:150],
-#                 'url': doc.get('document_url'),
-#                 'category': doc.get('document_category'),
-#                 'brand': doc.get('document_brand'),
-#                 'image': doc.get('image_url', [None])[0] if doc.get('image_url') else None,
-#             })
-        
-#         facets = {}
-#         for facet in results.get('facet_counts', []):
-#             facets[facet['field_name']] = [
-#                 {'value': c['value'], 'count': c['count']} 
-#                 for c in facet['counts']
-#             ]
-        
-#         return JsonResponse({
-#             'success': True,
-#             'hits': hits,
-#             'total': results.get('found', 0),
-#             'facets': facets,
-#             'page': page,
-#         })
-        
-#     except Exception as e:
-#         return JsonResponse({
-#             'success': False,
-#             'error': str(e),
-#         }, status=500)
-
-
-
-# # ==================== HELPER FUNCTIONS ====================
-
-# # def get_user_city(request):
-# #     """Get user's city from session, cookie, or IP geolocation."""
-# #     # Check session first
-# #     if request.session.get('user_city'):
-# #         return request.session['user_city']
-# #     # Default or IP-based detection
-# #     return 'Atlanta'  # Replace with actual detection
-
-
-# def get_featured_listings(category, city):
-#     """Get featured/promoted listings from Redis cache."""
-#     cache_key = f"featured:{category}:{city.lower()}"
-#     cached = redis_client.get(cache_key)
-#     if cached:
-#         return json.loads(cached)
-#     return []
-
-
-# def get_trending_searches(category, city):
-#     """Get trending searches from Redis."""
-#     cache_key = f"trending:{category}:{city.lower()}"
-#     results = redis_client.zrevrange(cache_key, 0, 7, withscores=False)
-#     return [r.decode() for r in results] if results else []
-
-
-# def get_category_stats(category, city):
-#     """Get category statistics from Redis cache."""
-#     cache_key = f"stats:{category}:{city.lower()}"
-#     stats = redis_client.hgetall(cache_key)
-#     if stats:
-#         return {k.decode(): v.decode() for k, v in stats.items()}
-#     return {}
-
-
-# def get_history_event(month, day):
-#     """Get 'This Day in Black History' event."""
-#     # Query your database or API
-#     # Return: {'title': '...', 'description': '...', 'year': 1863}
-#     return None
-
-
-# def get_featured_article(category):
-#     """Get featured/hero article for a category."""
-#     # Query your CMS or database
-#     return None
-
-
-# def get_hbcu_list(limit=4):
-#     """Get list of HBCUs."""
-#     # Could be static data or from database
-#     return []
-
-
-# def get_trending_content(category, subcategory, limit=4):
-#     """Get trending content for a category."""
-#     return []
-
-
-# def get_upcoming_events(category, city, limit=5):
-#     """Get upcoming events."""
-#     # Query your events table/API
-#     return []
-
-
-# def get_book_recommendations(limit=8):
-#     """Get book recommendations."""
-#     return []
-
-
-# def get_top_story():
-#     """Get the top news story."""
-#     return None
-
-
-# def get_news_articles(section=None, limit=5, exclude=None):
-#     """Get news articles, optionally filtered by section."""
-#     return []
-
-
-# def get_opinion_articles(limit=3):
-#     """Get opinion/commentary articles."""
-#     return []
-
-
-# def get_local_news(city, limit=4):
-#     """Get local news for a city."""
-#     return []
-
-
-# def get_good_news(limit=4):
-#     """Get positive/uplifting news stories."""
-#     return []
-
-
-# def get_organizations(city, limit=4):
-#     """Get local organizations."""
-#     return []
-
-
-# def get_volunteer_opportunities(city, limit=4):
-#     """Get volunteer opportunities."""
-#     return []
-
-
-# def get_churches(city, limit=6):
-#     """Get churches/faith communities."""
-#     return []
-
-
-# views.py - Production-Ready AfroTodo Search Engine Views
-# =============================================================================
-# IMPORTS
-# =============================================================================
-
-
-
 from __future__ import annotations
 
 import hashlib
@@ -2649,6 +9,7 @@ import uuid
 from datetime import date, datetime, timedelta, timezone
 from functools import wraps
 from typing import Any, Dict, List, Optional, Tuple, Union
+from django.views.decorators.csrf import csrf_exempt
 
 import redis
 import typesense
@@ -2711,37 +72,19 @@ except ImportError:
     log_search_event = None
 
 
-def get_client_ip(request):
-    """Extract client IP from request."""
-    x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
-    if x_forwarded_for:
-        ip = x_forwarded_for.split(',')[0].strip()
-    else:
-        ip = request.META.get('REMOTE_ADDR', '')
-    return ip
-
-
-def get_location_from_request(request):
-    """Extract location from request."""
-    location = {}
-    city = request.GET.get('city', '')
-    if not city:
-        try:
-            city = request.session.get('user_city', '')
-        except:
-            pass
-    if city:
-        location['city'] = city
-    return location if location else None
-
-
 # =============================================================================
 # LOGGING CONFIGURATION
 # =============================================================================
 
 logger = logging.getLogger(__name__)
 
-
+# Near the top with other imports
+from .geolocation import (
+    get_client_ip,
+    get_device_info,
+    get_full_client_info,
+    get_location_from_request
+)
 # =============================================================================
 # REDIS CLIENT WITH CONNECTION POOLING & ERROR HANDLING
 # =============================================================================
@@ -2833,6 +176,20 @@ class RedisManager:
         except (redis.ConnectionError, redis.TimeoutError) as e:
             logger.warning(f"Redis zrevrange error for key {key}: {e}")
             return []
+    
+    def safe_incr(self, key: str, ex: int = 60) -> int:
+        """Safely increment a counter with expiry."""
+        if not self._available or not self._client:
+            return 0
+        try:
+            pipe = self._client.pipeline()
+            pipe.incr(key)
+            pipe.expire(key, ex)
+            results = pipe.execute()
+            return results[0] if results else 0
+        except (redis.ConnectionError, redis.TimeoutError) as e:
+            logger.warning(f"Redis incr error for key {key}: {e}")
+            return 0
 
 
 # Initialize Redis manager
@@ -2938,6 +295,89 @@ class TypesenseManager:
             return None
 
 
+
+# =============================================================================
+# ANALYTICS CLIENT WITH CONNECTION RETRY LOGIC
+# =============================================================================
+
+_analytics_client = None
+_analytics_last_attempt: float = 0
+_analytics_retry_interval: int = 30  # Retry every 30 seconds
+_analytics_max_retries: int = 3
+_analytics_retry_count: int = 0
+
+def get_analytics():
+    """
+    Get or create SearchAnalytics instance with connection retry logic.
+    
+    Implements exponential backoff and maximum retry limits to prevent
+    repeated connection attempts that could impact performance.
+    """
+    global _analytics_client, _analytics_last_attempt, _analytics_retry_count
+    
+    # Return existing client if available
+    if _analytics_client is not None:
+        return _analytics_client
+    
+    # Check if analytics is available at all
+    if not ANALYTICS_AVAILABLE:
+        return None
+    
+    # Check if we've exceeded max retries
+    if _analytics_retry_count >= _analytics_max_retries:
+        # Only retry after extended interval (5 minutes) once max retries exceeded
+        extended_interval = 300  # 5 minutes
+        if time.time() - _analytics_last_attempt < extended_interval:
+            return None
+        # Reset retry count for fresh attempt after extended wait
+        _analytics_retry_count = 0
+    
+    # Check if enough time has passed since last attempt
+    current_time = time.time()
+    # Exponential backoff: 30s, 60s, 120s
+    backoff_interval = _analytics_retry_interval * (2 ** _analytics_retry_count)
+    
+    if current_time - _analytics_last_attempt < backoff_interval:
+        return None
+    
+    # Attempt to create analytics client
+    _analytics_last_attempt = current_time
+    
+    try:
+        _analytics_client = SearchAnalytics()
+        # Reset retry count on success
+        _analytics_retry_count = 0
+        logger.info("SearchAnalytics initialized successfully")
+        return _analytics_client
+    except redis.ConnectionError as e:
+        _analytics_retry_count += 1
+        logger.warning(
+            f"SearchAnalytics Redis connection failed (attempt {_analytics_retry_count}/{_analytics_max_retries}): {e}"
+        )
+    except redis.TimeoutError as e:
+        _analytics_retry_count += 1
+        logger.warning(
+            f"SearchAnalytics Redis timeout (attempt {_analytics_retry_count}/{_analytics_max_retries}): {e}"
+        )
+    except Exception as e:
+        _analytics_retry_count += 1
+        logger.warning(
+            f"Failed to initialize SearchAnalytics (attempt {_analytics_retry_count}/{_analytics_max_retries}): {e}"
+        )
+    
+    return None
+
+
+def reset_analytics_client():
+    """
+    Reset the analytics client for testing or recovery purposes.
+    """
+    global _analytics_client, _analytics_last_attempt, _analytics_retry_count
+    _analytics_client = None
+    _analytics_last_attempt = 0
+    _analytics_retry_count = 0
+
+
 # Initialize Typesense manager
 typesense_manager = TypesenseManager()
 
@@ -3021,6 +461,21 @@ SEARCH_CONFIG: Dict[str, Any] = {
     'cache_timeout': 300,
 }
 
+# Track click rate limiting configuration
+TRACK_CLICK_CONFIG: Dict[str, Any] = {
+    'rate_limit_per_minute': 120,  # Max clicks per session per minute
+    'rate_limit_per_hour': 1000,   # Max clicks per session per hour
+    'max_url_length': 2000,
+    'max_title_length': 500,
+    'max_query_length': 500,
+    'max_source_length': 200,
+    'max_result_id_length': 100,
+    'max_session_id_length': 50,
+    'max_request_id_length': 100,
+    'max_corrected_query_length': 500,
+    'max_event_data_size': 10000,  # 10KB max for event data
+}
+
 
 # =============================================================================
 # INPUT VALIDATION & SANITIZATION
@@ -3090,6 +545,94 @@ def sanitize_filter_value(value: Any) -> str:
     value = re.sub(r'[&|!=<>:;\[\]{}()\'"\\]', '', value)
     
     return value
+
+
+def sanitize_url(url: Any, max_length: int = 2000) -> str:
+    """
+    Sanitize URL input.
+    
+    Args:
+        url: Raw URL input
+        max_length: Maximum allowed length
+        
+    Returns:
+        Sanitized URL string
+    """
+    if url is None:
+        return ''
+    
+    try:
+        url = str(url).strip()
+    except (TypeError, ValueError):
+        return ''
+    
+    # Limit length
+    if len(url) > max_length:
+        url = url[:max_length]
+    
+    # Remove null bytes and control characters
+    url = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', url)
+    
+    # Basic URL validation - must start with http:// or https://
+    if url and not url.startswith(('http://', 'https://')):
+        return ''
+    
+    return url
+
+
+def sanitize_string(value: Any, max_length: int = 500) -> str:
+    """
+    General string sanitization.
+    
+    Args:
+        value: Raw string input
+        max_length: Maximum allowed length
+        
+    Returns:
+        Sanitized string
+    """
+    if value is None:
+        return ''
+    
+    try:
+        value = str(value).strip()
+    except (TypeError, ValueError):
+        return ''
+    
+    # Limit length
+    if len(value) > max_length:
+        value = value[:max_length]
+    
+    # Remove null bytes and control characters
+    value = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', value)
+    
+    return value
+
+
+def sanitize_int(value: Any, default: int = 0, min_val: int = None, max_val: int = None) -> int:
+    """
+    Sanitize integer input with bounds checking.
+    
+    Args:
+        value: Raw integer input
+        default: Default value if invalid
+        min_val: Minimum allowed value
+        max_val: Maximum allowed value
+        
+    Returns:
+        Validated integer
+    """
+    try:
+        result = int(value)
+    except (TypeError, ValueError):
+        return default
+    
+    if min_val is not None and result < min_val:
+        return min_val
+    if max_val is not None and result > max_val:
+        return max_val
+    
+    return result
 
 
 def validate_page(page: Any, default: int = 1) -> int:
@@ -3371,6 +914,50 @@ class SearchSecurityValidator:
             
         except (ValueError, TypeError):
             return False, None
+
+
+class TrackClickRateLimiter:
+    """Rate limiter specifically for click tracking endpoints."""
+    
+    @staticmethod
+    def check_rate_limit(session_id: str, client_ip: str = '') -> Tuple[bool, Optional[str]]:
+        """
+        Check if click tracking request is within rate limits.
+        
+        Uses both per-minute and per-hour limits to prevent abuse.
+        
+        Args:
+            session_id: User session ID
+            client_ip: Client IP address
+            
+        Returns:
+            Tuple of (is_allowed, error_message)
+        """
+        if not session_id:
+            # Fall back to IP-based limiting if no session
+            if not client_ip:
+                return True, None
+            identifier = f"ip:{client_ip}"
+        else:
+            identifier = f"session:{session_id}"
+        
+        # Check per-minute limit
+        minute_key = f"track_click_rate:minute:{identifier}"
+        minute_count = redis_manager.safe_incr(minute_key, ex=60)
+        
+        if minute_count > TRACK_CLICK_CONFIG['rate_limit_per_minute']:
+            logger.warning(f"Track click rate limit exceeded (minute) for {identifier}")
+            return False, "Rate limit exceeded. Please slow down."
+        
+        # Check per-hour limit
+        hour_key = f"track_click_rate:hour:{identifier}"
+        hour_count = redis_manager.safe_incr(hour_key, ex=3600)
+        
+        if hour_count > TRACK_CLICK_CONFIG['rate_limit_per_hour']:
+            logger.warning(f"Track click rate limit exceeded (hour) for {identifier}")
+            return False, "Rate limit exceeded. Please try again later."
+        
+        return True, None
 
 
 # =============================================================================
@@ -3659,7 +1246,7 @@ def search_suggestions(request):
 
 def search(request):
     """
-    Main search endpoint with security validation.
+    Main search endpoint with security validation and analytics tracking.
     Routes to keyword or semantic search based on alt_mode.
     """
     
@@ -3668,7 +1255,53 @@ def search(request):
     page = validate_page(request.GET.get('page', 1))
     per_page = validate_per_page(request.GET.get('per_page', 20))
     
-    # Extract filters (ignore analytics values in source)
+    # Generate request_id if not provided
+    request_id = params.request_id or f"{params.session_id}:{time.time()}"
+    
+    # Get user info for analytics
+    user_id = None
+    if hasattr(request, 'user') and request.user.is_authenticated:
+        user_id = str(request.user.id)
+    
+    # Get full client info (IP, location, device) using geolocation module
+    client_info = get_full_client_info(request)
+    client_ip = client_info.get('ip', '')
+    location = client_info.get('location') or {}
+    device = client_info.get('device') or {}
+    user_agent = client_info.get('user_agent', '')
+    
+    # Extract device details for analytics
+    device_type = device.get('device_type', params.device_type or 'unknown')
+    browser = device.get('browser', 'Unknown')
+    browser_version = device.get('browser_version', '')
+    os_name = device.get('os', 'Unknown')
+    os_version = device.get('os_version', '')
+    is_mobile = device.get('is_mobile', False)
+    is_bot = device.get('is_bot', False)
+    
+    # === 2. START/UPDATE SESSION (Analytics) ===
+    analytics = get_analytics()
+    if analytics:
+        try:
+            analytics.start_session(
+                session_id=params.session_id,
+                user_id=user_id,
+                device_type=device_type,
+                user_agent=user_agent,
+                ip_address=client_ip,
+                location=location,
+                referrer=request.META.get('HTTP_REFERER'),
+                browser=browser,
+                browser_version=browser_version,
+                os_name=os_name,
+                os_version=os_version,
+                is_mobile=is_mobile,
+                is_bot=is_bot
+            )
+        except Exception as e:
+            logger.warning(f"Analytics start_session error: {e}")
+    
+    # === 3. EXTRACT FILTERS ===
     source_filter = request.GET.get('source')
     if source_filter in ('home', 'results_page', 'header', None, ''):
         source_filter = None
@@ -3685,7 +1318,7 @@ def search(request):
     
     safe_search = request.GET.get('safe', 'on') == 'on'
     
-    # User location
+    # User location coordinates from request parameters
     user_location = None
     try:
         user_lat = request.GET.get('lat')
@@ -3698,7 +1331,22 @@ def search(request):
     except (TypeError, ValueError):
         pass
     
-    # === 2. SECURITY VALIDATION ===
+    # If no coordinates from params, use geolocation (only if valid location data)
+    if not user_location and location:
+        loc_lat = location.get('lat')
+        loc_lng = location.get('lng')
+        # Only use geolocation if we have valid coordinates (not defaults/fallbacks)
+        if loc_lat and loc_lng:
+            try:
+                lat = float(loc_lat)
+                lng = float(loc_lng)
+                # Verify it's not a default/fallback location (0,0 or similar)
+                if lat != 0.0 and lng != 0.0 and -90 <= lat <= 90 and -180 <= lng <= 180:
+                    user_location = (lat, lng)
+            except (TypeError, ValueError):
+                pass
+    
+    # === 4. SECURITY VALIDATION ===
     validator = SearchSecurityValidator()
     is_suspicious = False
     
@@ -3721,7 +1369,12 @@ def search(request):
     if is_suspicious:
         logger.info(f"Suspicious request detected: {reason}")
     
-    # === 3. EMPTY QUERY ===
+    # Also flag if geolocation detected bot
+    if is_bot:
+        is_suspicious = True
+        logger.info(f"Bot detected via User-Agent: {user_agent[:100]}")
+    
+    # === 5. EMPTY QUERY ===
     if not params.query:
         return render(request, 'results2.html', {
             'query': '',
@@ -3731,15 +1384,52 @@ def search(request):
             'show_trending': True,
         })
     
-    # === 4. CHECK CACHE ===
+    # === 6. CHECK CACHE ===
     cache_key = get_cache_key('search', params.query, page, params.alt_mode, json.dumps(filters, sort_keys=True))
     cached_result = safe_cache_get(cache_key)
     
     if cached_result and not filters:
         cached_result['from_cache'] = True
+        
+        # Track search even for cached results
+        if analytics:
+            try:
+                # Safely get intent type from cached result
+                cached_intent = cached_result.get('intent')
+                intent_type = None
+                if isinstance(cached_intent, dict):
+                    intent_type = cached_intent.get('type')
+                elif isinstance(cached_intent, str):
+                    intent_type = cached_intent
+                
+                analytics.track_search(
+                    session_id=params.session_id,
+                    query=params.query,
+                    results_count=cached_result.get('total_results', 0),
+                    alt_mode=params.alt_mode,
+                    user_id=user_id,
+                    location=location,
+                    device_type=device_type,
+                    search_time_ms=0,  # Cached, so instant
+                    search_strategy='cached',
+                    corrected_query=cached_result.get('corrected_query'),
+                    filters_applied=filters,
+                    page=page,
+                    intent=intent_type,
+                    request_id=request_id,
+                    browser=browser,
+                    os_name=os_name,
+                    is_mobile=is_mobile,
+                    is_bot=is_bot
+                )
+            except Exception as e:
+                logger.warning(f"Analytics track_search error (cached): {e}")
+        
         return render(request, 'results2.html', cached_result)
     
-    # === 5. ROUTE BASED ON ALT_MODE ===
+    # === 7. ROUTE BASED ON ALT_MODE ===
+    search_start_time = time.time()
+    
     if params.is_keyword_search:
         search_type = 'keyword'
         corrected_query = params.query
@@ -3777,10 +1467,11 @@ def search(request):
         if detect_query_intent:
             intent = detect_query_intent(corrected_query, tuple_array)
     
-    # === 6. EXECUTE SEARCH ===
+    # === 8. EXECUTE SEARCH ===
     results = []
     total_results = 0
     search_time = 0
+    search_strategy = search_type
     
     if execute_full_search:
         try:
@@ -3798,15 +1489,52 @@ def search(request):
             results = result.get('results', [])
             total_results = result.get('total', 0)
             search_time = result.get('search_time', 0)
+            search_strategy = result.get('search_strategy', search_type)
         except Exception as e:
             logger.error(f"Search execution error: {e}")
     
-    # === 7. ZERO RESULTS HANDLING ===
+    # Calculate total search time in milliseconds
+    search_time_ms = (time.time() - search_start_time) * 1000
+    
+    # === 9. TRACK SEARCH (Analytics) ===
+    if analytics:
+        try:
+            # Safely get intent type (might be string or dict)
+            intent_type = None
+            if isinstance(intent, dict):
+                intent_type = intent.get('type')
+            elif isinstance(intent, str):
+                intent_type = intent
+            
+            analytics.track_search(
+                session_id=params.session_id,
+                query=params.query,
+                results_count=total_results,
+                alt_mode=params.alt_mode,
+                user_id=user_id,
+                location=location,
+                device_type=device_type,
+                search_time_ms=search_time_ms,
+                search_strategy=search_strategy,
+                corrected_query=corrected_query if was_corrected else None,
+                filters_applied=filters if filters else None,
+                page=page,
+                intent=intent_type,
+                request_id=request_id,
+                browser=browser,
+                os_name=os_name,
+                is_mobile=is_mobile,
+                is_bot=is_bot
+            )
+        except Exception as e:
+            logger.warning(f"Analytics track_search error: {e}")
+    
+    # === 10. ZERO RESULTS HANDLING ===
     suggestions = []
     if not results:
         suggestions = handle_zero_results(params.query, corrected_query, filters)
     
-    # === 8. GET SUPPLEMENTARY DATA ===
+    # === 11. GET SUPPLEMENTARY DATA ===
     facets = {}
     related_searches = []
     featured = None
@@ -3830,11 +1558,11 @@ def search(request):
             except Exception:
                 pass
     
-    # === 9. CATEGORIZE & PAGINATE ===
+    # === 12. CATEGORIZE & PAGINATE ===
     categorized_results = categorize_results(results)
     pagination = build_pagination(page, per_page, total_results)
     
-    # === 10. LOG EVENTS ===
+    # === 13. LOG EVENTS ===
     if log_search_event:
         try:
             log_search_event(
@@ -3851,7 +1579,7 @@ def search(request):
     
     log_search_analytics(params, search_type, total_results, is_suspicious)
     
-    # === 11. BUILD CONTEXT ===
+    # === 14. BUILD CONTEXT ===
     context = {
         'query': params.query,
         'corrected_query': corrected_query,
@@ -3875,19 +1603,22 @@ def search(request):
         'per_page': per_page,
         'suggestions': suggestions,
         'session_id': params.session_id,
-        'request_id': params.request_id,
+        'request_id': request_id,
         'search_time': search_time,
+        'search_time_ms': search_time_ms,
         'from_cache': False,
-        'device_type': params.device_type,
+        'device_type': device_type,
         'source': params.source,
+        # Add location to context for template use (only if valid)
+        'user_city': location.get('city', '') if location else '',
+        'user_country': location.get('country', '') if location else '',
     }
     
-    # === 12. CACHE RESULTS ===
+    # === 15. CACHE RESULTS ===
     if not filters and total_results > 0:
         safe_cache_set(cache_key, context, SEARCH_CONFIG['cache_timeout'])
     
     return render(request, 'results2.html', context)
-
 
 # =============================================================================
 # VIEW: CATEGORY ROUTER
@@ -4986,3 +2717,307 @@ def get_category_stats(category: str, city: str) -> Dict[str, str]:
     """Get category statistics from Redis cache."""
     cache_key = f"stats:{category}:{city.lower()}"
     return redis_manager.safe_hgetall(cache_key)
+
+
+# =============================================================================
+# VIEW: TRACK CLICK (Analytics) - Production Ready
+# =============================================================================
+
+@csrf_exempt
+@require_http_methods(["POST", "GET"])
+def track_click(request):
+    """
+    Track when a user clicks on a search result or other events.
+    
+    Can be called via:
+    - POST with JSON body
+    - GET with query parameters (for simple tracking pixel/redirect)
+    
+    Handles both click events and generic events (page_dwell, related_search_click, etc.)
+    
+    Includes:
+    - Rate limiting per session/IP
+    - Input size validation
+    - Proper error handling without debug output
+    """
+    
+    # Extract parameters from POST or GET
+    if request.method == 'POST':
+        try:
+            # Validate body size before parsing
+            content_length = request.META.get('CONTENT_LENGTH', 0)
+            try:
+                content_length = int(content_length)
+            except (TypeError, ValueError):
+                content_length = 0
+            
+            if content_length > TRACK_CLICK_CONFIG['max_event_data_size']:
+                return JsonResponse(
+                    {'success': False, 'error': 'Request body too large'},
+                    status=413
+                )
+            
+            data = json.loads(request.body)
+        except (json.JSONDecodeError, ValueError):
+            data = request.POST.dict()
+    else:
+        data = request.GET.dict()
+    
+    # Get client IP for rate limiting
+    client_ip = get_client_ip(request)
+    
+    # Extract and validate session_id early for rate limiting
+    session_id = sanitize_string(
+        data.get('session_id', ''),
+        max_length=TRACK_CLICK_CONFIG['max_session_id_length']
+    )
+    
+    # === RATE LIMITING ===
+    is_allowed, rate_error = TrackClickRateLimiter.check_rate_limit(session_id, client_ip)
+    if not is_allowed:
+        return JsonResponse(
+            {'success': False, 'error': rate_error},
+            status=429
+        )
+    
+    # Check if this is a generic event (not a click)
+    event_type = sanitize_string(data.get('event_type', ''), max_length=50)
+    
+    if event_type and event_type != 'click':
+        # Handle generic events (page_dwell, related_search_click, trending_click, pagination_click, etc.)
+        analytics = get_analytics()
+        if analytics:
+            try:
+                if session_id:
+                    # Get location for event
+                    location = get_location_from_request(request)
+                    
+                    # Get user_id if logged in
+                    user_id = None
+                    if hasattr(request, 'user') and request.user.is_authenticated:
+                        user_id = str(request.user.id)
+                    
+                    # Sanitize event data - limit size
+                    sanitized_data = {}
+                    for key, value in data.items():
+                        if isinstance(value, str):
+                            sanitized_data[key] = value[:500]  # Limit string values
+                        elif isinstance(value, (int, float, bool)):
+                            sanitized_data[key] = value
+                        elif isinstance(value, dict):
+                            # Limit nested dicts
+                            sanitized_data[key] = {
+                                k[:100]: str(v)[:500] 
+                                for k, v in list(value.items())[:20]
+                            }
+                    
+                    analytics.track_event(
+                        session_id=session_id,
+                        event_type=event_type,
+                        event_data=sanitized_data,
+                        user_id=user_id,
+                        location=location
+                    )
+                return JsonResponse({'success': True})
+            except Exception as e:
+                logger.error(f"Event tracking error: {e}")
+                return JsonResponse(
+                    {'success': False, 'error': 'Event tracking failed'},
+                    status=500
+                )
+        return JsonResponse({'success': True})  # Silently succeed if no analytics
+    
+    # === CLICK TRACKING ===
+    
+    # Validate and sanitize all input fields with size limits
+    clicked_url = sanitize_url(
+        data.get('url', ''),
+        max_length=TRACK_CLICK_CONFIG['max_url_length']
+    )
+    query = sanitize_string(
+        data.get('query', ''),
+        max_length=TRACK_CLICK_CONFIG['max_query_length']
+    )
+    
+    # Validate required fields
+    if not session_id:
+        return JsonResponse(
+            {'success': False, 'error': 'Missing session_id'},
+            status=400
+        )
+    
+    if not clicked_url:
+        return JsonResponse(
+            {'success': False, 'error': 'Missing or invalid URL'},
+            status=400
+        )
+    
+    # Sanitize optional fields with size limits
+    clicked_position = sanitize_int(data.get('position', 0), default=0, min_val=0, max_val=1000)
+    result_id = sanitize_string(
+        data.get('result_id', ''),
+        max_length=TRACK_CLICK_CONFIG['max_result_id_length']
+    )
+    result_title = sanitize_string(
+        data.get('title', ''),
+        max_length=TRACK_CLICK_CONFIG['max_title_length']
+    )
+    result_source = sanitize_string(
+        data.get('source', ''),
+        max_length=TRACK_CLICK_CONFIG['max_source_length']
+    )
+    search_request_id = sanitize_string(
+        data.get('request_id', ''),
+        max_length=TRACK_CLICK_CONFIG['max_request_id_length']
+    )
+    
+    # Results count from original search
+    results_count = sanitize_int(data.get('results_count', 0), default=0, min_val=0, max_val=10000)
+    
+    # Correction info
+    was_corrected = str(data.get('was_corrected', 'false')).lower() == 'true'
+    corrected_query = sanitize_string(
+        data.get('corrected_query', ''),
+        max_length=TRACK_CLICK_CONFIG['max_corrected_query_length']
+    )
+    
+    # Time to click - validate bounds
+    time_to_click_ms = None
+    raw_time = data.get('time_to_click_ms')
+    if raw_time is not None:
+        time_to_click_ms = sanitize_int(raw_time, default=0, min_val=0, max_val=3600000)  # Max 1 hour
+        if time_to_click_ms == 0:
+            time_to_click_ms = None
+    
+    # User info
+    user_id = None
+    if hasattr(request, 'user') and request.user.is_authenticated:
+        user_id = str(request.user.id)
+    
+    # Location
+    location = get_location_from_request(request)
+    
+    # Track the click
+    analytics = get_analytics()
+    if analytics:
+        try:
+            analytics.track_click(
+                session_id=session_id,
+                query=query,
+                clicked_url=clicked_url,
+                clicked_position=clicked_position,
+                result_id=result_id,
+                result_title=result_title,
+                result_source=result_source,
+                user_id=user_id,
+                time_to_click_ms=time_to_click_ms,
+                location=location,
+                search_request_id=search_request_id,
+                results_count=results_count,
+                was_corrected=was_corrected,
+                corrected_query=corrected_query
+            )
+            
+            return JsonResponse({'success': True})
+        except Exception as e:
+            logger.error(f"Click tracking error: {e}")
+            return JsonResponse(
+                {'success': False, 'error': 'Tracking failed'},
+                status=500
+            )
+    
+    return JsonResponse(
+        {'success': False, 'error': 'Analytics not available'},
+        status=503
+    )
+
+
+@require_GET
+def click_redirect(request):
+    """
+    Redirect-based click tracking.
+    
+    Usage: /click/?url=https://example.com&session_id=abc&query=test&position=1
+    
+    Tracks the click then redirects user to the destination URL.
+    """
+    
+    destination_url = sanitize_url(
+        request.GET.get('url', ''),
+        max_length=TRACK_CLICK_CONFIG['max_url_length']
+    )
+    
+    if not destination_url:
+        return HttpResponseBadRequest('Missing or invalid URL parameter')
+    
+    # Get client IP for rate limiting
+    client_ip = get_client_ip(request)
+    
+    # Track the click (reuse track_click logic)
+    session_id = sanitize_string(
+        request.GET.get('session_id', ''),
+        max_length=TRACK_CLICK_CONFIG['max_session_id_length']
+    )
+    
+    # Rate limit check (but don't block redirect - just skip tracking)
+    is_allowed, _ = TrackClickRateLimiter.check_rate_limit(session_id, client_ip)
+    
+    if is_allowed:
+        query = sanitize_string(
+            request.GET.get('query', ''),
+            max_length=TRACK_CLICK_CONFIG['max_query_length']
+        )
+        clicked_position = sanitize_int(request.GET.get('position', 0), default=0, min_val=0, max_val=1000)
+        result_id = sanitize_string(
+            request.GET.get('result_id', ''),
+            max_length=TRACK_CLICK_CONFIG['max_result_id_length']
+        )
+        result_title = sanitize_string(
+            request.GET.get('title', ''),
+            max_length=TRACK_CLICK_CONFIG['max_title_length']
+        )
+        result_source = sanitize_string(
+            request.GET.get('source', ''),
+            max_length=TRACK_CLICK_CONFIG['max_source_length']
+        )
+        search_request_id = sanitize_string(
+            request.GET.get('request_id', ''),
+            max_length=TRACK_CLICK_CONFIG['max_request_id_length']
+        )
+        
+        results_count = sanitize_int(request.GET.get('results_count', 0), default=0, min_val=0, max_val=10000)
+        was_corrected = request.GET.get('was_corrected', 'false').lower() == 'true'
+        corrected_query = sanitize_string(
+            request.GET.get('corrected_query', ''),
+            max_length=TRACK_CLICK_CONFIG['max_corrected_query_length']
+        )
+        
+        user_id = None
+        if hasattr(request, 'user') and request.user.is_authenticated:
+            user_id = str(request.user.id)
+        
+        location = get_location_from_request(request)
+        
+        analytics = get_analytics()
+        if analytics and session_id:
+            try:
+                analytics.track_click(
+                    session_id=session_id,
+                    query=query,
+                    clicked_url=destination_url,
+                    clicked_position=clicked_position,
+                    result_id=result_id,
+                    result_title=result_title,
+                    result_source=result_source,
+                    user_id=user_id,
+                    time_to_click_ms=None,
+                    location=location,
+                    search_request_id=search_request_id,
+                    results_count=results_count,
+                    was_corrected=was_corrected,
+                    corrected_query=corrected_query
+                )
+            except Exception as e:
+                logger.warning(f"Click redirect tracking error: {e}")
+    
+    return redirect(destination_url)

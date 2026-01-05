@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ query }} - AfroTodo Search</title>
     <meta name="description" content="Search results for {{ query }} on AfroTodo - Discover Black business, culture & community.">
+    <meta name="csrf-token" content="{{ csrf_token }}">
     
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -1097,7 +1098,12 @@
             <!-- Search Results -->
             {% if has_results %}
                 {% for item in results %}
-                <article class="result-item">
+                <article class="result-item" 
+                         data-position="{{ forloop.counter }}"
+                         data-result-id="{{ item.id|default:'' }}"
+                         data-url="{{ item.url|default:'#' }}"
+                         data-title="{{ item.title|default:'Untitled' }}"
+                         data-source="{{ item.source|default:item.site_name|default:'' }}">
                     <div class="result-header">
                         <div class="result-favicon">
                             {% if item.favicon %}
@@ -1121,7 +1127,7 @@
                     </div>
                     
                     <h3 class="result-title">
-                        <a href="{{ item.url|default:'#' }}">{{ item.title|default:"Untitled" }}</a>
+                        <a href="{{ item.url|default:'#' }}" class="result-link">{{ item.title|default:"Untitled" }}</a>
                     </h3>
                     
                     <p class="result-snippet">
@@ -1344,6 +1350,162 @@
     </footer>
     
     <script>
+        // ==================== SEARCH ANALYTICS CONFIG ====================
+        const ANALYTICS_CONFIG = {
+            sessionId: '{{ session_id|escapejs }}',
+            query: '{{ query|escapejs }}',
+            correctedQuery: '{{ corrected_query|escapejs }}',
+            wasCorrected: {{ was_corrected|yesno:"true,false" }},
+            totalResults: {{ total_results|default:0 }},
+            requestId: '{{ request_id|escapejs }}',
+            trackClickUrl: '/api/track-click/',
+            searchStartTime: Date.now()
+        };
+
+        // ==================== CSRF TOKEN HELPER ====================
+        function getCSRFToken() {
+            return document.querySelector('meta[name="csrf-token"]')?.content || 
+                   document.querySelector('[name=csrfmiddlewaretoken]')?.value || '';
+        }
+
+        // ==================== CLICK TRACKING ====================
+        function trackResultClick(resultElement, linkElement) {
+            const position = parseInt(resultElement.dataset.position) || 0;
+            const resultId = resultElement.dataset.resultId || '';
+            const url = resultElement.dataset.url || linkElement.href || '';
+            const title = resultElement.dataset.title || '';
+            const source = resultElement.dataset.source || '';
+            
+            // Calculate time to click
+            const timeToClickMs = Date.now() - ANALYTICS_CONFIG.searchStartTime;
+            
+            // Build tracking payload
+            const trackingData = {
+                session_id: ANALYTICS_CONFIG.sessionId,
+                query: ANALYTICS_CONFIG.query,
+                url: url,
+                position: position,
+                result_id: resultId,
+                title: title,
+                source: source,
+                request_id: ANALYTICS_CONFIG.requestId,
+                results_count: ANALYTICS_CONFIG.totalResults,
+                was_corrected: ANALYTICS_CONFIG.wasCorrected,
+                corrected_query: ANALYTICS_CONFIG.correctedQuery,
+                time_to_click_ms: timeToClickMs
+            };
+            
+            // Send tracking request (non-blocking)
+            if (navigator.sendBeacon) {
+                // Use sendBeacon for reliable tracking even on page unload
+                const blob = new Blob([JSON.stringify(trackingData)], { type: 'application/json' });
+                navigator.sendBeacon(ANALYTICS_CONFIG.trackClickUrl, blob);
+            } else {
+                // Fallback to fetch
+                fetch(ANALYTICS_CONFIG.trackClickUrl, {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCSRFToken()
+                    },
+                    body: JSON.stringify(trackingData),
+                    keepalive: true
+                }).catch(err => console.warn('Click tracking failed:', err));
+            }
+            
+            // Log for debugging (remove in production)
+            console.log('Click tracked:', trackingData);
+        }
+
+        // ==================== GENERIC EVENT TRACKING ====================
+        function trackEvent(eventType, eventData) {
+            const payload = {
+                session_id: ANALYTICS_CONFIG.sessionId,
+                event_type: eventType,
+                query: ANALYTICS_CONFIG.query,
+                ...eventData
+            };
+            
+            if (navigator.sendBeacon) {
+                const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+                navigator.sendBeacon(ANALYTICS_CONFIG.trackClickUrl, blob);
+            } else {
+                fetch(ANALYTICS_CONFIG.trackClickUrl, {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCSRFToken()
+                    },
+                    body: JSON.stringify(payload),
+                    keepalive: true
+                }).catch(err => console.warn('Event tracking failed:', err));
+            }
+        }
+
+        // ==================== ATTACH CLICK LISTENERS ====================
+        document.addEventListener('DOMContentLoaded', function() {
+            // Track clicks on result titles
+            document.querySelectorAll('.result-item').forEach(function(resultItem) {
+                const links = resultItem.querySelectorAll('a.result-link, .result-title a');
+                
+                links.forEach(function(link) {
+                    link.addEventListener('click', function(e) {
+                        trackResultClick(resultItem, link);
+                        // Allow the link to proceed normally
+                    });
+                });
+                
+                // Also track if user clicks the URL breadcrumb
+                const urlParts = resultItem.querySelectorAll('.result-url-part');
+                urlParts.forEach(function(urlPart) {
+                    urlPart.style.cursor = 'pointer';
+                    urlPart.addEventListener('click', function(e) {
+                        const url = resultItem.dataset.url;
+                        if (url && url !== '#') {
+                            trackResultClick(resultItem, { href: url });
+                            window.location.href = url;
+                        }
+                    });
+                });
+            });
+            
+            // Track related searches
+            document.querySelectorAll('.related-search').forEach(function(link) {
+                link.addEventListener('click', function(e) {
+                    const relatedQuery = link.textContent.trim();
+                    trackEvent('related_search_click', { 
+                        original_query: ANALYTICS_CONFIG.query,
+                        related_query: relatedQuery 
+                    });
+                });
+            });
+            
+            // Track trending clicks
+            document.querySelectorAll('.trending-item').forEach(function(item) {
+                item.addEventListener('click', function(e) {
+                    const trendingQuery = item.querySelector('.trending-query')?.textContent.trim();
+                    trackEvent('trending_click', { 
+                        original_query: ANALYTICS_CONFIG.query,
+                        trending_query: trendingQuery 
+                    });
+                });
+            });
+            
+            // Track pagination
+            document.querySelectorAll('.pagination-page, .pagination-btn').forEach(function(btn) {
+                btn.addEventListener('click', function(e) {
+                    if (!btn.classList.contains('disabled')) {
+                        trackEvent('pagination_click', { 
+                            query: ANALYTICS_CONFIG.query,
+                            action: btn.classList.contains('pagination-next') ? 'next' : 
+                                   btn.classList.contains('pagination-prev') ? 'prev' : 'page'
+                        });
+                    }
+                });
+            });
+        });
+
+        // ==================== SEARCH BOX FUNCTIONS ====================
         function clearSearch() {
             const input = document.querySelector('.search-input');
             input.value = '';
@@ -1356,18 +1518,27 @@
             }
         });
 
-        // Make related searches dynamic
-        document.querySelectorAll('.related-search').forEach(link => {
-            link.addEventListener('click', function(e) {
-                // Allow natural link behavior now that hrefs are set properly
-            });
-        });
-
-        // Make trending items clickable - now using proper links
-        document.querySelectorAll('.trending-item').forEach(item => {
-            item.addEventListener('click', function(e) {
-                // Allow natural link behavior now that hrefs are set properly
-            });
+        // ==================== TRACK TIME ON PAGE ====================
+        let pageStartTime = Date.now();
+        
+        window.addEventListener('beforeunload', function() {
+            const timeOnPage = Date.now() - pageStartTime;
+            
+            // Only track if user spent meaningful time on page
+            if (timeOnPage > 1000) {
+                const data = {
+                    session_id: ANALYTICS_CONFIG.sessionId,
+                    event_type: 'page_dwell',
+                    query: ANALYTICS_CONFIG.query,
+                    time_on_page_ms: timeOnPage,
+                    had_results: ANALYTICS_CONFIG.totalResults > 0
+                };
+                
+                if (navigator.sendBeacon) {
+                    const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+                    navigator.sendBeacon(ANALYTICS_CONFIG.trackClickUrl, blob);
+                }
+            }
         });
     </script>
 </body>

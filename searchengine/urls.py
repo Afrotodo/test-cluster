@@ -1,5 +1,6 @@
 from django.urls import path
 from . import views
+from .views import track_click, click_redirect
 from . import searchapi
 
 app_name="searchengine"
@@ -48,6 +49,11 @@ urlpatterns = [
     path('health/', views.health_category, name='health'),
     path('news/', views.news_category, name='news'),
     path('community/', views.community_category, name='community'),
+    path('api/track-click/', track_click, name='track_click'),
+
+ 
+    # path('api/update-session-activity/', views.update_session_activity, name='update_session_activity'),  # ← Missing?
+    path('click/', click_redirect, name='click_redirect'),
     
     # ==================== DETAIL PAGES ====================
     # Business detail
