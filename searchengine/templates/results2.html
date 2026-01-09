@@ -1251,85 +1251,88 @@
         </div>
         
         <!-- Sidebar -->
-        <aside class="sidebar">
-            <!-- Related Searches -->
-            <div class="sidebar-section">
-                <h3 class="sidebar-title">
-                    <svg viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+<aside class="sidebar">
+    <!-- Related Searches -->
+    <div class="sidebar-section">
+        <h3 class="sidebar-title">
+            <svg viewBox="0 0 24 24" fill="currentColor">
+                <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+            </svg>
+            Related Searches
+        </h3>
+        <div class="related-searches">
+            {% if related_searches %}
+                {% for related in related_searches %}
+                <a href="/search?query={{ related.query|urlencode }}&session_id={{ session_id }}" class="related-search">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="11" cy="11" r="8"/>
+                        <path d="M21 21l-4.35-4.35"/>
                     </svg>
-                    Related Searches
-                </h3>
-                <div class="related-searches">
-                    {% if related_searches %}
-                        {% for related in related_searches %}
-                        <a href="/search?query={{ related|urlencode }}&session_id={{ session_id }}" class="related-search">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <circle cx="11" cy="11" r="8"/>
-                                <path d="M21 21l-4.35-4.35"/>
-                            </svg>
-                            {{ related }}
-                        </a>
-                        {% endfor %}
-                    {% else %}
-                        <a href="/search?query={{ query|urlencode }}+near+me&session_id={{ session_id }}" class="related-search">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <circle cx="11" cy="11" r="8"/>
-                                <path d="M21 21l-4.35-4.35"/>
-                            </svg>
-                            {{ query }} near me
-                        </a>
-                        <a href="/search?query=best+{{ query|urlencode }}&session_id={{ session_id }}" class="related-search">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <circle cx="11" cy="11" r="8"/>
-                                <path d="M21 21l-4.35-4.35"/>
-                            </svg>
-                            Best {{ query }}
-                        </a>
-                        <a href="/search?query={{ query|urlencode }}+Black-owned&session_id={{ session_id }}" class="related-search">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <circle cx="11" cy="11" r="8"/>
-                                <path d="M21 21l-4.35-4.35"/>
-                            </svg>
-                            {{ query }} Black-owned
-                        </a>
-                    {% endif %}
-                </div>
-            </div>
+                    {{ related.label }}
+                </a>
+                {% endfor %}
+            {% else %}
+                <a href="/search?query={{ query|urlencode }}+near+me&session_id={{ session_id }}" class="related-search">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="11" cy="11" r="8"/>
+                        <path d="M21 21l-4.35-4.35"/>
+                    </svg>
+                    {{ query }} near me
+                </a>
+                <a href="/search?query=best+{{ query|urlencode }}&session_id={{ session_id }}" class="related-search">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="11" cy="11" r="8"/>
+                        <path d="M21 21l-4.35-4.35"/>
+                    </svg>
+                    Best {{ query }}
+                </a>
+                <a href="/search?query={{ query|urlencode }}+Black-owned&session_id={{ session_id }}" class="related-search">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="11" cy="11" r="8"/>
+                        <path d="M21 21l-4.35-4.35"/>
+                    </svg>
+                    {{ query }} Black-owned
+                </a>
+            {% endif %}
+        </div>
 
-            <!-- Trending Now -->
-            <div class="sidebar-section">
-                <h3 class="sidebar-title">
-                    <svg viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M16 6l2.29 2.29-4.88 4.88-4-4L2 16.59 3.41 18l6-6 4 4 6.3-6.29L22 12V6z"/>
-                    </svg>
-                    Trending Now
-                </h3>
-                <div class="trending-list">
-                    <a href="/search?query=Black+therapists+Chicago&session_id={{ session_id }}" class="trending-item">
-                        <span class="trending-number">1</span>
-                        <div class="trending-content">
-                            <div class="trending-query">Black therapists Chicago</div>
-                            <div class="trending-meta">+120% this week</div>
-                        </div>
-                    </a>
-                    <a href="/search?query=Juneteenth+events+2025&session_id={{ session_id }}" class="trending-item">
-                        <span class="trending-number">2</span>
-                        <div class="trending-content">
-                            <div class="trending-query">Juneteenth events 2025</div>
-                            <div class="trending-meta">Trending</div>
-                        </div>
-                    </a>
-                    <a href="/search?query=HBCU+scholarships&session_id={{ session_id }}" class="trending-item">
-                        <span class="trending-number">3</span>
-                        <div class="trending-content">
-                            <div class="trending-query">HBCU scholarships</div>
-                            <div class="trending-meta">+85% this week</div>
-                        </div>
-                    </a>
+    </div>
+
+    <!-- Trending Now -->
+    <div class="sidebar-section">
+        <h3 class="sidebar-title">
+            <svg viewBox="0 0 24 24" fill="currentColor">
+                <path d="M16 6l2.29 2.29-4.88 4.88-4-4L2 16.59 3.41 18l6-6 4 4 6.3-6.29L22 12V6z"/>
+            </svg>
+            Trending Now
+        </h3>
+        <div class="trending-list">
+            <a href="/search?query=Black+therapists+Chicago&session_id={{ session_id }}" class="trending-item">
+                <span class="trending-number">1</span>
+                <div class="trending-content">
+                    <div class="trending-query">Black therapists Chicago</div>
+                    <div class="trending-meta">+120% this week</div>
                 </div>
-            </div>
-        </aside>
+            </a>
+            <a href="/search?query=Juneteenth+events+2025&session_id={{ session_id }}" class="trending-item">
+                <span class="trending-number">2</span>
+                <div class="trending-content">
+                    <div class="trending-query">Juneteenth events 2025</div>
+                    <div class="trending-meta">Trending</div>
+                </div>
+            </a>
+            <a href="/search?query=HBCU+scholarships&session_id={{ session_id }}" class="trending-item">
+                <span class="trending-number">3</span>
+                <div class="trending-content">
+                    <div class="trending-query">HBCU scholarships</div>
+                    <div class="trending-meta">+85% this week</div>
+                </div>
+            </a>
+        </div>
+    </div>
+</aside>
+
+
     </div>
     
     <footer class="footer">
