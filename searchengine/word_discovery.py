@@ -6295,15 +6295,713 @@
 # if __name__ == "__main__":
 #     test_word_discovery()
 
+
+
+#                                                                                   PART 2   This works perfectly 
+
+# """
+# word_discovery.py
+# OPTIMIZED: Single-pass word validation, correction, and bigram detection.
+
+# Key Changes:
+# - ONE batch Redis call upfront (not multiple passes)
+# - Only correct UNKNOWN words (don't touch valid words)
+# - Bigram detection in same loop
+# - O(1) lookups using pre-fetched data
+# """
+# import json
+# from typing import Dict, Any, List, Tuple, Optional, Set
+# from functools import lru_cache
+
+# # Try to import the fast C implementation, fall back to pure Python
+# try:
+#     from pyxdameraulevenshtein import damerau_levenshtein_distance as _fast_levenshtein
+#     USE_FAST_LEVENSHTEIN = True
+# except ImportError:
+#     USE_FAST_LEVENSHTEIN = False
+
+# # Handle both relative and absolute imports
+# try:
+#     from .searchapi import (
+#         RedisLookupTable,
+#         validate_word,
+#         get_term_metadata,
+#         get_suggestions,
+#         generate_candidates_smart,
+#         batch_check_candidates,
+#         batch_validate_words_redis,
+#         batch_check_bigrams,
+#         batch_get_term_metadata,
+#         damerau_levenshtein_distance as _python_levenshtein
+#     )
+# except ImportError:
+#     from searchapi import (
+#         RedisLookupTable,
+#         validate_word,
+#         get_term_metadata,
+#         get_suggestions,
+#         generate_candidates_smart,
+#         batch_check_candidates,
+#         batch_validate_words_redis,
+#         batch_check_bigrams,
+#         batch_get_term_metadata,
+#         damerau_levenshtein_distance as _python_levenshtein
+#     )
+
+
+# # =============================================================================
+# # CONSTANTS - frozensets for O(1) lookup
+# # =============================================================================
+
+# ALLOWED_POS: frozenset = frozenset({
+#     "pronoun", "noun", "verb", "article", "adjective",
+#     "preposition", "adverb", "be", "modal", "auxiliary",
+#     "proper_noun", "proper noun", "relative_pronoun", "wh_pronoun", "determiner",
+#     "quantifier", "numeral", "participle", "gerund",
+#     "infinitive_marker", "particle", "negation", "conjunction", "interjection"
+# })
+
+# LOCATION_TYPES: frozenset = frozenset({"city", "state", "neighborhood", "region", "country", "us_city", "us_state"})
+
+# COMPOUND_NOUN_TYPES: frozenset = frozenset({
+#     "city", "state", "neighborhood", "region", "country",
+#     "occupation", "product", "furniture", "food", "sport", "disease", "animal"
+# })
+
+# # Pre-built dict for O(1) context rule lookup
+# LOCAL_CONTEXT_RULES: Dict[Tuple[Optional[str], Optional[str]], List[Tuple[str, float]]] = {
+#     # BOTH NEIGHBORS KNOWN
+#     ("determiner", "noun"): [("adjective", 0.95)],
+#     ("determiner", "adjective"): [("adjective", 0.85), ("adverb", 0.70)],
+#     ("determiner", "verb"): [("noun", 0.90)],
+#     ("article", "noun"): [("adjective", 0.95)],
+#     ("article", "adjective"): [("adjective", 0.85)],
+#     ("article", "verb"): [("noun", 0.90)],
+#     ("adjective", "noun"): [("adjective", 0.85)],
+#     ("adjective", "verb"): [("noun", 0.90)],
+#     ("adjective", "adjective"): [("noun", 0.70)],
+#     ("noun", "noun"): [("verb", 0.85), ("conjunction", 0.80)],
+#     ("noun", "adjective"): [("verb", 0.90), ("be", 0.85)],
+#     ("noun", "adverb"): [("verb", 0.90)],
+#     ("noun", "preposition"): [("verb", 0.85)],
+#     ("noun", "determiner"): [("verb", 0.90)],
+#     ("noun", "article"): [("verb", 0.90)],
+#     ("verb", "noun"): [("adjective", 0.80), ("determiner", 0.75)],
+#     ("verb", "verb"): [("adverb", 0.75)],
+#     ("verb", "adjective"): [("adverb", 0.85)],
+#     ("verb", "preposition"): [("noun", 0.85), ("adverb", 0.70)],
+#     ("pronoun", "noun"): [("verb", 0.90)],
+#     ("pronoun", "adjective"): [("verb", 0.90), ("be", 0.85)],
+#     ("pronoun", "determiner"): [("verb", 0.90)],
+#     ("pronoun", "article"): [("verb", 0.90)],
+#     ("pronoun", "adverb"): [("verb", 0.85)],
+#     ("pronoun", "preposition"): [("verb", 0.90)],
+#     ("preposition", "noun"): [("adjective", 0.85), ("determiner", 0.80)],
+#     ("preposition", "proper_noun"): [("adjective", 0.80)],
+#     ("preposition", "adjective"): [("determiner", 0.85), ("adverb", 0.70)],
+#     ("preposition", "verb"): [("noun", 0.80)],
+#     ("adverb", "noun"): [("adjective", 0.85)],
+#     ("adverb", "verb"): [("adverb", 0.75)],
+#     ("be", "noun"): [("adjective", 0.85), ("determiner", 0.80)],
+#     ("be", "adjective"): [("adverb", 0.90)],
+#     ("be", "preposition"): [("adverb", 0.80)],
+#     ("conjunction", "noun"): [("noun", 0.85), ("adjective", 0.80)],
+#     ("conjunction", "verb"): [("noun", 0.85), ("pronoun", 0.80)],
+#     # ONLY LEFT NEIGHBOR KNOWN
+#     ("determiner", None): [("noun", 0.85), ("adjective", 0.80)],
+#     ("article", None): [("noun", 0.85), ("adjective", 0.80)],
+#     ("adjective", None): [("noun", 0.90)],
+#     ("pronoun", None): [("verb", 0.90), ("be", 0.80)],
+#     ("verb", None): [("noun", 0.75), ("determiner", 0.70), ("adverb", 0.65), ("adjective", 0.60)],
+#     ("preposition", None): [("noun", 0.80), ("determiner", 0.75), ("proper_noun", 0.70), ("adjective", 0.65)],
+#     ("noun", None): [("verb", 0.80), ("noun", 0.60), ("conjunction", 0.50)],
+#     ("adverb", None): [("adjective", 0.80), ("verb", 0.75), ("adverb", 0.70)],
+#     ("be", None): [("adjective", 0.85), ("noun", 0.75), ("determiner", 0.70)],
+#     ("conjunction", None): [("noun", 0.85), ("pronoun", 0.80), ("determiner", 0.75)],
+#     # ONLY RIGHT NEIGHBOR KNOWN
+#     (None, "noun"): [("adjective", 0.90), ("determiner", 0.85), ("article", 0.85)],
+#     (None, "verb"): [("noun", 0.85), ("pronoun", 0.80), ("adverb", 0.70)],
+#     (None, "adjective"): [("adverb", 0.85), ("determiner", 0.75), ("article", 0.75)],
+#     (None, "adverb"): [("verb", 0.80), ("adverb", 0.70)],
+#     (None, "preposition"): [("noun", 0.85), ("verb", 0.80)],
+#     (None, "determiner"): [("verb", 0.85), ("preposition", 0.75), ("noun", 0.70)],
+#     (None, "article"): [("verb", 0.85), ("preposition", 0.75), ("noun", 0.70)],
+#     (None, "pronoun"): [("verb", 0.75), ("preposition", 0.70), ("conjunction", 0.65)],
+#     (None, "proper_noun"): [("preposition", 0.80), ("verb", 0.75)],
+#     (None, "conjunction"): [("noun", 0.85), ("verb", 0.80)],
+# }
+
+
+# # =============================================================================
+# # CACHED HELPERS - O(1) after first call
+# # =============================================================================
+
+# @lru_cache(maxsize=10000)
+# def cached_levenshtein(word1: str, word2: str) -> int:
+#     """Cached Levenshtein distance calculation."""
+#     if USE_FAST_LEVENSHTEIN:
+#         return _fast_levenshtein(word1, word2)
+#     return _python_levenshtein(word1, word2)
+
+
+# def normalize_pos(pos_value: Any) -> str:
+#     """
+#     Normalize POS value to a simple string.
+    
+#     Handles:
+#     - None -> 'unknown'
+#     - "['noun']" (string) -> 'noun'
+#     - ['noun'] (list) -> 'noun'
+#     - 'noun' (string) -> 'noun'
+#     - Location categories -> 'proper_noun'
+#     """
+#     if pos_value is None:
+#         return 'unknown'
+    
+#     # Handle string that looks like a list: "['noun']"
+#     if isinstance(pos_value, str):
+#         pos_value = pos_value.strip()
+#         if pos_value.startswith('[') and pos_value.endswith(']'):
+#             try:
+#                 parsed = json.loads(pos_value.replace("'", '"'))
+#                 if isinstance(parsed, list) and parsed:
+#                     pos_value = parsed[0]
+#                 else:
+#                     pos_value = 'unknown'
+#             except (json.JSONDecodeError, ValueError):
+#                 # Try manual parsing: "['noun']" -> "noun"
+#                 inner = pos_value[1:-1].strip()
+#                 if inner.startswith("'") and inner.endswith("'"):
+#                     pos_value = inner[1:-1]
+#                 elif inner.startswith('"') and inner.endswith('"'):
+#                     pos_value = inner[1:-1]
+#                 else:
+#                     pos_value = inner
+    
+#     # Handle actual list: ['noun']
+#     if isinstance(pos_value, list):
+#         pos_value = pos_value[0] if pos_value else 'unknown'
+    
+#     # Ensure it's a string
+#     if not isinstance(pos_value, str):
+#         pos_value = str(pos_value) if pos_value else 'unknown'
+    
+#     # Normalize location types to proper_noun
+#     pos_lower = pos_value.lower().strip()
+    
+#     if pos_lower in ('proper noun', 'proper_noun'):
+#         return 'proper_noun'
+    
+#     if pos_lower in LOCATION_TYPES:
+#         return 'proper_noun'
+    
+#     if pos_lower in COMPOUND_NOUN_TYPES:
+#         return 'noun'
+    
+#     # Return as-is if it's a valid POS
+#     if pos_lower in ALLOWED_POS:
+#         return pos_lower
+    
+#     return pos_value.lower() if pos_value else 'unknown'
+
+
+# # =============================================================================
+# # CONTEXT-BASED PREDICTION - O(1) dict lookups
+# # =============================================================================
+
+# def predict_pos_from_context(
+#     left_pos: Optional[str],
+#     right_pos: Optional[str]
+# ) -> Optional[Tuple[str, float]]:
+#     """Predict POS based on neighboring words' POS tags."""
+#     # Try both neighbors (most specific)
+#     key = (left_pos, right_pos)
+#     if key in LOCAL_CONTEXT_RULES:
+#         return LOCAL_CONTEXT_RULES[key][0]
+    
+#     # Try left only
+#     if left_pos:
+#         key = (left_pos, None)
+#         if key in LOCAL_CONTEXT_RULES:
+#             return LOCAL_CONTEXT_RULES[key][0]
+    
+#     # Try right only
+#     if right_pos:
+#         key = (None, right_pos)
+#         if key in LOCAL_CONTEXT_RULES:
+#             return LOCAL_CONTEXT_RULES[key][0]
+    
+#     return None
+
+
+# # =============================================================================
+# # CORRECTION SEARCH - Only for UNKNOWN words
+# # =============================================================================
+
+# def find_correction_for_unknown(
+#     word: str,
+#     left_pos: Optional[str],
+#     right_pos: Optional[str],
+#     max_distance: int = 2
+# ) -> Optional[Dict[str, Any]]:
+#     """
+#     Find correction for an unknown word using POS context.
+    
+#     1. Predict expected POS from neighbors
+#     2. Generate candidates
+#     3. Filter by POS match
+#     4. Return closest by distance
+#     """
+#     # Predict what POS this word should be
+#     prediction = predict_pos_from_context(left_pos, right_pos)
+#     predicted_pos = prediction[0] if prediction else 'noun'  # Default to noun
+    
+#     # Generate candidates
+#     candidates = generate_candidates_smart(word, max_candidates=50)
+    
+#     if not candidates:
+#         return None
+    
+#     # Batch check which candidates exist
+#     found = batch_check_candidates(candidates)
+    
+#     if not found:
+#         return None
+    
+#     word_lower = word.lower()
+#     matches = []
+#     fallback_matches = []
+    
+#     for item in found:
+#         item_pos = normalize_pos(item.get('pos', 'unknown'))
+#         term_lower = item.get('term', '').lower()
+        
+#         # Calculate distance
+#         distance = cached_levenshtein(word_lower, term_lower)
+        
+#         if distance > max_distance:
+#             continue
+        
+#         item['distance'] = distance
+#         item['normalized_pos'] = item_pos
+        
+#         # Check if POS matches prediction
+#         pos_match = (
+#             item_pos == predicted_pos or
+#             (predicted_pos == 'proper_noun' and item.get('category', '').lower() in LOCATION_TYPES) or
+#             (predicted_pos == 'noun' and item_pos in ('noun', 'proper_noun'))
+#         )
+        
+#         if pos_match:
+#             matches.append(item)
+#         else:
+#             fallback_matches.append(item)
+    
+#     # Prefer POS matches, fall back to any match
+#     result_list = matches if matches else fallback_matches
+    
+#     if not result_list:
+#         return None
+    
+#     # Sort by distance first, then by rank (higher rank = better)
+#     result_list.sort(key=lambda x: (x['distance'], -x.get('rank', 0)))
+    
+#     return result_list[0]
+
+
+# # =============================================================================
+# # SINGLE-PASS WORD DISCOVERY
+# # =============================================================================
+
+# def word_discovery_single_pass(
+#     query: str,
+#     pre_validated: Optional[List[Dict[str, Any]]] = None,
+#     verbose: bool = False
+# ) -> Dict[str, Any]:
+#     """
+#     OPTIMIZED: Single-pass word discovery.
+    
+#     1. Batch validate all words (single Redis call)
+#     2. Single loop: process each word + detect bigrams
+#        - Valid word -> keep it
+#        - Unknown word -> find correction using POS context
+#     3. Return categorized results
+#     """
+#     words = query.split()
+    
+#     if not words:
+#         return _empty_result(query)
+    
+#     # =========================================================================
+#     # STEP 1: Batch validate all words - ONE Redis call
+#     # =========================================================================
+    
+#     if pre_validated:
+#         # Use pre-validated data (from lookup_table)
+#         word_data = {}
+#         for item in pre_validated:
+#             w = item.get('word', '').lower()
+#             if w:
+#                 word_data[w] = {
+#                     'exists': item.get('exists', False),
+#                     'pos': normalize_pos(item.get('pos') or item.get('metadata', {}).get('pos')),
+#                     'metadata': item.get('metadata', item)
+#                 }
+#     else:
+#         # Batch validate via Redis
+#         validation_cache = batch_validate_words_redis(words)
+#         word_data = {}
+#         for word in words:
+#             w = word.lower()
+#             if w in validation_cache:
+#                 result = validation_cache[w]
+#                 word_data[w] = {
+#                     'exists': result.get('is_valid', False),
+#                     'pos': normalize_pos(result.get('metadata', {}).get('pos', 'unknown')),
+#                     'metadata': result.get('metadata', {})
+#                 }
+#             else:
+#                 word_data[w] = {'exists': False, 'pos': 'unknown', 'metadata': {}}
+    
+#     # =========================================================================
+#     # STEP 2: Prepare bigram checking - ONE Redis call
+#     # =========================================================================
+    
+#     bigram_pairs = []
+#     for i in range(len(words) - 1):
+#         bigram_pairs.append((words[i].lower(), words[i + 1].lower()))
+    
+#     bigram_results = batch_check_bigrams(bigram_pairs) if bigram_pairs else {}
+    
+#     # =========================================================================
+#     # STEP 3: Single loop - process words and detect bigrams
+#     # =========================================================================
+    
+#     processed = []  # Final processed words
+#     corrections = []  # Corrections made
+#     bigrams_found = []  # Bigrams detected
+#     skip_next = False
+    
+#     for i, word in enumerate(words):
+#         if skip_next:
+#             skip_next = False
+#             continue
+        
+#         word_lower = word.lower()
+#         data = word_data.get(word_lower, {'exists': False, 'pos': 'unknown', 'metadata': {}})
+        
+#         # Check for bigram with next word
+#         if i < len(words) - 1:
+#             next_word = words[i + 1].lower()
+#             bigram_key = f"{word_lower} {next_word}"
+            
+#             if bigram_key in bigram_results:
+#                 # Found a bigram!
+#                 bigram_meta = bigram_results[bigram_key]
+#                 category = bigram_meta.get('category', '')
+#                 bigram_pos = 'proper_noun' if category.lower() in LOCATION_TYPES else 'noun'
+                
+#                 processed.append({
+#                     'position': i + 1,
+#                     'word': f"{word} {words[i + 1]}",
+#                     'search_word': f"{word} {words[i + 1]}",
+#                     'status': 'bigram',
+#                     'pos': bigram_pos,
+#                     'metadata': bigram_meta
+#                 })
+                
+#                 bigrams_found.append({
+#                     'bigram': f"{word} {words[i + 1]}",
+#                     'category': category
+#                 })
+                
+#                 skip_next = True
+#                 continue
+        
+#         # Process single word
+#         if data['exists']:
+#             # Word is valid - keep it as is
+#             processed.append({
+#                 'position': i + 1,
+#                 'word': word,
+#                 'search_word': word,
+#                 'status': 'valid',
+#                 'pos': data['pos'],
+#                 'metadata': data['metadata']
+#             })
+#         else:
+#             # Word is unknown - try to correct it
+#             left_pos = processed[-1]['pos'] if processed else None
+            
+#             # Look ahead for right POS (if next word is valid)
+#             right_pos = None
+#             if i < len(words) - 1:
+#                 next_word_lower = words[i + 1].lower()
+#                 next_data = word_data.get(next_word_lower, {})
+#                 if next_data.get('exists'):
+#                     right_pos = next_data.get('pos')
+            
+#             # Find correction
+#             correction = find_correction_for_unknown(word, left_pos, right_pos)
+            
+#             if correction:
+#                 corrected_word = correction.get('term', word)
+#                 processed.append({
+#                     'position': i + 1,
+#                     'word': word,
+#                     'search_word': corrected_word,
+#                     'status': 'corrected',
+#                     'pos': normalize_pos(correction.get('pos', 'unknown')),
+#                     'metadata': correction,
+#                     'original': word,
+#                     'corrected': corrected_word,
+#                     'distance': correction.get('distance', 0)
+#                 })
+#                 corrections.append({
+#                     'original': word,
+#                     'corrected': corrected_word,
+#                     'distance': correction.get('distance', 0)
+#                 })
+#             else:
+#                 # No correction found - keep original
+#                 processed.append({
+#                     'position': i + 1,
+#                     'word': word,
+#                     'search_word': word,
+#                     'status': 'unknown',
+#                     'pos': 'unknown',
+#                     'metadata': {}
+#                 })
+    
+#     # =========================================================================
+#     # STEP 4: Build results
+#     # =========================================================================
+    
+#     valid_terms = [p for p in processed if p['status'] in ('valid', 'corrected', 'bigram')]
+#     unknown_terms = [p for p in processed if p['status'] == 'unknown']
+#     corrected_terms = [p for p in processed if p['status'] == 'corrected']
+#     bigram_terms = [p for p in processed if p['status'] == 'bigram']
+    
+#     search_terms = [p['search_word'] for p in processed]
+#     corrected_query = ' '.join(search_terms)
+    
+#     if verbose:
+#         print(f"\n{'='*60}")
+#         print(f"📊 WORD DISCOVERY RESULTS: '{query}'")
+#         print(f"   Valid terms ({len(valid_terms)}): {[t['search_word'] for t in valid_terms]}")
+#         print(f"   Unknown terms ({len(unknown_terms)}): {[t['word'] for t in unknown_terms]}")
+#         print(f"   Corrected: {[(c['original'], c['corrected']) for c in corrected_terms]}")
+#         print(f"   Bigrams: {[t['word'] for t in bigram_terms]}")
+#         print(f"   Search terms: {search_terms}")
+#         print(f"{'='*60}\n")
+    
+#     return {
+#         'success': True,
+#         'query': query,
+#         'corrected_query': corrected_query,
+#         'terms': processed,
+#         'valid_terms': valid_terms,
+#         'unknown_terms': unknown_terms,
+#         'corrected_terms': corrected_terms,
+#         'bigram_terms': bigram_terms,
+#         'search_terms': search_terms,
+#         'has_unknown': len(unknown_terms) > 0,
+#         'all_unknown': len(unknown_terms) == len(processed) and len(processed) > 0,
+#         'valid_count': len(valid_terms),
+#         'unknown_count': len(unknown_terms),
+#         'total_count': len(processed)
+#     }
+
+
+# def _empty_result(query: str) -> Dict[str, Any]:
+#     """Return empty result structure."""
+#     return {
+#         'success': True,
+#         'query': query,
+#         'corrected_query': '',
+#         'terms': [],
+#         'valid_terms': [],
+#         'unknown_terms': [],
+#         'corrected_terms': [],
+#         'bigram_terms': [],
+#         'search_terms': [],
+#         'has_unknown': False,
+#         'all_unknown': True,
+#         'valid_count': 0,
+#         'unknown_count': 0,
+#         'total_count': 0
+#     }
+
+
+# # =============================================================================
+# # PUBLIC API - Compatible with existing code
+# # =============================================================================
+
+# def word_discovery_full(
+#     query: str,
+#     verbose: bool = False,
+#     pre_validated: Optional[List[Dict[str, Any]]] = None
+# ) -> Dict[str, Any]:
+#     """
+#     Full word discovery with categorized output for search integration.
+#     This is the main entry point - now uses single-pass processing.
+#     """
+#     return word_discovery_single_pass(query, pre_validated=pre_validated, verbose=verbose)
+
+
+# def word_discovery_multi(
+#     query: str,
+#     redis_client=None,
+#     prefix: str = "prefix",
+#     verbose: bool = False,
+#     pre_validated: Optional[List[Dict[str, Any]]] = None
+# ) -> Tuple[List[Dict[str, Any]], List[Tuple[int, str]], str]:
+#     """
+#     Legacy entry point for compatibility.
+#     Returns: (corrections, tuple_array, corrected_query)
+#     """
+#     result = word_discovery_single_pass(query, pre_validated=pre_validated, verbose=verbose)
+    
+#     corrections = result.get('corrected_terms', [])
+#     tuple_array = [(t['position'], t['pos']) for t in result.get('terms', [])]
+#     corrected_query = result.get('corrected_query', query)
+    
+#     return corrections, tuple_array, corrected_query
+
+
+# # =============================================================================
+# # HELPER FUNCTIONS FOR SEARCH INTEGRATION
+# # =============================================================================
+
+# def get_search_strategy(discovery_result: Dict[str, Any]) -> str:
+#     """Determine search strategy based on word discovery results."""
+#     valid_count = discovery_result.get('valid_count', 0)
+    
+#     if valid_count >= 2:
+#         return 'strict'
+#     elif valid_count == 1:
+#         return 'mixed'
+#     else:
+#         return 'semantic'
+
+
+# def get_filter_terms(discovery_result: Dict[str, Any]) -> List[str]:
+#     """Get terms for strict filtering."""
+#     return [t['search_word'] for t in discovery_result.get('valid_terms', [])]
+
+
+# def get_loose_terms(discovery_result: Dict[str, Any]) -> List[str]:
+#     """Get unknown terms for loose search."""
+#     return [t['word'] for t in discovery_result.get('unknown_terms', [])]
+
+
+# def get_all_search_terms(discovery_result: Dict[str, Any]) -> List[str]:
+#     """Get all search terms."""
+#     return discovery_result.get('search_terms', [])
+
+
+# # =============================================================================
+# # OPTIMIZED QUERY PROCESSING
+# # =============================================================================
+
+# def process_query_optimized(
+#     query: str,
+#     verbose: bool = False
+# ) -> Dict[str, Any]:
+#     """
+#     Optimized end-to-end query processing for Typesense search.
+    
+#     - Single validation pass
+#     - Batched bigram detection
+#     - Categorized output for search strategy
+#     """
+#     try:
+#         from .searchapi import lookup_table
+#     except ImportError:
+#         from searchapi import lookup_table
+    
+#     # Step 1: Lookup with validation cache
+#     lookup_result = lookup_table(query, return_validation_cache=True)
+    
+#     if not lookup_result.get('success', False):
+#         words = query.split()
+#         return {
+#             'success': False,
+#             'query': query,
+#             'corrected_query': query,
+#             'terms': [],
+#             'valid_terms': [],
+#             'unknown_terms': [{'word': w, 'search_word': w, 'pos': 'unknown', 'status': 'unknown'} 
+#                              for w in words],
+#             'corrected_terms': [],
+#             'bigram_terms': [],
+#             'search_terms': words,
+#             'has_unknown': True,
+#             'all_unknown': True,
+#             'valid_count': 0,
+#             'unknown_count': len(words),
+#             'total_count': len(words),
+#             'search_strategy': 'semantic',
+#             'cache_hit': False,
+#             'error': lookup_result.get('error', 'Lookup failed')
+#         }
+    
+#     # Step 2: Single-pass word discovery
+#     result = word_discovery_single_pass(
+#         query,
+#         pre_validated=lookup_result.get('terms', []),
+#         verbose=verbose
+#     )
+    
+#     # Step 3: Determine search strategy
+#     result['search_strategy'] = get_search_strategy(result)
+#     result['cache_hit'] = lookup_result.get('cache_hit', False)
+    
+#     return result
+
+
+# # =============================================================================
+# # TEST FUNCTION
+# # =============================================================================
+
+# def test_word_discovery():
+#     """Test function to verify word discovery is working."""
+#     test_queries = [
+#         "tuskegee airmen",
+#         "the quikc brown fox",
+#         "new york city",
+#         "black doctors",
+#         "african american history",
+#     ]
+    
+#     print("=" * 60)
+#     print("WORD DISCOVERY TEST (SINGLE-PASS)")
+#     print("=" * 60)
+    
+#     for query in test_queries:
+#         print(f"\nQuery: '{query}'")
+#         result = word_discovery_single_pass(query, verbose=False)
+        
+#         print(f"  Valid: {[t['search_word'] for t in result['valid_terms']]}")
+#         print(f"  Unknown: {[t['word'] for t in result['unknown_terms']]}")
+#         print(f"  Corrected: {result['corrected_query']}")
+#         print(f"  Strategy: {get_search_strategy(result)}")
+
+
+# if __name__ == "__main__":
+#     test_word_discovery()
+
 """
 word_discovery.py
 OPTIMIZED: Single-pass word validation, correction, and bigram detection.
+UPDATED: Score-based search strategy selection using Redis rank field.
 
 Key Changes:
 - ONE batch Redis call upfront (not multiple passes)
 - Only correct UNKNOWN words (don't touch valid words)
 - Bigram detection in same loop
 - O(1) lookups using pre-fetched data
+- NEW: Extract rank scores from Redis for strategy selection
 """
 import json
 from typing import Dict, Any, List, Tuple, Optional, Set
@@ -6363,6 +7061,14 @@ COMPOUND_NOUN_TYPES: frozenset = frozenset({
     "city", "state", "neighborhood", "region", "country",
     "occupation", "product", "furniture", "food", "sport", "disease", "animal"
 })
+
+# =============================================================================
+# SCORE-BASED STRATEGY THRESHOLDS
+# =============================================================================
+
+SCORE_THRESHOLD_STRICT = 2000   # avg_score > 2000 → strict keyword search
+SCORE_THRESHOLD_MIXED = 500     # avg_score 500-2000 → mixed search
+# avg_score < 500 → semantic search
 
 # Pre-built dict for O(1) context rule lookup
 LOCAL_CONTEXT_RULES: Dict[Tuple[Optional[str], Optional[str]], List[Tuple[str, float]]] = {
@@ -6501,6 +7207,32 @@ def normalize_pos(pos_value: Any) -> str:
     return pos_value.lower() if pos_value else 'unknown'
 
 
+def extract_rank_score(metadata: Dict[str, Any]) -> int:
+    """
+    Extract rank score from metadata.
+    
+    Handles various formats:
+    - int: 1234
+    - str: "1234"
+    - missing: 0
+    """
+    rank = metadata.get('rank', 0)
+    
+    if isinstance(rank, int):
+        return rank
+    
+    if isinstance(rank, float):
+        return int(rank)
+    
+    if isinstance(rank, str):
+        try:
+            return int(rank)
+        except (ValueError, TypeError):
+            return 0
+    
+    return 0
+
+
 # =============================================================================
 # CONTEXT-BASED PREDICTION - O(1) dict lookups
 # =============================================================================
@@ -6615,13 +7347,14 @@ def word_discovery_single_pass(
     verbose: bool = False
 ) -> Dict[str, Any]:
     """
-    OPTIMIZED: Single-pass word discovery.
+    OPTIMIZED: Single-pass word discovery with score extraction.
     
     1. Batch validate all words (single Redis call)
     2. Single loop: process each word + detect bigrams
-       - Valid word -> keep it
+       - Valid word -> keep it, extract rank score
        - Unknown word -> find correction using POS context
-    3. Return categorized results
+    3. Calculate score totals for strategy selection
+    4. Return categorized results with scores
     """
     words = query.split()
     
@@ -6638,10 +7371,11 @@ def word_discovery_single_pass(
         for item in pre_validated:
             w = item.get('word', '').lower()
             if w:
+                metadata = item.get('metadata', item)
                 word_data[w] = {
                     'exists': item.get('exists', False),
-                    'pos': normalize_pos(item.get('pos') or item.get('metadata', {}).get('pos')),
-                    'metadata': item.get('metadata', item)
+                    'pos': normalize_pos(item.get('pos') or metadata.get('pos')),
+                    'metadata': metadata
                 }
     else:
         # Batch validate via Redis
@@ -6697,18 +7431,24 @@ def word_discovery_single_pass(
                 category = bigram_meta.get('category', '')
                 bigram_pos = 'proper_noun' if category.lower() in LOCATION_TYPES else 'noun'
                 
+                # Extract rank score (bigrams get 1.5x multiplier for being multi-word)
+                bigram_rank = extract_rank_score(bigram_meta)
+                bigram_rank = int(bigram_rank * 1.5)  # Bigram bonus
+                
                 processed.append({
                     'position': i + 1,
                     'word': f"{word} {words[i + 1]}",
                     'search_word': f"{word} {words[i + 1]}",
                     'status': 'bigram',
                     'pos': bigram_pos,
-                    'metadata': bigram_meta
+                    'metadata': bigram_meta,
+                    'rank_score': bigram_rank
                 })
                 
                 bigrams_found.append({
                     'bigram': f"{word} {words[i + 1]}",
-                    'category': category
+                    'category': category,
+                    'rank_score': bigram_rank
                 })
                 
                 skip_next = True
@@ -6717,13 +7457,17 @@ def word_discovery_single_pass(
         # Process single word
         if data['exists']:
             # Word is valid - keep it as is
+            # Extract rank score from metadata
+            rank_score = extract_rank_score(data['metadata'])
+            
             processed.append({
                 'position': i + 1,
                 'word': word,
                 'search_word': word,
                 'status': 'valid',
                 'pos': data['pos'],
-                'metadata': data['metadata']
+                'metadata': data['metadata'],
+                'rank_score': rank_score
             })
         else:
             # Word is unknown - try to correct it
@@ -6742,6 +7486,8 @@ def word_discovery_single_pass(
             
             if correction:
                 corrected_word = correction.get('term', word)
+                correction_rank = extract_rank_score(correction)
+                
                 processed.append({
                     'position': i + 1,
                     'word': word,
@@ -6751,26 +7497,29 @@ def word_discovery_single_pass(
                     'metadata': correction,
                     'original': word,
                     'corrected': corrected_word,
-                    'distance': correction.get('distance', 0)
+                    'distance': correction.get('distance', 0),
+                    'rank_score': correction_rank
                 })
                 corrections.append({
                     'original': word,
                     'corrected': corrected_word,
-                    'distance': correction.get('distance', 0)
+                    'distance': correction.get('distance', 0),
+                    'rank_score': correction_rank
                 })
             else:
-                # No correction found - keep original
+                # No correction found - keep original with zero score
                 processed.append({
                     'position': i + 1,
                     'word': word,
                     'search_word': word,
                     'status': 'unknown',
                     'pos': 'unknown',
-                    'metadata': {}
+                    'metadata': {},
+                    'rank_score': 0
                 })
     
     # =========================================================================
-    # STEP 4: Build results
+    # STEP 4: Build results with score calculations
     # =========================================================================
     
     valid_terms = [p for p in processed if p['status'] in ('valid', 'corrected', 'bigram')]
@@ -6781,6 +7530,12 @@ def word_discovery_single_pass(
     search_terms = [p['search_word'] for p in processed]
     corrected_query = ' '.join(search_terms)
     
+    # Calculate score totals for strategy selection
+    total_score = sum(p.get('rank_score', 0) for p in processed)
+    scored_terms = [p for p in processed if p.get('rank_score', 0) > 0]
+    average_score = total_score / len(processed) if processed else 0
+    max_score = max((p.get('rank_score', 0) for p in processed), default=0)
+    
     if verbose:
         print(f"\n{'='*60}")
         print(f"📊 WORD DISCOVERY RESULTS: '{query}'")
@@ -6789,6 +7544,8 @@ def word_discovery_single_pass(
         print(f"   Corrected: {[(c['original'], c['corrected']) for c in corrected_terms]}")
         print(f"   Bigrams: {[t['word'] for t in bigram_terms]}")
         print(f"   Search terms: {search_terms}")
+        print(f"   📈 Scores: total={total_score}, avg={average_score:.1f}, max={max_score}")
+        print(f"   Term scores: {[(t['search_word'], t.get('rank_score', 0)) for t in processed]}")
         print(f"{'='*60}\n")
     
     return {
@@ -6805,7 +7562,12 @@ def word_discovery_single_pass(
         'all_unknown': len(unknown_terms) == len(processed) and len(processed) > 0,
         'valid_count': len(valid_terms),
         'unknown_count': len(unknown_terms),
-        'total_count': len(processed)
+        'total_count': len(processed),
+        # Score-based metrics for strategy selection
+        'total_score': total_score,
+        'average_score': round(average_score, 1),
+        'max_score': max_score,
+        'scored_term_count': len(scored_terms)
     }
 
 
@@ -6825,7 +7587,11 @@ def _empty_result(query: str) -> Dict[str, Any]:
         'all_unknown': True,
         'valid_count': 0,
         'unknown_count': 0,
-        'total_count': 0
+        'total_count': 0,
+        'total_score': 0,
+        'average_score': 0,
+        'max_score': 0,
+        'scored_term_count': 0
     }
 
 
@@ -6870,12 +7636,32 @@ def word_discovery_multi(
 # =============================================================================
 
 def get_search_strategy(discovery_result: Dict[str, Any]) -> str:
-    """Determine search strategy based on word discovery results."""
+    """
+    Determine search strategy based on SCORE, not just count.
+    
+    Thresholds:
+    - avg_score > 2000: User knows domain vocabulary → strict keyword search
+    - avg_score 500-2000: Partial domain knowledge → mixed search  
+    - avg_score < 500: Generic/conceptual query → semantic search
+    
+    High scores indicate terms that appear frequently in your corpus,
+    meaning the user is "speaking the domain language" and keyword
+    matching will be effective.
+    
+    Low scores indicate generic vocabulary or terms not in your corpus,
+    meaning semantic/vector search will better understand intent.
+    """
+    average_score = discovery_result.get('average_score', 0)
     valid_count = discovery_result.get('valid_count', 0)
     
-    if valid_count >= 2:
+    # Must have at least one valid term to use strict/mixed
+    if valid_count == 0:
+        return 'semantic'
+    
+    # Score-based strategy selection
+    if average_score > SCORE_THRESHOLD_STRICT:
         return 'strict'
-    elif valid_count == 1:
+    elif average_score > SCORE_THRESHOLD_MIXED:
         return 'mixed'
     else:
         return 'semantic'
@@ -6896,6 +7682,27 @@ def get_all_search_terms(discovery_result: Dict[str, Any]) -> List[str]:
     return discovery_result.get('search_terms', [])
 
 
+def get_term_scores(discovery_result: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Get list of terms with their scores."""
+    return [
+        {
+            'term': t['search_word'],
+            'score': t.get('rank_score', 0),
+            'status': t['status']
+        }
+        for t in discovery_result.get('terms', [])
+    ]
+
+
+def get_high_score_terms(discovery_result: Dict[str, Any], min_score: int = 500) -> List[str]:
+    """Get only terms with score above threshold."""
+    return [
+        t['search_word']
+        for t in discovery_result.get('terms', [])
+        if t.get('rank_score', 0) >= min_score
+    ]
+
+
 # =============================================================================
 # OPTIMIZED QUERY PROCESSING
 # =============================================================================
@@ -6910,6 +7717,7 @@ def process_query_optimized(
     - Single validation pass
     - Batched bigram detection
     - Categorized output for search strategy
+    - Score-based strategy selection
     """
     try:
         from .searchapi import lookup_table
@@ -6927,7 +7735,7 @@ def process_query_optimized(
             'corrected_query': query,
             'terms': [],
             'valid_terms': [],
-            'unknown_terms': [{'word': w, 'search_word': w, 'pos': 'unknown', 'status': 'unknown'} 
+            'unknown_terms': [{'word': w, 'search_word': w, 'pos': 'unknown', 'status': 'unknown', 'rank_score': 0} 
                              for w in words],
             'corrected_terms': [],
             'bigram_terms': [],
@@ -6937,6 +7745,10 @@ def process_query_optimized(
             'valid_count': 0,
             'unknown_count': len(words),
             'total_count': len(words),
+            'total_score': 0,
+            'average_score': 0,
+            'max_score': 0,
+            'scored_term_count': 0,
             'search_strategy': 'semantic',
             'cache_hit': False,
             'error': lookup_result.get('error', 'Lookup failed')
@@ -6949,7 +7761,7 @@ def process_query_optimized(
         verbose=verbose
     )
     
-    # Step 3: Determine search strategy
+    # Step 3: Determine search strategy using scores
     result['search_strategy'] = get_search_strategy(result)
     result['cache_hit'] = lookup_result.get('cache_hit', False)
     
@@ -6961,18 +7773,20 @@ def process_query_optimized(
 # =============================================================================
 
 def test_word_discovery():
-    """Test function to verify word discovery is working."""
+    """Test function to verify word discovery and scoring is working."""
     test_queries = [
-        "tuskegee airmen",
-        "the quikc brown fox",
-        "new york city",
-        "black doctors",
-        "african american history",
+        "tuskegee airmen",           # Should be high score (domain terms)
+        "the quick brown fox",        # Should be low score (generic)
+        "new york city",              # Should be high score (location bigram)
+        "black doctors",              # Should be medium score
+        "african american history",   # Should be high score
+        "how did people vote",        # Should be low score (generic phrasing)
+        "hbcu civil rights",          # Should be high score
     ]
     
-    print("=" * 60)
-    print("WORD DISCOVERY TEST (SINGLE-PASS)")
-    print("=" * 60)
+    print("=" * 70)
+    print("WORD DISCOVERY TEST (SCORE-BASED STRATEGY)")
+    print("=" * 70)
     
     for query in test_queries:
         print(f"\nQuery: '{query}'")
@@ -6981,7 +7795,11 @@ def test_word_discovery():
         print(f"  Valid: {[t['search_word'] for t in result['valid_terms']]}")
         print(f"  Unknown: {[t['word'] for t in result['unknown_terms']]}")
         print(f"  Corrected: {result['corrected_query']}")
-        print(f"  Strategy: {get_search_strategy(result)}")
+        print(f"  📊 Scores: total={result['total_score']}, avg={result['average_score']}, max={result['max_score']}")
+        print(f"  Term breakdown:")
+        for term in result['terms']:
+            print(f"      • {term['search_word']}: {term.get('rank_score', 0)} pts ({term['status']})")
+        print(f"  🎯 Strategy: {get_search_strategy(result).upper()}")
 
 
 if __name__ == "__main__":
