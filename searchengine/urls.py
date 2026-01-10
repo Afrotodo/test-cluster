@@ -50,6 +50,7 @@ urlpatterns = [
     path('news/', views.news_category, name='news'),
     path('community/', views.community_category, name='community'),
     path('api/track-click/', track_click, name='track_click'),
+    path('api/facets/', views.facets_api, name='facets_api'),
 
  
     # path('api/update-session-activity/', views.update_session_activity, name='update_session_activity'),  # ← Missing?
