@@ -260,21 +260,21 @@
         </div>
     </section>
 
-    <section class="topics-section">
-        <div class="section-header"><h2 class="section-title">Explore by Topic</h2></div>
-        <div class="topics-grid">
-            <a href="?topic=music" class="topic-card {% if selected_topic == 'music' %}active{% endif %}"><div class="topic-icon">🎵</div><div class="topic-name">Music</div></a>
-            <a href="?topic=art" class="topic-card {% if selected_topic == 'art' %}active{% endif %}"><div class="topic-icon">🎨</div><div class="topic-name">Art</div></a>
-            <a href="?topic=literature" class="topic-card {% if selected_topic == 'literature' %}active{% endif %}"><div class="topic-icon">📚</div><div class="topic-name">Literature</div></a>
-            <a href="?topic=film" class="topic-card {% if selected_topic == 'film' %}active{% endif %}"><div class="topic-icon">🎬</div><div class="topic-name">Film & TV</div></a>
-            <a href="?topic=hbcus" class="topic-card {% if selected_topic == 'hbcus' %}active{% endif %}"><div class="topic-icon">🎓</div><div class="topic-name">HBCUs</div></a>
-            <a href="?topic=food" class="topic-card {% if selected_topic == 'food' %}active{% endif %}"><div class="topic-icon">🍽️</div><div class="topic-name">Food</div></a>
-            <a href="?topic=fashion" class="topic-card {% if selected_topic == 'fashion' %}active{% endif %}"><div class="topic-icon">👗</div><div class="topic-name">Fashion</div></a>
-            <a href="?topic=history" class="topic-card {% if selected_topic == 'history' %}active{% endif %}"><div class="topic-icon">🏛️</div><div class="topic-name">History</div></a>
-            <a href="?topic=theater" class="topic-card {% if selected_topic == 'theater' %}active{% endif %}"><div class="topic-icon">🎭</div><div class="topic-name">Theater</div></a>
-            <a href="?topic=events" class="topic-card {% if selected_topic == 'events' %}active{% endif %}"><div class="topic-icon">📅</div><div class="topic-name">Events</div></a>
-        </div>
-    </section>
+<section class="topics-section">
+    <div class="section-header"><h2 class="section-title">Explore by Topic</h2></div>
+    <div class="topics-grid">
+        <a href="?topic=music" class="topic-card {% if selected_topic == 'music' %}active{% endif %}"><div class="topic-icon">🎵</div><div class="topic-name">Music</div></a>
+        <a href="?topic=art" class="topic-card {% if selected_topic == 'art' %}active{% endif %}"><div class="topic-icon">🎨</div><div class="topic-name">Art</div></a>
+        <a href="?topic=literature" class="topic-card {% if selected_topic == 'literature' %}active{% endif %}"><div class="topic-icon">📚</div><div class="topic-name">Literature</div></a>
+        <a href="?topic=film" class="topic-card {% if selected_topic == 'film' %}active{% endif %}"><div class="topic-icon">🎬</div><div class="topic-name">Film & TV</div></a>
+        <a href="?topic=hbcus" class="topic-card {% if selected_topic == 'hbcus' %}active{% endif %}"><div class="topic-icon">🎓</div><div class="topic-name">HBCUs</div></a>
+        <a href="?topic=food" class="topic-card {% if selected_topic == 'food' %}active{% endif %}"><div class="topic-icon">🍽️</div><div class="topic-name">Food</div></a>
+        <a href="?topic=fashion" class="topic-card {% if selected_topic == 'fashion' %}active{% endif %}"><div class="topic-icon">👗</div><div class="topic-name">Fashion</div></a>
+        <a href="?topic=history" class="topic-card {% if selected_topic == 'history' %}active{% endif %}"><div class="topic-icon">🏛️</div><div class="topic-name">History</div></a>
+        <a href="?topic=theater" class="topic-card {% if selected_topic == 'theater' %}active{% endif %}"><div class="topic-icon">🎭</div><div class="topic-name">Theater</div></a>
+        <a href="?topic=events" class="topic-card {% if selected_topic == 'events' %}active{% endif %}"><div class="topic-icon">📅</div><div class="topic-name">Events</div></a>
+    </div>
+</section>
 
     <section class="history-section">
         <div class="history-inner">
@@ -291,22 +291,28 @@
         </div>
     </section>
 
-    <section class="hbcu-section">
-        <div class="section-header"><h2 class="section-title">HBCU Spotlight</h2><a href="?topic=hbcus" class="section-link">View All HBCUs →</a></div>
-        <div class="hbcu-grid">
-            {% for hbcu in hbcus %}
-            <a href="{{ hbcu.document.document_url }}" target="_blank" class="hbcu-card">
-                <div class="hbcu-image">{% if hbcu.document.image_url %}<img src="{{ hbcu.document.image_url.0 }}" alt="{{ hbcu.document.document_title }}">{% endif %}<span class="hbcu-badge">HBCU</span></div>
-                <div class="hbcu-content"><h3 class="hbcu-name">{{ hbcu.document.document_title }}</h3><p class="hbcu-location">{{ hbcu.document.document_brand }}</p></div>
-            </a>
-            {% empty %}
-            <a href="#" class="hbcu-card"><div class="hbcu-image"><span class="hbcu-badge">Private</span></div><div class="hbcu-content"><h3 class="hbcu-name">Spelman College</h3><p class="hbcu-location">Atlanta, GA</p><div class="hbcu-stats"><span class="hbcu-stat">Est. <strong>1881</strong></span></div></div></a>
-            <a href="#" class="hbcu-card"><div class="hbcu-image"><span class="hbcu-badge">Private</span></div><div class="hbcu-content"><h3 class="hbcu-name">Howard University</h3><p class="hbcu-location">Washington, DC</p><div class="hbcu-stats"><span class="hbcu-stat">Est. <strong>1867</strong></span></div></div></a>
-            <a href="#" class="hbcu-card"><div class="hbcu-image"><span class="hbcu-badge">Private</span></div><div class="hbcu-content"><h3 class="hbcu-name">Morehouse College</h3><p class="hbcu-location">Atlanta, GA</p><div class="hbcu-stats"><span class="hbcu-stat">Est. <strong>1867</strong></span></div></div></a>
-            <a href="#" class="hbcu-card"><div class="hbcu-image"><span class="hbcu-badge">Public</span></div><div class="hbcu-content"><h3 class="hbcu-name">Florida A&M</h3><p class="hbcu-location">Tallahassee, FL</p><div class="hbcu-stats"><span class="hbcu-stat">Est. <strong>1887</strong></span></div></div></a>
-            {% endfor %}
-        </div>
-    </section>
+<section class="hbcu-section">
+    <div class="section-header">
+        <h2 class="section-title">HBCU Spotlight</h2>
+        <a href="?topic=hbcus" class="section-link">View All HBCUs →</a>
+    </div>
+    <div class="hbcu-grid">
+        {% for hbcu in hbcus %}
+        <a href="{{ hbcu.document.document_url }}" target="_blank" class="hbcu-card">
+            <div class="hbcu-image">
+                {% if hbcu.document.image_url %}<img src="{{ hbcu.document.image_url.0 }}" alt="{{ hbcu.document.document_title }}">{% endif %}
+                <span class="hbcu-badge">HBCU</span>
+            </div>
+            <div class="hbcu-content">
+                <h3 class="hbcu-name">{{ hbcu.document.document_title }}</h3>
+                <p class="hbcu-location">{{ hbcu.document.document_brand }}</p>
+            </div>
+        </a>
+        {% empty %}
+        <p>No HBCUs found</p>
+        {% endfor %}
+    </div>
+</section>
 
     <!-- Browse All Content Section with Faceted Search -->
     <section class="browse-section">

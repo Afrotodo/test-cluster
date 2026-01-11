@@ -4797,6 +4797,102 @@ def business_category(request):
 # VIEW: CULTURE CATEGORY
 # =============================================================================
 
+# def culture_category(request, city: str):
+#     """Culture & heritage page with faceted search."""
+    
+#     query = sanitize_query(request.GET.get('q', ''))
+#     selected_topic = sanitize_filter_value(request.GET.get('topic', ''))
+#     selected_category = sanitize_filter_value(request.GET.get('category', ''))
+#     selected_brand = sanitize_filter_value(request.GET.get('brand', ''))
+#     sort = validate_sort(request.GET.get('sort', ''), ['authority', 'recent'], 'authority')
+#     page = validate_page(request.GET.get('page', 1))
+    
+#     today = date.today()
+    
+#     filters = ['document_schema:=culture']
+    
+#     valid_topics = {'hbcus', 'film', 'music', 'art', 'literature', 'food', 'fashion', 'history', 'theater', 'events'}
+#     if selected_topic and selected_topic not in valid_topics:
+#         selected_topic = ''
+    
+#     if selected_topic == 'hbcus':
+#         filters = ['document_schema:=education']
+#     elif selected_topic == 'film':
+#         filters = ['(document_schema:=culture || document_schema:=media)']
+    
+#     if selected_category:
+#         filters.append(f'document_category:={selected_category}')
+#     if selected_brand:
+#         filters.append(f'document_brand:={selected_brand}')
+    
+#     filter_by = build_filter_string(filters)
+#     sort_by = 'authority_score:desc' if sort == 'authority' else 'created_at:desc'
+    
+#     results = typesense_search(
+#         query=query or '*',
+#         filter_by=filter_by,
+#         sort_by=sort_by,
+#         facet_by='document_category,document_brand',
+#         per_page=18,
+#         page=page,
+#     )
+    
+#     browse_results = safe_get_hits(results)
+#     total = safe_get_total(results)
+#     facets = parse_facets(results)
+    
+#     hbcu_results = typesense_search(
+#         query='university college',
+#         filter_by='document_schema:=education',
+#         sort_by='authority_score:desc',
+#         per_page=4,
+#     )
+#     hbcus = safe_get_hits(hbcu_results)
+    
+#     featured_results = typesense_search(
+#         query='*',
+#         filter_by='document_schema:=culture && document_category:=history',
+#         sort_by='authority_score:desc',
+#         per_page=1,
+#     )
+    
+#     featured_article = None
+#     featured_hits = safe_get_hits(featured_results)
+#     if featured_hits:
+#         doc = featured_hits[0].get('document', {})
+#         featured_article = {
+#             'title': doc.get('document_title'),
+#             'excerpt': (doc.get('document_summary', '') or '')[:200],
+#             'url': doc.get('document_url'),
+#             'image': doc.get('image_url', [None])[0] if doc.get('image_url') else None,
+#         }
+    
+#     active_filter_count = sum([
+#         bool(selected_topic),
+#         bool(selected_category),
+#         bool(selected_brand),
+#     ])
+    
+#     context = {
+#         'city': city,
+#         'query': query,
+#         'today': {'day': today.day, 'month': today.strftime('%b').upper()},
+#         'featured_article': featured_article,
+#         'hbcus': hbcus,
+#         'results': browse_results,
+#         'total': total,
+#         'facets': facets,
+#         'selected_topic': selected_topic,
+#         'selected_category': selected_category,
+#         'selected_brand': selected_brand,
+#         'active_filter_count': active_filter_count,
+#         'page': page,
+#         'has_more': (page * 18) < total,
+#         'sort': sort,
+#     }
+    
+#     return render(request, 'category_culture.html', context)
+
 def culture_category(request, city: str):
     """Culture & heritage page with faceted search."""
     
@@ -4809,17 +4905,36 @@ def culture_category(request, city: str):
     
     today = date.today()
     
+    # Base filter for culture page
     filters = ['document_schema:=culture']
     
     valid_topics = {'hbcus', 'film', 'music', 'art', 'literature', 'food', 'fashion', 'history', 'theater', 'events'}
     if selected_topic and selected_topic not in valid_topics:
         selected_topic = ''
     
+    # Topic-based filtering - FIX: use document_category for hbcus
     if selected_topic == 'hbcus':
-        filters = ['document_schema:=education']
+        filters = ['document_category:=hbcu']  # Changed from document_schema:=education
     elif selected_topic == 'film':
         filters = ['(document_schema:=culture || document_schema:=media)']
+    elif selected_topic == 'music':
+        filters = ['document_schema:=culture', 'document_category:=music']
+    elif selected_topic == 'art':
+        filters = ['document_schema:=culture', 'document_category:=art']
+    elif selected_topic == 'literature':
+        filters = ['document_schema:=culture', 'document_category:=literature']
+    elif selected_topic == 'food':
+        filters = ['document_schema:=culture', 'document_category:=food']
+    elif selected_topic == 'fashion':
+        filters = ['document_schema:=culture', 'document_category:=fashion']
+    elif selected_topic == 'history':
+        filters = ['document_schema:=culture', 'document_category:=history']
+    elif selected_topic == 'theater':
+        filters = ['document_schema:=culture', 'document_category:=theater']
+    elif selected_topic == 'events':
+        filters = ['document_schema:=culture', 'document_category:=events']
     
+    # Additional filters from sidebar
     if selected_category:
         filters.append(f'document_category:={selected_category}')
     if selected_brand:
@@ -4841,9 +4956,10 @@ def culture_category(request, city: str):
     total = safe_get_total(results)
     facets = parse_facets(results)
     
+    # HBCU Spotlight - FIX: filter by document_category:=hbcu
     hbcu_results = typesense_search(
-        query='university college',
-        filter_by='document_schema:=education',
+        query='*',
+        filter_by='document_category:=hbcu',  # Changed from document_schema:=education
         sort_by='authority_score:desc',
         per_page=4,
     )
@@ -4892,7 +5008,6 @@ def culture_category(request, city: str):
     }
     
     return render(request, 'category_culture.html', context)
-
 
 # =============================================================================
 # VIEW: HEALTH CATEGORY
