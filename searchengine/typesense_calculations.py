@@ -14005,7 +14005,7 @@ SOURCE_AUTHORITY = {
 # ============================================================================
 
 VALID_DATA_TYPES = frozenset([
-    'content', 'service', 'product', 'person', 'media', 'location'
+    'article', 'person', 'business', 'place', 'media', 'event', 'product'
 ])
 
 VALID_SCHEMAS = frozenset([
@@ -15231,13 +15231,14 @@ def get_tab_facets(query: str) -> dict:
         
         # Label mappings
         data_type_labels = {
-            'content': 'Articles',
-            'service': 'Services',
-            'product': 'Products',
-            'person': 'People',
-            'media': 'Media',
-            'location': 'Places',
-        }
+                    'article': 'Articles',
+                    'person': 'People',
+                    'business': 'Businesses',
+                    'place': 'Places',
+                    'media': 'Media',
+                    'event': 'Events',
+                    'product': 'Products',
+                }
         
         category_labels = {
             'healthcare_medical': 'Healthcare',
