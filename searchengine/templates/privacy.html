@@ -1,0 +1,1182 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-75PTNSEVFH"></script>
+    <script>
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){dataLayer.push(arguments);}
+        gtag('js', new Date());
+        gtag('config', 'G-75PTNSEVFH');
+    </script>
+
+    <title>Privacy Policy | AfroTodo</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="description" content="AfroTodo Privacy Policy - Learn how we collect, use, and protect your personal information.">
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700;800&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --black: #1a1a1a;
+            --green: #2d6a4f;
+            --green-light: #40916c;
+            --gold: #d4a03a;
+            --gold-light: #e9c46a;
+            --red: #bc4749;
+            --red-deep: #9b2226;
+            --cream: #faf8f5;
+            --warm-white: #fffef9;
+            --gray-100: #f5f3f0;
+            --gray-200: #e8e4df;
+            --gray-300: #d4cfc8;
+            --gray-500: #8a8279;
+            --gray-700: #4a4640;
+            
+            --font-display: 'Playfair Display', Georgia, serif;
+            --font-body: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+            
+            --space-xs: 4px;
+            --space-sm: 8px;
+            --space-md: 16px;
+            --space-lg: 24px;
+            --space-xl: 32px;
+            --space-2xl: 48px;
+            
+            --transition-fast: 150ms ease;
+            --transition-base: 250ms ease;
+        }
+
+        *, *::before, *::after {
+            box-sizing: border-box;
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            font-family: var(--font-body);
+            color: var(--black);
+            background-color: var(--cream);
+            overflow-x: hidden;
+            width: 100%;
+            -webkit-text-size-adjust: 100%;
+            line-height: 1.6;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: 
+                radial-gradient(circle at 20% 80%, rgba(45, 106, 79, 0.03) 0%, transparent 50%),
+                radial-gradient(circle at 80% 20%, rgba(212, 160, 58, 0.03) 0%, transparent 50%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .page-wrapper {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            z-index: 1;
+        }
+
+        .main-content {
+            flex: 1;
+            padding-top: 80px;
+        }
+
+        /* ==================== HEADER ==================== */
+        .header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: var(--space-md) var(--space-lg);
+            background: rgba(250, 248, 245, 0.9);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--gray-200);
+            z-index: 100;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: var(--space-md);
+        }
+
+        .menu-toggle {
+            display: none;
+            width: 40px;
+            height: 40px;
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            padding: var(--space-sm);
+            border-radius: 8px;
+            color: var(--gray-700);
+            transition: background var(--transition-fast);
+        }
+
+        .menu-toggle:hover {
+            background: var(--gray-100);
+        }
+
+        .header-logo {
+            font-family: var(--font-display);
+            font-size: 24px;
+            font-weight: 700;
+            text-decoration: none;
+            display: flex;
+            align-items: baseline;
+            gap: 2px;
+        }
+
+        .header-logo .logo-a { color: var(--black); }
+        .header-logo .logo-f { color: var(--green); }
+        .header-logo .logo-r { color: var(--gold); }
+        .header-logo .logo-o { color: var(--red); }
+        .header-logo .logo-text { color: var(--black); }
+
+        .header-nav {
+            display: flex;
+            gap: var(--space-xs);
+        }
+
+        .nav-link {
+            padding: var(--space-sm) var(--space-md);
+            text-decoration: none;
+            color: var(--gray-700);
+            font-size: 14px;
+            font-weight: 500;
+            border-radius: 8px;
+            transition: all var(--transition-fast);
+        }
+
+        .nav-link:hover {
+            background: var(--gray-100);
+            color: var(--black);
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: var(--space-sm);
+        }
+
+        .auth-link {
+            padding: var(--space-sm) var(--space-md);
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
+            border-radius: 8px;
+            transition: all var(--transition-fast);
+        }
+
+        .auth-link.login {
+            color: var(--gray-700);
+        }
+
+        .auth-link.login:hover {
+            color: var(--black);
+            background: var(--gray-100);
+        }
+
+        .auth-link.signup {
+            background: var(--black);
+            color: var(--warm-white);
+        }
+
+        .auth-link.signup:hover {
+            background: var(--gray-700);
+        }
+
+        /* ==================== PAGE HEADER ==================== */
+        .page-header {
+            background: linear-gradient(135deg, var(--black) 0%, var(--gray-700) 100%);
+            color: white;
+            padding: clamp(40px, 8vw, 60px) var(--space-lg);
+            text-align: center;
+        }
+
+        .page-header h1 {
+            font-family: var(--font-display);
+            font-size: clamp(1.8rem, 5vw, 2.5rem);
+            font-weight: 700;
+            margin: 0 0 var(--space-sm) 0;
+        }
+
+        .page-header .effective-date {
+            font-size: clamp(0.9rem, 2vw, 1rem);
+            opacity: 0.8;
+            margin: 0;
+        }
+
+        /* ==================== POLICY CONTENT ==================== */
+        .policy-container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: clamp(30px, 6vw, 60px) var(--space-lg);
+        }
+
+        .policy-intro {
+            background: var(--warm-white);
+            border: 1px solid var(--gray-200);
+            border-radius: 12px;
+            padding: clamp(20px, 4vw, 30px);
+            margin-bottom: var(--space-xl);
+        }
+
+        .policy-intro p {
+            margin: 0;
+            color: var(--gray-700);
+            font-size: clamp(0.95rem, 2vw, 1.05rem);
+            line-height: 1.8;
+        }
+
+        .policy-section {
+            margin-bottom: var(--space-2xl);
+        }
+
+        .policy-section h2 {
+            font-family: var(--font-display);
+            font-size: clamp(1.3rem, 3.5vw, 1.6rem);
+            font-weight: 700;
+            color: var(--black);
+            margin: 0 0 var(--space-md) 0;
+            padding-bottom: var(--space-sm);
+            border-bottom: 3px solid var(--green);
+            display: inline-block;
+        }
+
+        .policy-section h3 {
+            font-family: var(--font-body);
+            font-size: clamp(1rem, 2.5vw, 1.15rem);
+            font-weight: 600;
+            color: var(--black);
+            margin: var(--space-lg) 0 var(--space-sm) 0;
+        }
+
+        .policy-section h4 {
+            font-family: var(--font-body);
+            font-size: clamp(0.95rem, 2vw, 1.05rem);
+            font-weight: 600;
+            color: var(--gray-700);
+            margin: var(--space-md) 0 var(--space-sm) 0;
+        }
+
+        .policy-section p {
+            color: var(--gray-700);
+            font-size: clamp(0.9rem, 2vw, 1rem);
+            line-height: 1.8;
+            margin: 0 0 var(--space-md) 0;
+        }
+
+        .policy-section ul,
+        .policy-section ol {
+            color: var(--gray-700);
+            font-size: clamp(0.9rem, 2vw, 1rem);
+            line-height: 1.8;
+            margin: 0 0 var(--space-md) 0;
+            padding-left: var(--space-lg);
+        }
+
+        .policy-section li {
+            margin-bottom: var(--space-sm);
+        }
+
+        .policy-section a {
+            color: var(--green);
+            text-decoration: none;
+            transition: color var(--transition-fast);
+        }
+
+        .policy-section a:hover {
+            color: var(--green-light);
+            text-decoration: underline;
+        }
+
+        /* Highlight Boxes */
+        .highlight-box {
+            background: linear-gradient(135deg, rgba(45, 106, 79, 0.08) 0%, rgba(45, 106, 79, 0.03) 100%);
+            border-left: 4px solid var(--green);
+            padding: var(--space-md) var(--space-lg);
+            margin: var(--space-lg) 0;
+            border-radius: 0 8px 8px 0;
+        }
+
+        .highlight-box p {
+            margin: 0;
+        }
+
+        .highlight-box.warning {
+            background: linear-gradient(135deg, rgba(212, 160, 58, 0.1) 0%, rgba(212, 160, 58, 0.03) 100%);
+            border-left-color: var(--gold);
+        }
+
+        /* Data Table */
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: var(--space-lg) 0;
+            font-size: clamp(0.85rem, 2vw, 0.95rem);
+        }
+
+        .data-table th,
+        .data-table td {
+            padding: var(--space-sm) var(--space-md);
+            text-align: left;
+            border-bottom: 1px solid var(--gray-200);
+        }
+
+        .data-table th {
+            background: var(--gray-100);
+            font-weight: 600;
+            color: var(--black);
+        }
+
+        .data-table td {
+            color: var(--gray-700);
+        }
+
+        .data-table tr:hover td {
+            background: var(--gray-100);
+        }
+
+        /* Contact Box */
+        .contact-box {
+            background: var(--warm-white);
+            border: 2px solid var(--green);
+            border-radius: 12px;
+            padding: clamp(20px, 4vw, 30px);
+            margin-top: var(--space-xl);
+            text-align: center;
+        }
+
+        .contact-box h3 {
+            font-family: var(--font-display);
+            color: var(--black);
+            margin: 0 0 var(--space-sm) 0;
+        }
+
+        .contact-box p {
+            margin: 0;
+        }
+
+        .contact-box a {
+            color: var(--green);
+            font-weight: 600;
+        }
+
+        /* Table of Contents */
+        .toc {
+            background: var(--warm-white);
+            border: 1px solid var(--gray-200);
+            border-radius: 12px;
+            padding: clamp(20px, 4vw, 30px);
+            margin-bottom: var(--space-xl);
+        }
+
+        .toc h3 {
+            font-family: var(--font-display);
+            font-size: 1.1rem;
+            margin: 0 0 var(--space-md) 0;
+            color: var(--black);
+        }
+
+        .toc ol {
+            margin: 0;
+            padding-left: var(--space-lg);
+            columns: 2;
+            column-gap: var(--space-xl);
+        }
+
+        .toc li {
+            margin-bottom: var(--space-xs);
+            font-size: 0.9rem;
+            break-inside: avoid;
+        }
+
+        .toc a {
+            color: var(--gray-700);
+            text-decoration: none;
+            transition: color var(--transition-fast);
+        }
+
+        .toc a:hover {
+            color: var(--green);
+        }
+
+        /* ==================== FOOTER ==================== */
+        .footer {
+            padding: var(--space-xl) var(--space-lg);
+            border-top: 1px solid var(--gray-200);
+            background: var(--warm-white);
+        }
+
+        .footer-content {
+            max-width: 900px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: var(--space-md);
+        }
+
+        .footer-brand {
+            font-family: var(--font-display);
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--black);
+        }
+
+        .footer-links {
+            display: flex;
+            gap: var(--space-lg);
+            flex-wrap: wrap;
+        }
+
+        .footer-link {
+            font-size: 14px;
+            color: var(--gray-500);
+            text-decoration: none;
+            transition: color var(--transition-fast);
+        }
+
+        .footer-link:hover {
+            color: var(--black);
+        }
+
+        .footer-tagline {
+            font-size: 13px;
+            color: var(--gray-500);
+            text-align: center;
+            width: 100%;
+            margin-top: var(--space-md);
+            padding-top: var(--space-md);
+            border-top: 1px solid var(--gray-100);
+        }
+
+        /* ==================== MOBILE SIDEBAR ==================== */
+        .mobile-sidebar-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.4);
+            z-index: 200;
+            opacity: 0;
+            transition: opacity var(--transition-base);
+        }
+
+        .mobile-sidebar-overlay.show {
+            display: block;
+            opacity: 1;
+        }
+
+        .mobile-sidebar {
+            position: fixed;
+            top: 0;
+            left: -300px;
+            width: 300px;
+            height: 100%;
+            background: var(--warm-white);
+            z-index: 201;
+            transition: left var(--transition-base);
+            overflow-y: auto;
+            box-shadow: 4px 0 20px rgba(0, 0, 0, 0.1);
+        }
+
+        .mobile-sidebar.open {
+            left: 0;
+        }
+
+        .mobile-sidebar-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: var(--space-lg);
+            border-bottom: 1px solid var(--gray-200);
+        }
+
+        .mobile-sidebar-title {
+            font-family: var(--font-display);
+            font-size: 20px;
+            font-weight: 700;
+        }
+
+        .mobile-sidebar-close {
+            width: 36px;
+            height: 36px;
+            border: none;
+            background: var(--gray-100);
+            border-radius: 8px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--gray-700);
+            transition: background var(--transition-fast);
+        }
+
+        .mobile-sidebar-close:hover {
+            background: var(--gray-200);
+        }
+
+        .mobile-sidebar-nav {
+            padding: var(--space-md) 0;
+        }
+
+        .mobile-nav-item {
+            display: flex;
+            align-items: center;
+            gap: var(--space-md);
+            padding: var(--space-md) var(--space-lg);
+            text-decoration: none;
+            color: var(--gray-700);
+            font-weight: 500;
+            transition: all var(--transition-fast);
+        }
+
+        .mobile-nav-item:hover {
+            background: var(--gray-100);
+            color: var(--black);
+        }
+
+        .mobile-nav-item svg {
+            width: 22px;
+            height: 22px;
+            color: var(--gray-500);
+        }
+
+        .mobile-nav-divider {
+            height: 1px;
+            background: var(--gray-200);
+            margin: var(--space-sm) var(--space-lg);
+        }
+
+        /* ==================== RESPONSIVE ==================== */
+        @media (max-width: 768px) {
+            .header-nav {
+                display: none;
+            }
+
+            .menu-toggle {
+                display: flex;
+            }
+
+            .toc ol {
+                columns: 1;
+            }
+
+            .footer-content {
+                flex-direction: column;
+                text-align: center;
+            }
+
+            .footer-links {
+                justify-content: center;
+            }
+
+            .auth-link {
+                padding: var(--space-xs) var(--space-sm);
+                font-size: 13px;
+            }
+
+            .data-table {
+                display: block;
+                overflow-x: auto;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .policy-container {
+                padding-left: var(--space-md);
+                padding-right: var(--space-md);
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Mobile Sidebar Overlay -->
+    <div class="mobile-sidebar-overlay" id="mobile-sidebar-overlay"></div>
+    
+    <!-- Mobile Sidebar -->
+    <div class="mobile-sidebar" id="mobile-sidebar">
+        <div class="mobile-sidebar-header">
+            <span class="mobile-sidebar-title">
+                <span style="color: var(--black);">A</span><span style="color: var(--green);">f</span><span style="color: var(--gold);">r</span><span style="color: var(--red);">o</span>Todo
+            </span>
+            <button class="mobile-sidebar-close" id="mobile-sidebar-close">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M18 6L6 18M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+        <nav class="mobile-sidebar-nav">
+            <a href="" class="mobile-nav-item">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/>
+                </svg>
+                <span>Home</span>
+            </a>
+            <a href="" class="mobile-nav-item">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 7V3H2v18h20V7H12zM6 19H4v-2h2v2zm0-4H4v-2h2v2zm0-4H4V9h2v2zm0-4H4V5h2v2zm4 12H8v-2h2v2zm0-4H8v-2h2v2zm0-4H8V9h2v2zm0-4H8V5h2v2zm10 12h-8v-2h2v-2h-2v-2h2v-2h-2V9h8v10zm-2-8h-2v2h2v-2zm0 4h-2v2h2v-2z"/>
+                </svg>
+                <span>Business</span>
+            </a>
+            <a href="" class="mobile-nav-item">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9c0-.46-.04-.92-.1-1.36-.98 1.37-2.58 2.26-4.4 2.26-3.03 0-5.5-2.47-5.5-5.5 0-1.82.89-3.42 2.26-4.4-.44-.06-.9-.1-1.36-.1z"/>
+                </svg>
+                <span>Culture</span>
+            </a>
+            <a href="" class="mobile-nav-item">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                </svg>
+                <span>Health</span>
+            </a>
+            <a href="" class="mobile-nav-item">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z"/>
+                </svg>
+                <span>News</span>
+            </a>
+            <a href="" class="mobile-nav-item">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
+                </svg>
+                <span>About</span>
+            </a>
+            <div class="mobile-nav-divider"></div>
+            {% if user.is_authenticated %}
+            <a href="" class="mobile-nav-item">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/>
+                </svg>
+                <span>Logout</span>
+            </a>
+            {% else %}
+            <a href="" class="mobile-nav-item">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+                </svg>
+                <span>Login</span>
+            </a>
+            <a href="" class="mobile-nav-item">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M15 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-9-2V7H4v3H1v2h3v3h2v-3h3v-2H6zm9 4c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+                </svg>
+                <span>Sign Up</span>
+            </a>
+            {% endif %}
+        </nav>
+    </div>
+
+    <!-- Header -->
+    <header class="header">
+        <div class="header-left">
+            <button class="menu-toggle" id="mobile-menu-toggle">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M3 6h18M3 12h18M3 18h18"/>
+                </svg>
+            </button>
+            <a href="" class="header-logo">
+                <span class="logo-a">A</span><span class="logo-f">f</span><span class="logo-r">r</span><span class="logo-o">o</span><span class="logo-text">Todo</span>
+            </a>
+        </div>
+        
+        <nav class="header-nav">
+      <a href="{% url 'searchengine:category' 'business' %}" class="nav-link active">Business</a>
+                <a href="{% url 'searchengine:category' 'culture' %}" class="nav-link">Culture</a>
+                <a href="{% url 'searchengine:category' 'health' %}" class="nav-link">Health</a>
+                <a href="{% url 'searchengine:category' 'news' %}" class="nav-link">News</a>
+                <a href="{% url 'searchengine:category' 'community' %}" class="nav-link">Community</a>
+        </nav>
+
+        <div class="header-right">
+            {% if user.is_authenticated %}
+            <a href="" class="auth-link login">Logout</a>
+            {% else %}
+            <a href="" class="auth-link login">Login</a>
+            <a href="" class="auth-link signup">Sign Up</a>
+            {% endif %}
+        </div>
+    </header>
+
+    <main class="page-wrapper">
+        <div class="main-content">
+            <!-- Page Header -->
+            <section class="page-header">
+                <h1>Privacy Policy</h1>
+                <p class="effective-date">Effective Date: April 1, 2025</p>
+            </section>
+
+            <!-- Policy Content -->
+            <div class="policy-container">
+                
+                <!-- Introduction -->
+                <div class="policy-intro">
+                    <p>
+                        AfroTodo, LLC ("AfroTodo," "Company," "we," "us," or "our") provides this Privacy Policy because we know that you, like us, care about how your information is collected, used, shared, retained and secured. This Privacy Policy applies to information collected when you visit our website, use our mobile applications, or access our services (collectively, our "Platform").
+                    </p>
+                </div>
+
+                <!-- Table of Contents -->
+                <div class="toc">
+                    <h3>Table of Contents</h3>
+                    <ol>
+                        <li><a href="#definitions">Definitions</a></li>
+                        <li><a href="#data-collected">Types of Data Collected</a></li>
+                        <li><a href="#search-data">Search Data & AI</a></li>
+                        <li><a href="#business-listings">Business Directory Data</a></li>
+                        <li><a href="#cookies">Cookies & Tracking</a></li>
+                        <li><a href="#use-of-data">Use of Data</a></li>
+                        <li><a href="#retention">Retention of Data</a></li>
+                        <li><a href="#transfer">Transfer of Data</a></li>
+                        <li><a href="#security">Security of Data</a></li>
+                        <li><a href="#sharing">Sharing Your Information</a></li>
+                        <li><a href="#third-party">Third-Party Services</a></li>
+                        <li><a href="#children">Children's Privacy</a></li>
+                        <li><a href="#california">California Residents</a></li>
+                        <li><a href="#nevada">Nevada Residents</a></li>
+                        <li><a href="#gdpr">European Data Subjects (GDPR)</a></li>
+                        <li><a href="#changes">Changes to This Policy</a></li>
+                        <li><a href="#contact">Contact Us</a></li>
+                    </ol>
+                </div>
+
+                <!-- Section 1: Definitions -->
+                <section class="policy-section" id="definitions">
+                    <h2>1. Definitions</h2>
+                    
+                    <p><strong>Personal Data</strong> means data about a living individual who can be identified from those data (or from those and other information either in our possession or likely to come into our possession).</p>
+                    
+                    <p><strong>Usage Data</strong> is data collected automatically either generated by the use of the Platform or from the Platform infrastructure itself (for example, the duration of a page visit).</p>
+                    
+                    <p><strong>Cookies</strong> are small pieces of data stored on your device (computer or mobile device).</p>
+                    
+                    <p><strong>Data Controller</strong> means the natural or legal person who (either alone or jointly or in common with other persons) determines the purposes for which and the manner in which any personal information are, or are to be, processed. For the purpose of this Privacy Policy, we are a Data Controller of your Personal Data.</p>
+                    
+                    <p><strong>Data Processor (or Service Provider)</strong> means any natural or legal person who processes the data on behalf of the Data Controller. We may use the services of various Service Providers in order to process your data more effectively.</p>
+                    
+                    <p><strong>Data Subject (or User)</strong> is any living individual who is using our Platform and is the subject of Personal Data.</p>
+                </section>
+
+                <!-- Section 2: Types of Data Collected -->
+                <section class="policy-section" id="data-collected">
+                    <h2>2. Types of Data Collected</h2>
+                    
+                    <p>We collect information about you when you use the Platform, including, but not limited to, information you provide when you register an account, access our content, update your profile, participate in a promotion, make a purchase, or contact our customer support.</p>
+                    
+                    <h3>Personal Data We May Collect</h3>
+                    <ul>
+                        <li>Email address</li>
+                        <li>First name and last name</li>
+                        <li>Phone number</li>
+                        <li>Address, City, State, ZIP/Postal code, Country</li>
+                        <li>Financial information for purchases</li>
+                        <li>Cookies and Usage Data</li>
+                    </ul>
+
+                    <h3>Information Collected Automatically</h3>
+                    <p>We automatically collect information when you use the Platform, which may include:</p>
+                    <ul>
+                        <li><strong>Service Use Data:</strong> Pages you visit, features you use, time of day, products and services you view</li>
+                        <li><strong>Device Information:</strong> Device type (mobile, tablet, desktop), browser type and version, operating system</li>
+                        <li><strong>Session Information:</strong> Session duration, page visits, interaction patterns, referral source</li>
+                        <li><strong>Geo-locational Information:</strong> Approximate location (city/region level) when enabled</li>
+                    </ul>
+                </section>
+
+                <!-- Section 3: Search Data & AI (NEW) -->
+                <section class="policy-section" id="search-data">
+                    <h2>3. Search Data & Artificial Intelligence</h2>
+                    
+                    <div class="highlight-box">
+                        <p><strong>Important:</strong> AfroTodo is a search engine, and search functionality is central to our Platform. This section explains how we handle your search data.</p>
+                    </div>
+
+                    <h3>Search Data We Collect</h3>
+                    <p>When you use our search functionality, we collect:</p>
+                    <ul>
+                        <li>Your search queries and keywords</li>
+                        <li>Search timestamp and frequency</li>
+                        <li>Whether you clicked on a search result</li>
+                        <li>Session information linked to your search</li>
+                        <li>Search refinements and filters used</li>
+                    </ul>
+
+                    <h3>How We Use Search Data</h3>
+                    <p>We use search data to:</p>
+                    <ul>
+                        <li>Provide relevant search results</li>
+                        <li>Improve search accuracy and relevance over time</li>
+                        <li>Understand what our community is looking for</li>
+                        <li>Generate aggregate insights about community interests</li>
+                        <li>Develop new features and content categories</li>
+                    </ul>
+
+                    <h3>Artificial Intelligence</h3>
+                    <p>AfroTodo uses artificial intelligence and machine learning to:</p>
+                    <ul>
+                        <li>Process and understand search queries</li>
+                        <li>Match you with relevant businesses, content, and resources</li>
+                        <li>Categorize and organize content</li>
+                        <li>Improve search results over time</li>
+                    </ul>
+                    <p>Your search queries and interactions help train our systems to better serve the Black community. We do not sell search data to third parties.</p>
+                </section>
+
+                <!-- Section 4: Business Directory Data (NEW) -->
+                <section class="policy-section" id="business-listings">
+                    <h2>4. Business Directory Data</h2>
+                    
+                    <h3>For Business Listings</h3>
+                    <p>For businesses listed in our directory, we collect and display:</p>
+                    <ul>
+                        <li>Business name and description</li>
+                        <li>Location and contact information</li>
+                        <li>Category and services offered</li>
+                        <li>Images, logos, and branding materials</li>
+                        <li>Social media links</li>
+                        <li>Hours of operation</li>
+                    </ul>
+                    
+                    <div class="highlight-box warning">
+                        <p><strong>Business Owners:</strong> By submitting a business listing, you consent to this information being publicly displayed and searchable on our Platform. You may request updates or removal of your listing by contacting us.</p>
+                    </div>
+
+                    <h3>For Users Searching Businesses</h3>
+                    <p>When you search for or interact with business listings, we may collect:</p>
+                    <ul>
+                        <li>Which businesses you view</li>
+                        <li>Searches that led you to specific businesses</li>
+                        <li>Whether you clicked on contact information or external links</li>
+                    </ul>
+                </section>
+
+                <!-- Section 5: Cookies & Tracking -->
+                <section class="policy-section" id="cookies">
+                    <h2>5. Cookies & Tracking Technologies</h2>
+                    
+                    <p>We use cookies and similar tracking technologies to collect and track information and to improve and analyze our Platform.</p>
+
+                    <h3>Types of Cookies We Use</h3>
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Cookie Type</th>
+                                <th>Purpose</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>Session Cookies</strong></td>
+                                <td>Operate our Platform and maintain your session while you browse</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Preference Cookies</strong></td>
+                                <td>Remember your preferences and settings</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Security Cookies</strong></td>
+                                <td>Security purposes and fraud prevention</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Analytics Cookies</strong></td>
+                                <td>Understand how visitors interact with our Platform</td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <h3>Other Tracking Technologies</h3>
+                    <p><strong>Pixels:</strong> Also known as web beacons, these are code embedded in our Platform that sends information about your use to a server. Pixels are used in combination with cookies to track activity.</p>
+                    
+                    <p><strong>Local Storage:</strong> We may use browser local storage to maintain session information and improve your experience.</p>
+
+                    <h3>Your Choices</h3>
+                    <p>You can instruct your browser to refuse all cookies or to indicate when a cookie is being sent. However, if you do not accept cookies, you may not be able to use some portions of our Platform.</p>
+                </section>
+
+                <!-- Section 6: Use of Data -->
+                <section class="policy-section" id="use-of-data">
+                    <h2>6. Use of Data</h2>
+                    
+                    <p>We use the collected data for various purposes:</p>
+                    <ul>
+                        <li>To provide and maintain our Platform</li>
+                        <li>To fulfill any purpose for which you provide it</li>
+                        <li>To notify you about changes to our Platform</li>
+                        <li>To allow you to participate in interactive features</li>
+                        <li>To provide customer support</li>
+                        <li>To gather analysis to improve our Platform</li>
+                        <li>To monitor the usage of our Platform</li>
+                        <li>To detect, prevent and address technical issues</li>
+                        <li>To provide news, offers and information about services similar to those you have used</li>
+                    </ul>
+                    
+                    <p>We may also use your Personal Data to contact you with newsletters, marketing or promotional materials. You may opt out of receiving these communications by following the unsubscribe instructions provided in any email we send.</p>
+                </section>
+
+                <!-- Section 7: Retention of Data -->
+                <section class="policy-section" id="retention">
+                    <h2>7. Retention of Data</h2>
+                    
+                    <p>We will retain your Personal Data only for as long as is necessary for the purposes set out in this Privacy Policy. We will retain and use your Personal Data to the extent necessary to:</p>
+                    <ul>
+                        <li>Comply with our legal obligations</li>
+                        <li>Resolve disputes</li>
+                        <li>Enforce our legal agreements and policies</li>
+                    </ul>
+                    
+                    <p>Usage Data is generally retained for a shorter period of time, except when this data is used to strengthen the security or improve the functionality of our Platform, or we are legally obligated to retain it longer.</p>
+                </section>
+
+                <!-- Section 8: Transfer of Data -->
+                <section class="policy-section" id="transfer">
+                    <h2>8. Transfer of Data</h2>
+                    
+                    <p>Your information, including Personal Data, may be transferred to — and maintained on — computers located outside of your state, province, country or other governmental jurisdiction where data protection laws may differ from those in your jurisdiction.</p>
+                    
+                    <p>If you are located outside the United States and choose to provide information to us, please note that we transfer the data, including Personal Data, to the United States and process it there.</p>
+                    
+                    <p>Your consent to this Privacy Policy followed by your submission of such information represents your agreement to that transfer.</p>
+                </section>
+
+                <!-- Section 9: Security of Data -->
+                <section class="policy-section" id="security">
+                    <h2>9. Security of Data</h2>
+                    
+                    <p>The security of your data is important to us. We use commercially acceptable means to protect your Personal Data, including:</p>
+                    <ul>
+                        <li>Encryption of data in transit</li>
+                        <li>Secure storage practices</li>
+                        <li>Access controls and authentication</li>
+                        <li>Regular security assessments</li>
+                    </ul>
+                    
+                    <p>However, no method of transmission over the Internet or method of electronic storage is 100% secure. While we strive to protect your Personal Data, we cannot guarantee its absolute security.</p>
+                </section>
+
+                <!-- Section 10: Sharing Your Information -->
+                <section class="policy-section" id="sharing">
+                    <h2>10. Sharing Your Information</h2>
+                    
+                    <p>We may share information in the following circumstances:</p>
+                    
+                    <h4>Partners</h4>
+                    <p>We may share information with partners in connection with offering co-branded services or engaging in joint activities.</p>
+                    
+                    <h4>Business Transfers</h4>
+                    <p>We may share information in the event of a merger, acquisition, reorganization, or sale of assets.</p>
+                    
+                    <h4>Legal Requirements</h4>
+                    <p>We may disclose your Personal Data if required by law or in response to valid requests by public authorities (e.g., a court or government agency).</p>
+                    
+                    <h4>Service Providers</h4>
+                    <p>We may share information with service providers who process data on our behalf. We contractually require them to protect your information and use it only for the services they provide to us.</p>
+                    
+                    <div class="highlight-box">
+                        <p><strong>We do not sell your personal information to third parties.</strong></p>
+                    </div>
+                </section>
+
+                <!-- Section 11: Third-Party Services -->
+                <section class="policy-section" id="third-party">
+                    <h2>11. Third-Party Services</h2>
+                    
+                    <p>We use the following third-party services to operate our Platform:</p>
+                    
+                    <h4>Analytics</h4>
+                    <p>We use Google Analytics to understand how visitors use our Platform. Google Analytics collects information such as how often users visit, what pages they visit, and what other sites they used prior to coming to our Platform.</p>
+                    
+                    <h4>Payment Processing</h4>
+                    <p>If applicable, we use third-party payment processors. We do not store or collect your payment card details. That information is provided directly to our payment processors whose use of your personal information is governed by their privacy policies.</p>
+                    
+                    <h4>Links to Other Sites</h4>
+                    <p>Our Platform may contain links to other sites not operated by us. If you click on a third-party link, you will be directed to that third party's site. We strongly advise you to review the Privacy Policy of every site you visit. We have no control over and assume no responsibility for the content, privacy policies, or practices of any third-party sites or services.</p>
+                </section>
+
+                <!-- Section 12: Children's Privacy -->
+                <section class="policy-section" id="children">
+                    <h2>12. Children's Privacy</h2>
+                    
+                    <p>Our Platform is not intended for children under 13 years of age. No one under age 13 may provide any personal information to or on the Platform. We do not knowingly collect personal information from children under 13.</p>
+                    
+                    <p>If you are under 13, do not use or provide any information on this Platform, register on the Platform, use any interactive features, or provide any information about yourself to us.</p>
+                    
+                    <p>If we learn we have collected personal information from a child under 13 without verification of parental consent, we will delete that information. If you believe we might have any information from or about a child under 13, please contact us.</p>
+                </section>
+
+                <!-- Section 13: California Residents -->
+                <section class="policy-section" id="california">
+                    <h2>13. Additional Disclosures for California Residents</h2>
+                    
+                    <p>If you are a California resident, California law may provide you with additional rights regarding our use of your personal information.</p>
+                    
+                    <h4>Do Not Track</h4>
+                    <p>We do not support Do Not Track ("DNT"). Do Not Track is a preference you can set in your web browser to inform websites that you do not want to be tracked. You can enable or disable Do Not Track by visiting the Preferences or Settings page of your web browser.</p>
+                    
+                    <h4>Your Rights</h4>
+                    <p>California residents may have the right to:</p>
+                    <ul>
+                        <li>Know what personal information is being collected</li>
+                        <li>Know whether personal information is sold or disclosed and to whom</li>
+                        <li>Say no to the sale of personal information</li>
+                        <li>Access your personal information</li>
+                        <li>Request deletion of your personal information</li>
+                        <li>Not be discriminated against for exercising your privacy rights</li>
+                    </ul>
+                    
+                    <p>To exercise these rights, please contact us using the information below.</p>
+                </section>
+
+                <!-- Section 14: Nevada Residents -->
+                <section class="policy-section" id="nevada">
+                    <h2>14. Additional Disclosures for Nevada Residents</h2>
+                    
+                    <p>Nevada law (NRS 603A.340) requires each business to establish a designated request address where Nevada consumers may submit requests directing the business not to sell certain kinds of personal information.</p>
+                    
+                    <p>If you are a Nevada consumer and wish to submit a request relating to our compliance with Nevada law, please contact us using the information below.</p>
+                </section>
+
+                <!-- Section 15: GDPR -->
+                <section class="policy-section" id="gdpr">
+                    <h2>15. Additional Disclosures for European Data Subjects (GDPR)</h2>
+                    
+                    <p>If you are from the European Economic Area (EEA), our legal basis for collecting and using personal information depends on the Personal Data we collect and the specific context in which we collect it.</p>
+                    
+                    <p>We may process your Personal Data because:</p>
+                    <ul>
+                        <li>We need to perform a contract with you</li>
+                        <li>You have given us permission to do so</li>
+                        <li>The processing is in our legitimate interests and not overridden by your rights</li>
+                        <li>For payment processing purposes</li>
+                        <li>To comply with the law</li>
+                    </ul>
+                    
+                    <h4>Your Data Protection Rights</h4>
+                    <p>If you are a resident of the EEA, you have certain data protection rights:</p>
+                    <ul>
+                        <li><strong>Right to Access:</strong> You can request copies of your personal data</li>
+                        <li><strong>Right to Rectification:</strong> You can request that we correct inaccurate information</li>
+                        <li><strong>Right to Erasure:</strong> You can request that we delete your personal data</li>
+                        <li><strong>Right to Restrict Processing:</strong> You can request that we restrict processing of your data</li>
+                        <li><strong>Right to Data Portability:</strong> You can request a copy of your data in a machine-readable format</li>
+                        <li><strong>Right to Object:</strong> You can object to our processing of your personal data</li>
+                        <li><strong>Right to Withdraw Consent:</strong> You can withdraw consent at any time</li>
+                    </ul>
+                    
+                    <p>You also have the right to complain to a Data Protection Authority about our collection and use of your Personal Data.</p>
+                </section>
+
+                <!-- Section 16: Changes -->
+                <section class="policy-section" id="changes">
+                    <h2>16. Changes to This Privacy Policy</h2>
+                    
+                    <p>We may update our Privacy Policy from time to time. We will notify you of any changes by posting the new Privacy Policy on this page and updating the "Effective Date" at the top.</p>
+                    
+                    <p>You are advised to review this Privacy Policy periodically for any changes. Changes to this Privacy Policy are effective when they are posted on this page.</p>
+                </section>
+
+                <!-- Section 17: Contact -->
+                <section class="policy-section" id="contact">
+                    <h2>17. Contact Us</h2>
+                    
+                    <div class="contact-box">
+                        <h3>Questions About This Policy?</h3>
+                        <p>If you have any questions about this Privacy Policy, please contact us:</p>
+                        <p><strong>Email:</strong> <a href="mailto:admin@afrotodo.com">admin@afrotodo.com</a></p>
+                    </div>
+                </section>
+
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <div class="footer-content">
+                <span class="footer-brand">AfroTodo</span>
+                <div class="footer-links">
+                    <a href="{% url 'searchengine:about' %}" class="footer-link">About</a>
+                    <a href="{% url 'accounts:register' %}" class="footer-link">Add Business</a>
+                    <a href="{% url 'searchengine:privacy' %}" class="footer-link">Privacy</a>
+                    <a href="{% url 'searchengine:term' %}" class="footer-link">Terms</a>
+                    <a href="{% url 'searchengine:contact' %}" class="footer-link">Contact</a>
+                </div>
+                <p class="footer-tagline">Shop Black. Learn Black. Own the future.</p>
+            </div>
+        </footer>
+    </main>
+
+    <!-- Mobile Sidebar Script -->
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const mobileMenuToggle = document.getElementById('mobile-menu-toggle');
+        const mobileSidebar = document.getElementById('mobile-sidebar');
+        const mobileSidebarOverlay = document.getElementById('mobile-sidebar-overlay');
+        const mobileSidebarClose = document.getElementById('mobile-sidebar-close');
+
+        function openMobileSidebar() {
+            if (mobileSidebar) mobileSidebar.classList.add('open');
+            if (mobileSidebarOverlay) mobileSidebarOverlay.classList.add('show');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeMobileSidebar() {
+            if (mobileSidebar) mobileSidebar.classList.remove('open');
+            if (mobileSidebarOverlay) mobileSidebarOverlay.classList.remove('show');
+            document.body.style.overflow = '';
+        }
+
+        if (mobileMenuToggle) mobileMenuToggle.addEventListener('click', openMobileSidebar);
+        if (mobileSidebarClose) mobileSidebarClose.addEventListener('click', closeMobileSidebar);
+        if (mobileSidebarOverlay) mobileSidebarOverlay.addEventListener('click', closeMobileSidebar);
+
+        document.querySelectorAll('.mobile-nav-item').forEach(item => {
+            item.addEventListener('click', closeMobileSidebar);
+        });
+
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') closeMobileSidebar();
+        });
+
+        // Smooth scroll for TOC links
+        document.querySelectorAll('.toc a').forEach(link => {
+            link.addEventListener('click', function(e) {
+                e.preventDefault();
+                const targetId = this.getAttribute('href').substring(1);
+                const targetElement = document.getElementById(targetId);
+                if (targetElement) {
+                    const headerOffset = 100;
+                    const elementPosition = targetElement.getBoundingClientRect().top;
+                    const offsetPosition = elementPosition + window.pageYOffset - headerOffset;
+                    window.scrollTo({
+                        top: offsetPosition,
+                        behavior: 'smooth'
+                    });
+                }
+            });
+        });
+    });
+    </script>
+</body>
+</html>

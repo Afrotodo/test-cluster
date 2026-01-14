@@ -1,0 +1,1193 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-75PTNSEVFH"></script>
+    <script>
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){dataLayer.push(arguments);}
+        gtag('js', new Date());
+        gtag('config', 'G-75PTNSEVFH');
+    </script>
+
+    <title>Terms of Service | AfroTodo</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="description" content="AfroTodo Terms of Service - The rules and guidelines for using our platform.">
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700;800&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --black: #1a1a1a;
+            --green: #2d6a4f;
+            --green-light: #40916c;
+            --gold: #d4a03a;
+            --gold-light: #e9c46a;
+            --red: #bc4749;
+            --red-deep: #9b2226;
+            --cream: #faf8f5;
+            --warm-white: #fffef9;
+            --gray-100: #f5f3f0;
+            --gray-200: #e8e4df;
+            --gray-300: #d4cfc8;
+            --gray-500: #8a8279;
+            --gray-700: #4a4640;
+            
+            --font-display: 'Playfair Display', Georgia, serif;
+            --font-body: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+            
+            --space-xs: 4px;
+            --space-sm: 8px;
+            --space-md: 16px;
+            --space-lg: 24px;
+            --space-xl: 32px;
+            --space-2xl: 48px;
+            
+            --transition-fast: 150ms ease;
+            --transition-base: 250ms ease;
+        }
+
+        *, *::before, *::after {
+            box-sizing: border-box;
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            font-family: var(--font-body);
+            color: var(--black);
+            background-color: var(--cream);
+            overflow-x: hidden;
+            width: 100%;
+            -webkit-text-size-adjust: 100%;
+            line-height: 1.6;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: 
+                radial-gradient(circle at 20% 80%, rgba(45, 106, 79, 0.03) 0%, transparent 50%),
+                radial-gradient(circle at 80% 20%, rgba(212, 160, 58, 0.03) 0%, transparent 50%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .page-wrapper {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            z-index: 1;
+        }
+
+        .main-content {
+            flex: 1;
+            padding-top: 80px;
+        }
+
+        /* ==================== HEADER ==================== */
+        .header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: var(--space-md) var(--space-lg);
+            background: rgba(250, 248, 245, 0.9);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--gray-200);
+            z-index: 100;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: var(--space-md);
+        }
+
+        .menu-toggle {
+            display: none;
+            width: 40px;
+            height: 40px;
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            padding: var(--space-sm);
+            border-radius: 8px;
+            color: var(--gray-700);
+            transition: background var(--transition-fast);
+        }
+
+        .menu-toggle:hover {
+            background: var(--gray-100);
+        }
+
+        .header-logo {
+            font-family: var(--font-display);
+            font-size: 24px;
+            font-weight: 700;
+            text-decoration: none;
+            display: flex;
+            align-items: baseline;
+            gap: 2px;
+        }
+
+        .header-logo .logo-a { color: var(--black); }
+        .header-logo .logo-f { color: var(--green); }
+        .header-logo .logo-r { color: var(--gold); }
+        .header-logo .logo-o { color: var(--red); }
+        .header-logo .logo-text { color: var(--black); }
+
+        .header-nav {
+            display: flex;
+            gap: var(--space-xs);
+        }
+
+        .nav-link {
+            padding: var(--space-sm) var(--space-md);
+            text-decoration: none;
+            color: var(--gray-700);
+            font-size: 14px;
+            font-weight: 500;
+            border-radius: 8px;
+            transition: all var(--transition-fast);
+        }
+
+        .nav-link:hover {
+            background: var(--gray-100);
+            color: var(--black);
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: var(--space-sm);
+        }
+
+        .auth-link {
+            padding: var(--space-sm) var(--space-md);
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
+            border-radius: 8px;
+            transition: all var(--transition-fast);
+        }
+
+        .auth-link.login {
+            color: var(--gray-700);
+        }
+
+        .auth-link.login:hover {
+            color: var(--black);
+            background: var(--gray-100);
+        }
+
+        .auth-link.signup {
+            background: var(--black);
+            color: var(--warm-white);
+        }
+
+        .auth-link.signup:hover {
+            background: var(--gray-700);
+        }
+
+        /* ==================== PAGE HEADER ==================== */
+        .page-header {
+            background: linear-gradient(135deg, var(--green) 0%, #1b4332 100%);
+            color: white;
+            padding: clamp(40px, 8vw, 60px) var(--space-lg);
+            text-align: center;
+        }
+
+        .page-header h1 {
+            font-family: var(--font-display);
+            font-size: clamp(1.8rem, 5vw, 2.5rem);
+            font-weight: 700;
+            margin: 0 0 var(--space-sm) 0;
+        }
+
+        .page-header .effective-date {
+            font-size: clamp(0.9rem, 2vw, 1rem);
+            opacity: 0.8;
+            margin: 0;
+        }
+
+        /* ==================== TERMS CONTENT ==================== */
+        .terms-container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: clamp(30px, 6vw, 60px) var(--space-lg);
+        }
+
+        .terms-intro {
+            background: var(--warm-white);
+            border: 1px solid var(--gray-200);
+            border-radius: 12px;
+            padding: clamp(20px, 4vw, 30px);
+            margin-bottom: var(--space-xl);
+        }
+
+        .terms-intro p {
+            margin: 0;
+            color: var(--gray-700);
+            font-size: clamp(0.95rem, 2vw, 1.05rem);
+            line-height: 1.8;
+        }
+
+        .terms-section {
+            margin-bottom: var(--space-2xl);
+        }
+
+        .terms-section h2 {
+            font-family: var(--font-display);
+            font-size: clamp(1.3rem, 3.5vw, 1.6rem);
+            font-weight: 700;
+            color: var(--black);
+            margin: 0 0 var(--space-md) 0;
+            padding-bottom: var(--space-sm);
+            border-bottom: 3px solid var(--gold);
+            display: inline-block;
+        }
+
+        .terms-section h3 {
+            font-family: var(--font-body);
+            font-size: clamp(1rem, 2.5vw, 1.15rem);
+            font-weight: 600;
+            color: var(--black);
+            margin: var(--space-lg) 0 var(--space-sm) 0;
+        }
+
+        .terms-section h4 {
+            font-family: var(--font-body);
+            font-size: clamp(0.95rem, 2vw, 1.05rem);
+            font-weight: 600;
+            color: var(--gray-700);
+            margin: var(--space-md) 0 var(--space-sm) 0;
+        }
+
+        .terms-section p {
+            color: var(--gray-700);
+            font-size: clamp(0.9rem, 2vw, 1rem);
+            line-height: 1.8;
+            margin: 0 0 var(--space-md) 0;
+        }
+
+        .terms-section ul,
+        .terms-section ol {
+            color: var(--gray-700);
+            font-size: clamp(0.9rem, 2vw, 1rem);
+            line-height: 1.8;
+            margin: 0 0 var(--space-md) 0;
+            padding-left: var(--space-lg);
+        }
+
+        .terms-section li {
+            margin-bottom: var(--space-sm);
+        }
+
+        .terms-section a {
+            color: var(--green);
+            text-decoration: none;
+            transition: color var(--transition-fast);
+        }
+
+        .terms-section a:hover {
+            color: var(--green-light);
+            text-decoration: underline;
+        }
+
+        /* Highlight Boxes */
+        .highlight-box {
+            background: linear-gradient(135deg, rgba(45, 106, 79, 0.08) 0%, rgba(45, 106, 79, 0.03) 100%);
+            border-left: 4px solid var(--green);
+            padding: var(--space-md) var(--space-lg);
+            margin: var(--space-lg) 0;
+            border-radius: 0 8px 8px 0;
+        }
+
+        .highlight-box p {
+            margin: 0;
+        }
+
+        .highlight-box.warning {
+            background: linear-gradient(135deg, rgba(212, 160, 58, 0.1) 0%, rgba(212, 160, 58, 0.03) 100%);
+            border-left-color: var(--gold);
+        }
+
+        .highlight-box.important {
+            background: linear-gradient(135deg, rgba(188, 71, 73, 0.08) 0%, rgba(188, 71, 73, 0.03) 100%);
+            border-left-color: var(--red);
+        }
+
+        /* Contact Box */
+        .contact-box {
+            background: var(--warm-white);
+            border: 2px solid var(--green);
+            border-radius: 12px;
+            padding: clamp(20px, 4vw, 30px);
+            margin-top: var(--space-xl);
+            text-align: center;
+        }
+
+        .contact-box h3 {
+            font-family: var(--font-display);
+            color: var(--black);
+            margin: 0 0 var(--space-sm) 0;
+        }
+
+        .contact-box p {
+            margin: 0;
+        }
+
+        .contact-box a {
+            color: var(--green);
+            font-weight: 600;
+        }
+
+        /* Table of Contents */
+        .toc {
+            background: var(--warm-white);
+            border: 1px solid var(--gray-200);
+            border-radius: 12px;
+            padding: clamp(20px, 4vw, 30px);
+            margin-bottom: var(--space-xl);
+        }
+
+        .toc h3 {
+            font-family: var(--font-display);
+            font-size: 1.1rem;
+            margin: 0 0 var(--space-md) 0;
+            color: var(--black);
+        }
+
+        .toc ol {
+            margin: 0;
+            padding-left: var(--space-lg);
+            columns: 2;
+            column-gap: var(--space-xl);
+        }
+
+        .toc li {
+            margin-bottom: var(--space-xs);
+            font-size: 0.9rem;
+            break-inside: avoid;
+        }
+
+        .toc a {
+            color: var(--gray-700);
+            text-decoration: none;
+            transition: color var(--transition-fast);
+        }
+
+        .toc a:hover {
+            color: var(--green);
+        }
+
+        /* ==================== FOOTER ==================== */
+        .footer {
+            padding: var(--space-xl) var(--space-lg);
+            border-top: 1px solid var(--gray-200);
+            background: var(--warm-white);
+        }
+
+        .footer-content {
+            max-width: 900px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: var(--space-md);
+        }
+
+        .footer-brand {
+            font-family: var(--font-display);
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--black);
+        }
+
+        .footer-links {
+            display: flex;
+            gap: var(--space-lg);
+            flex-wrap: wrap;
+        }
+
+        .footer-link {
+            font-size: 14px;
+            color: var(--gray-500);
+            text-decoration: none;
+            transition: color var(--transition-fast);
+        }
+
+        .footer-link:hover {
+            color: var(--black);
+        }
+
+        .footer-tagline {
+            font-size: 13px;
+            color: var(--gray-500);
+            text-align: center;
+            width: 100%;
+            margin-top: var(--space-md);
+            padding-top: var(--space-md);
+            border-top: 1px solid var(--gray-100);
+        }
+
+        /* ==================== MOBILE SIDEBAR ==================== */
+        .mobile-sidebar-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.4);
+            z-index: 200;
+            opacity: 0;
+            transition: opacity var(--transition-base);
+        }
+
+        .mobile-sidebar-overlay.show {
+            display: block;
+            opacity: 1;
+        }
+
+        .mobile-sidebar {
+            position: fixed;
+            top: 0;
+            left: -300px;
+            width: 300px;
+            height: 100%;
+            background: var(--warm-white);
+            z-index: 201;
+            transition: left var(--transition-base);
+            overflow-y: auto;
+            box-shadow: 4px 0 20px rgba(0, 0, 0, 0.1);
+        }
+
+        .mobile-sidebar.open {
+            left: 0;
+        }
+
+        .mobile-sidebar-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: var(--space-lg);
+            border-bottom: 1px solid var(--gray-200);
+        }
+
+        .mobile-sidebar-title {
+            font-family: var(--font-display);
+            font-size: 20px;
+            font-weight: 700;
+        }
+
+        .mobile-sidebar-close {
+            width: 36px;
+            height: 36px;
+            border: none;
+            background: var(--gray-100);
+            border-radius: 8px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--gray-700);
+            transition: background var(--transition-fast);
+        }
+
+        .mobile-sidebar-close:hover {
+            background: var(--gray-200);
+        }
+
+        .mobile-sidebar-nav {
+            padding: var(--space-md) 0;
+        }
+
+        .mobile-nav-item {
+            display: flex;
+            align-items: center;
+            gap: var(--space-md);
+            padding: var(--space-md) var(--space-lg);
+            text-decoration: none;
+            color: var(--gray-700);
+            font-weight: 500;
+            transition: all var(--transition-fast);
+        }
+
+        .mobile-nav-item:hover {
+            background: var(--gray-100);
+            color: var(--black);
+        }
+
+        .mobile-nav-item svg {
+            width: 22px;
+            height: 22px;
+            color: var(--gray-500);
+        }
+
+        .mobile-nav-divider {
+            height: 1px;
+            background: var(--gray-200);
+            margin: var(--space-sm) var(--space-lg);
+        }
+
+        /* ==================== RESPONSIVE ==================== */
+        @media (max-width: 768px) {
+            .header-nav {
+                display: none;
+            }
+
+            .menu-toggle {
+                display: flex;
+            }
+
+            .toc ol {
+                columns: 1;
+            }
+
+            .footer-content {
+                flex-direction: column;
+                text-align: center;
+            }
+
+            .footer-links {
+                justify-content: center;
+            }
+
+            .auth-link {
+                padding: var(--space-xs) var(--space-sm);
+                font-size: 13px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .terms-container {
+                padding-left: var(--space-md);
+                padding-right: var(--space-md);
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Mobile Sidebar Overlay -->
+    <div class="mobile-sidebar-overlay" id="mobile-sidebar-overlay"></div>
+    
+    <!-- Mobile Sidebar -->
+    <div class="mobile-sidebar" id="mobile-sidebar">
+        <div class="mobile-sidebar-header">
+            <span class="mobile-sidebar-title">
+                <span style="color: var(--black);">A</span><span style="color: var(--green);">f</span><span style="color: var(--gold);">r</span><span style="color: var(--red);">o</span>Todo
+            </span>
+            <button class="mobile-sidebar-close" id="mobile-sidebar-close">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M18 6L6 18M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+        <nav class="mobile-sidebar-nav">
+            <a href="" class="mobile-nav-item">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/>
+                </svg>
+                <span>Home</span>
+            </a>
+            <a href="" class="mobile-nav-item">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 7V3H2v18h20V7H12zM6 19H4v-2h2v2zm0-4H4v-2h2v2zm0-4H4V9h2v2zm0-4H4V5h2v2zm4 12H8v-2h2v2zm0-4H8v-2h2v2zm0-4H8V9h2v2zm0-4H8V5h2v2zm10 12h-8v-2h2v-2h-2v-2h2v-2h-2V9h8v10zm-2-8h-2v2h2v-2zm0 4h-2v2h2v-2z"/>
+                </svg>
+                <span>Business</span>
+            </a>
+            <a href="" class="mobile-nav-item">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9c0-.46-.04-.92-.1-1.36-.98 1.37-2.58 2.26-4.4 2.26-3.03 0-5.5-2.47-5.5-5.5 0-1.82.89-3.42 2.26-4.4-.44-.06-.9-.1-1.36-.1z"/>
+                </svg>
+                <span>Culture</span>
+            </a>
+            <a href="" class="mobile-nav-item">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                </svg>
+                <span>Health</span>
+            </a>
+            <a href="" class="mobile-nav-item">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z"/>
+                </svg>
+                <span>News</span>
+            </a>
+            <a href="" class="mobile-nav-item">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
+                </svg>
+                <span>About</span>
+            </a>
+            <div class="mobile-nav-divider"></div>
+            {% if user.is_authenticated %}
+            <a href="" class="mobile-nav-item">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/>
+                </svg>
+                <span>Logout</span>
+            </a>
+            {% else %}
+            <a href="" class="mobile-nav-item">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+                </svg>
+                <span>Login</span>
+            </a>
+            <a href="" class="mobile-nav-item">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M15 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-9-2V7H4v3H1v2h3v3h2v-3h3v-2H6zm9 4c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+                </svg>
+                <span>Sign Up</span>
+            </a>
+            {% endif %}
+        </nav>
+    </div>
+
+    <!-- Header -->
+    <header class="header">
+        <div class="header-left">
+            <button class="menu-toggle" id="mobile-menu-toggle">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M3 6h18M3 12h18M3 18h18"/>
+                </svg>
+            </button>
+            <a href="" class="header-logo">
+                <span class="logo-a">A</span><span class="logo-f">f</span><span class="logo-r">r</span><span class="logo-o">o</span><span class="logo-text">Todo</span>
+            </a>
+        </div>
+        
+        <nav class="header-nav">
+    <a href="{% url 'searchengine:category' 'business' %}" class="nav-link active">Business</a>
+                <a href="{% url 'searchengine:category' 'culture' %}" class="nav-link">Culture</a>
+                <a href="{% url 'searchengine:category' 'health' %}" class="nav-link">Health</a>
+                <a href="{% url 'searchengine:category' 'news' %}" class="nav-link">News</a>
+                <a href="{% url 'searchengine:category' 'community' %}" class="nav-link">Community</a>
+        </nav>
+
+        <div class="header-right">
+            {% if user.is_authenticated %}
+            <a href="" class="auth-link login">Logout</a>
+            {% else %}
+            <a href="" class="auth-link login">Login</a>
+            <a href="" class="auth-link signup">Sign Up</a>
+            {% endif %}
+        </div>
+    </header>
+
+    <main class="page-wrapper">
+        <div class="main-content">
+            <!-- Page Header -->
+            <section class="page-header">
+                <h1>Terms of Service</h1>
+                <p class="effective-date">Effective Date: April 1, 2025</p>
+            </section>
+
+            <!-- Terms Content -->
+            <div class="terms-container">
+                
+                <!-- Introduction -->
+                <div class="terms-intro">
+                    <p>
+                        Welcome to AfroTodo. These Terms of Service ("Terms") govern your access to and use of our website, mobile applications, and services (collectively, the "Platform"). By accessing or using AfroTodo, you agree to be bound by these Terms. If you do not agree to these Terms, do not use our Platform.
+                    </p>
+                </div>
+
+                <!-- Table of Contents -->
+                <div class="toc">
+                    <h3>Table of Contents</h3>
+                    <ol>
+                        <li><a href="#acceptance">Acceptance of Terms</a></li>
+                        <li><a href="#about">About AfroTodo</a></li>
+                        <li><a href="#eligibility">Eligibility</a></li>
+                        <li><a href="#accounts">User Accounts</a></li>
+                        <li><a href="#search">Search Services</a></li>
+                        <li><a href="#business-listings">Business Listings</a></li>
+                        <li><a href="#user-content">User Content</a></li>
+                        <li><a href="#prohibited">Prohibited Conduct</a></li>
+                        <li><a href="#intellectual-property">Intellectual Property</a></li>
+                        <li><a href="#third-party">Third-Party Links & Services</a></li>
+                        <li><a href="#disclaimers">Disclaimers</a></li>
+                        <li><a href="#limitation">Limitation of Liability</a></li>
+                        <li><a href="#indemnification">Indemnification</a></li>
+                        <li><a href="#termination">Termination</a></li>
+                        <li><a href="#governing-law">Governing Law</a></li>
+                        <li><a href="#disputes">Dispute Resolution</a></li>
+                        <li><a href="#changes">Changes to Terms</a></li>
+                        <li><a href="#contact">Contact Us</a></li>
+                    </ol>
+                </div>
+
+                <!-- Section 1: Acceptance of Terms -->
+                <section class="terms-section" id="acceptance">
+                    <h2>1. Acceptance of Terms</h2>
+                    
+                    <p>By accessing or using the AfroTodo Platform, you acknowledge that you have read, understood, and agree to be bound by these Terms of Service and our Privacy Policy, which is incorporated herein by reference.</p>
+                    
+                    <p>If you are using the Platform on behalf of a business or other entity, you represent and warrant that you have the authority to bind that entity to these Terms, in which case "you" refers to that entity.</p>
+                    
+                    <div class="highlight-box important">
+                        <p><strong>Important:</strong> Your continued use of the Platform following the posting of any changes to these Terms constitutes acceptance of those changes.</p>
+                    </div>
+                </section>
+
+                <!-- Section 2: About AfroTodo -->
+                <section class="terms-section" id="about">
+                    <h2>2. About AfroTodo</h2>
+                    
+                    <p>AfroTodo is an AI-powered search engine and directory built for and by the Black community. Our Platform provides:</p>
+                    <ul>
+                        <li>Search functionality to discover Black-owned businesses, cultural content, health resources, and community information</li>
+                        <li>A business directory featuring Black-owned businesses</li>
+                        <li>Curated content related to Black culture, history, health, and community</li>
+                        <li>Tools for businesses to list and promote their services</li>
+                    </ul>
+                    
+                    <p>AfroTodo is committed to preserving and amplifying Black voices, supporting Black economic power, and providing a trusted resource for our global community.</p>
+                </section>
+
+                <!-- Section 3: Eligibility -->
+                <section class="terms-section" id="eligibility">
+                    <h2>3. Eligibility</h2>
+                    
+                    <p>To use the AfroTodo Platform, you must:</p>
+                    <ul>
+                        <li>Be at least 13 years of age (or the minimum age required in your jurisdiction)</li>
+                        <li>Have the legal capacity to enter into a binding agreement</li>
+                        <li>Not be prohibited from using the Platform under applicable laws</li>
+                        <li>Not have been previously banned or removed from the Platform</li>
+                    </ul>
+                    
+                    <p>If you are under 18, you represent that you have your parent or guardian's permission to use the Platform and that they have agreed to these Terms on your behalf.</p>
+                </section>
+
+                <!-- Section 4: User Accounts -->
+                <section class="terms-section" id="accounts">
+                    <h2>4. User Accounts</h2>
+                    
+                    <h3>Account Creation</h3>
+                    <p>Some features of the Platform may require you to create an account. When you create an account, you agree to:</p>
+                    <ul>
+                        <li>Provide accurate, current, and complete information</li>
+                        <li>Maintain and promptly update your account information</li>
+                        <li>Keep your password secure and confidential</li>
+                        <li>Notify us immediately of any unauthorized access to your account</li>
+                        <li>Accept responsibility for all activities that occur under your account</li>
+                    </ul>
+
+                    <h3>Account Security</h3>
+                    <p>You are responsible for safeguarding your account credentials. AfroTodo will not be liable for any loss or damage arising from your failure to protect your account information.</p>
+
+                    <h3>Account Termination</h3>
+                    <p>You may delete your account at any time by contacting us. We reserve the right to suspend or terminate your account if you violate these Terms or for any other reason at our sole discretion.</p>
+                </section>
+
+                <!-- Section 5: Search Services -->
+                <section class="terms-section" id="search">
+                    <h2>5. Search Services</h2>
+                    
+                    <h3>Search Functionality</h3>
+                    <p>AfroTodo provides search functionality powered by artificial intelligence to help you discover businesses, content, and resources. You understand and agree that:</p>
+                    <ul>
+                        <li>Search results are generated algorithmically and may not always be comprehensive or accurate</li>
+                        <li>We do not guarantee the accuracy, completeness, or reliability of search results</li>
+                        <li>Search results do not constitute an endorsement of any business, product, or service</li>
+                        <li>Your search queries may be used to improve our services as described in our Privacy Policy</li>
+                    </ul>
+
+                    <h3>AI-Generated Content</h3>
+                    <p>Some content or search results may be generated or enhanced by artificial intelligence. While we strive for accuracy, AI-generated content may contain errors or inaccuracies. You should independently verify any important information.</p>
+
+                    <div class="highlight-box warning">
+                        <p><strong>Note:</strong> AfroTodo is not responsible for the accuracy of information provided by third parties, including businesses listed in our directory.</p>
+                    </div>
+                </section>
+
+                <!-- Section 6: Business Listings -->
+                <section class="terms-section" id="business-listings">
+                    <h2>6. Business Listings</h2>
+                    
+                    <h3>For Business Owners</h3>
+                    <p>If you submit a business listing to AfroTodo, you represent and warrant that:</p>
+                    <ul>
+                        <li>You are the owner or authorized representative of the business</li>
+                        <li>All information provided is accurate, current, and complete</li>
+                        <li>You have the right to submit any images, logos, or content included in your listing</li>
+                        <li>Your business operates legally and in compliance with all applicable laws</li>
+                        <li>You will promptly update your listing if any information changes</li>
+                    </ul>
+
+                    <h3>Listing Guidelines</h3>
+                    <p>Business listings must:</p>
+                    <ul>
+                        <li>Accurately represent the business and its services</li>
+                        <li>Not contain false, misleading, or deceptive information</li>
+                        <li>Not include offensive, discriminatory, or inappropriate content</li>
+                        <li>Not infringe on any third party's intellectual property rights</li>
+                        <li>Comply with all applicable laws and regulations</li>
+                    </ul>
+
+                    <h3>Our Rights</h3>
+                    <p>AfroTodo reserves the right to:</p>
+                    <ul>
+                        <li>Review, edit, or remove any business listing at our sole discretion</li>
+                        <li>Verify business information before publishing</li>
+                        <li>Remove listings that violate these Terms or our community guidelines</li>
+                        <li>Display business listings in any format or order we choose</li>
+                    </ul>
+
+                    <h3>No Guarantee</h3>
+                    <p>Inclusion in our directory does not guarantee any specific visibility, traffic, or business results. We do not endorse any business listed on our Platform.</p>
+                </section>
+
+                <!-- Section 7: User Content -->
+                <section class="terms-section" id="user-content">
+                    <h2>7. User Content</h2>
+                    
+                    <h3>Your Content</h3>
+                    <p>"User Content" includes any content you submit, post, or transmit through the Platform, including business listings, reviews, comments, images, and other materials.</p>
+
+                    <h3>License Grant</h3>
+                    <p>By submitting User Content, you grant AfroTodo a worldwide, non-exclusive, royalty-free, sublicensable, and transferable license to use, reproduce, modify, adapt, publish, translate, distribute, and display your User Content in connection with operating and promoting the Platform.</p>
+
+                    <h3>Your Responsibilities</h3>
+                    <p>You are solely responsible for your User Content and represent that:</p>
+                    <ul>
+                        <li>You own or have the necessary rights to submit the content</li>
+                        <li>Your content does not violate any third party's rights</li>
+                        <li>Your content is accurate and not misleading</li>
+                        <li>Your content complies with these Terms and all applicable laws</li>
+                    </ul>
+
+                    <h3>Content Removal</h3>
+                    <p>We may remove any User Content at any time for any reason, including content that violates these Terms or that we find objectionable.</p>
+                </section>
+
+                <!-- Section 8: Prohibited Conduct -->
+                <section class="terms-section" id="prohibited">
+                    <h2>8. Prohibited Conduct</h2>
+                    
+                    <p>You agree not to engage in any of the following prohibited activities:</p>
+
+                    <h3>General Prohibitions</h3>
+                    <ul>
+                        <li>Violating any applicable law, regulation, or third-party rights</li>
+                        <li>Submitting false, misleading, or fraudulent information</li>
+                        <li>Impersonating any person or entity</li>
+                        <li>Harassing, threatening, or intimidating other users</li>
+                        <li>Posting content that is defamatory, obscene, or offensive</li>
+                        <li>Discriminating against any individual or group</li>
+                    </ul>
+
+                    <h3>Technical Prohibitions</h3>
+                    <ul>
+                        <li>Attempting to gain unauthorized access to the Platform or other users' accounts</li>
+                        <li>Using automated systems (bots, scrapers, etc.) to access the Platform without permission</li>
+                        <li>Interfering with or disrupting the Platform's functionality</li>
+                        <li>Circumventing any security or access controls</li>
+                        <li>Introducing viruses, malware, or other harmful code</li>
+                        <li>Reverse engineering or decompiling any part of the Platform</li>
+                    </ul>
+
+                    <h3>Commercial Prohibitions</h3>
+                    <ul>
+                        <li>Using the Platform for unauthorized commercial purposes</li>
+                        <li>Sending unsolicited advertising or spam</li>
+                        <li>Collecting user information without consent</li>
+                        <li>Reselling or redistributing Platform content without permission</li>
+                    </ul>
+                </section>
+
+                <!-- Section 9: Intellectual Property -->
+                <section class="terms-section" id="intellectual-property">
+                    <h2>9. Intellectual Property</h2>
+                    
+                    <h3>Our Intellectual Property</h3>
+                    <p>The Platform and its original content, features, and functionality are owned by AfroTodo, LLC and are protected by copyright, trademark, and other intellectual property laws. This includes:</p>
+                    <ul>
+                        <li>The AfroTodo name, logo, and branding</li>
+                        <li>Website and app design, layout, and graphics</li>
+                        <li>Software, algorithms, and underlying technology</li>
+                        <li>Original content created by AfroTodo</li>
+                    </ul>
+
+                    <h3>Limited License</h3>
+                    <p>We grant you a limited, non-exclusive, non-transferable, revocable license to access and use the Platform for personal, non-commercial purposes in accordance with these Terms.</p>
+
+                    <h3>Restrictions</h3>
+                    <p>You may not:</p>
+                    <ul>
+                        <li>Copy, modify, or distribute Platform content without permission</li>
+                        <li>Use our trademarks or branding without written consent</li>
+                        <li>Remove any copyright or proprietary notices</li>
+                        <li>Create derivative works based on the Platform</li>
+                    </ul>
+
+                    <h3>Feedback</h3>
+                    <p>If you provide feedback, suggestions, or ideas about the Platform, you grant us the right to use such feedback without restriction or compensation to you.</p>
+                </section>
+
+                <!-- Section 10: Third-Party Links & Services -->
+                <section class="terms-section" id="third-party">
+                    <h2>10. Third-Party Links & Services</h2>
+                    
+                    <p>The Platform may contain links to third-party websites, services, or content that are not owned or controlled by AfroTodo. We are not responsible for:</p>
+                    <ul>
+                        <li>The content, accuracy, or opinions expressed on third-party sites</li>
+                        <li>The privacy practices of third-party sites</li>
+                        <li>Any products, services, or transactions with third parties</li>
+                        <li>Any damages or losses caused by third-party sites or services</li>
+                    </ul>
+                    
+                    <p>Your interactions with third parties, including businesses listed in our directory, are solely between you and that third party. We encourage you to review the terms and privacy policies of any third-party sites you visit.</p>
+                </section>
+
+                <!-- Section 11: Disclaimers -->
+                <section class="terms-section" id="disclaimers">
+                    <h2>11. Disclaimers</h2>
+                    
+                    <div class="highlight-box important">
+                        <p><strong>THE PLATFORM IS PROVIDED "AS IS" AND "AS AVAILABLE" WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED.</strong></p>
+                    </div>
+
+                    <p>To the fullest extent permitted by law, AfroTodo disclaims all warranties, including but not limited to:</p>
+                    <ul>
+                        <li>Implied warranties of merchantability, fitness for a particular purpose, and non-infringement</li>
+                        <li>Warranties that the Platform will be uninterrupted, secure, or error-free</li>
+                        <li>Warranties regarding the accuracy, reliability, or completeness of any content</li>
+                        <li>Warranties that defects will be corrected</li>
+                        <li>Warranties that the Platform is free of viruses or harmful components</li>
+                    </ul>
+
+                    <h3>Business Listings Disclaimer</h3>
+                    <p>AfroTodo does not verify, endorse, or guarantee the accuracy of business listings. We are not responsible for the quality, safety, legality, or any other aspect of products or services offered by businesses listed on our Platform.</p>
+
+                    <h3>Search Results Disclaimer</h3>
+                    <p>Search results are provided for informational purposes only. We do not guarantee the accuracy, completeness, or usefulness of any search results. You should independently verify any information before relying on it.</p>
+                </section>
+
+                <!-- Section 12: Limitation of Liability -->
+                <section class="terms-section" id="limitation">
+                    <h2>12. Limitation of Liability</h2>
+                    
+                    <div class="highlight-box important">
+                        <p><strong>TO THE MAXIMUM EXTENT PERMITTED BY LAW, AFROTODO SHALL NOT BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES.</strong></p>
+                    </div>
+
+                    <p>This includes, but is not limited to, damages for:</p>
+                    <ul>
+                        <li>Loss of profits, revenue, data, or business opportunities</li>
+                        <li>Personal injury or property damage</li>
+                        <li>Unauthorized access to or alteration of your data</li>
+                        <li>Conduct of any third party on the Platform</li>
+                        <li>Any other matter relating to the Platform</li>
+                    </ul>
+
+                    <p>In no event shall our total liability exceed the greater of (a) the amount you paid to AfroTodo in the twelve (12) months preceding the claim, or (b) one hundred dollars ($100).</p>
+
+                    <p>Some jurisdictions do not allow the exclusion of certain warranties or limitation of liability, so some of the above limitations may not apply to you.</p>
+                </section>
+
+                <!-- Section 13: Indemnification -->
+                <section class="terms-section" id="indemnification">
+                    <h2>13. Indemnification</h2>
+                    
+                    <p>You agree to indemnify, defend, and hold harmless AfroTodo, its officers, directors, employees, agents, and affiliates from and against any claims, liabilities, damages, losses, costs, or expenses (including reasonable attorneys' fees) arising out of or related to:</p>
+                    <ul>
+                        <li>Your use of the Platform</li>
+                        <li>Your User Content</li>
+                        <li>Your violation of these Terms</li>
+                        <li>Your violation of any third-party rights</li>
+                        <li>Your violation of any applicable law</li>
+                        <li>Any dispute between you and a third party</li>
+                    </ul>
+                </section>
+
+                <!-- Section 14: Termination -->
+                <section class="terms-section" id="termination">
+                    <h2>14. Termination</h2>
+                    
+                    <h3>Termination by You</h3>
+                    <p>You may stop using the Platform at any time. If you have an account, you may delete it by contacting us.</p>
+
+                    <h3>Termination by Us</h3>
+                    <p>We may suspend or terminate your access to the Platform at any time, with or without cause, and with or without notice, including if we believe you have violated these Terms.</p>
+
+                    <h3>Effect of Termination</h3>
+                    <p>Upon termination:</p>
+                    <ul>
+                        <li>Your right to use the Platform will immediately cease</li>
+                        <li>We may delete your account and any associated data</li>
+                        <li>Provisions that by their nature should survive will remain in effect</li>
+                    </ul>
+                </section>
+
+                <!-- Section 15: Governing Law -->
+                <section class="terms-section" id="governing-law">
+                    <h2>15. Governing Law</h2>
+                    
+                    <p>These Terms shall be governed by and construed in accordance with the laws of the State of Georgia, United States, without regard to its conflict of law provisions.</p>
+                    
+                    <p>You agree to submit to the personal and exclusive jurisdiction of the courts located in Fulton County, Georgia for any disputes arising out of or relating to these Terms or the Platform.</p>
+                </section>
+
+                <!-- Section 16: Dispute Resolution -->
+                <section class="terms-section" id="disputes">
+                    <h2>16. Dispute Resolution</h2>
+                    
+                    <h3>Informal Resolution</h3>
+                    <p>Before filing a formal legal claim, you agree to first contact us and attempt to resolve the dispute informally. Most disputes can be resolved this way.</p>
+
+                    <h3>Binding Arbitration</h3>
+                    <p>If we cannot resolve a dispute informally, you agree that any dispute, claim, or controversy arising out of or relating to these Terms or the Platform will be resolved by binding arbitration, rather than in court, except that you may assert claims in small claims court if your claims qualify.</p>
+
+                    <h3>Class Action Waiver</h3>
+                    <p>You agree that any arbitration or proceeding shall be limited to the dispute between us individually. To the fullest extent permitted by law:</p>
+                    <ul>
+                        <li>No arbitration or proceeding shall be joined with any other</li>
+                        <li>No dispute shall be arbitrated on a class-action basis</li>
+                        <li>No dispute shall be brought as a class or representative action</li>
+                    </ul>
+
+                    <h3>Opt-Out</h3>
+                    <p>You may opt out of this arbitration agreement by sending written notice within 30 days of first accepting these Terms. Send your opt-out notice to: support@afrotodo.com with "Arbitration Opt-Out" in the subject line.</p>
+                </section>
+
+                <!-- Section 17: Changes to Terms -->
+                <section class="terms-section" id="changes">
+                    <h2>17. Changes to Terms</h2>
+                    
+                    <p>We reserve the right to modify these Terms at any time. If we make material changes, we will notify you by:</p>
+                    <ul>
+                        <li>Posting the updated Terms on the Platform</li>
+                        <li>Updating the "Effective Date" at the top of these Terms</li>
+                        <li>Sending you an email notification (if you have an account)</li>
+                    </ul>
+                    
+                    <p>Your continued use of the Platform after any changes constitutes your acceptance of the new Terms. If you do not agree to the modified Terms, you should stop using the Platform.</p>
+                    
+                    <p>We encourage you to review these Terms periodically for any updates.</p>
+                </section>
+
+                <!-- Section 18: Contact -->
+                <section class="terms-section" id="contact">
+                    <h2>18. Contact Us</h2>
+                    
+                    <p>If you have any questions about these Terms of Service, please contact us:</p>
+                    
+                    <div class="contact-box">
+                        <h3>Questions About These Terms?</h3>
+                        <p><strong>Email:</strong> <a href="mailto:support@afrotodo.com">support@afrotodo.com</a></p>
+                        <p style="margin-top: var(--space-md);"><strong>AfroTodo, LLC</strong></p>
+                    </div>
+                </section>
+
+                <!-- Additional Provisions -->
+                <section class="terms-section">
+                    <h2>Additional Provisions</h2>
+                    
+                    <h3>Entire Agreement</h3>
+                    <p>These Terms, together with our Privacy Policy, constitute the entire agreement between you and AfroTodo regarding your use of the Platform and supersede all prior agreements.</p>
+
+                    <h3>Severability</h3>
+                    <p>If any provision of these Terms is found to be unenforceable, the remaining provisions will continue in full force and effect.</p>
+
+                    <h3>Waiver</h3>
+                    <p>Our failure to enforce any right or provision of these Terms will not be considered a waiver of that right or provision.</p>
+
+                    <h3>Assignment</h3>
+                    <p>You may not assign or transfer these Terms or your rights under them without our prior written consent. We may assign our rights and obligations under these Terms without restriction.</p>
+
+                    <h3>No Agency</h3>
+                    <p>Nothing in these Terms creates any agency, partnership, joint venture, or employment relationship between you and AfroTodo.</p>
+                </section>
+
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <div class="footer-content">
+                <span class="footer-brand">AfroTodo</span>
+                <div class="footer-links">
+                    <a href="{% url 'searchengine:about' %}" class="footer-link">About</a>
+                    <a href="{% url 'accounts:register' %}" class="footer-link">Add Business</a>
+                    <a href="{% url 'searchengine:privacy' %}" class="footer-link">Privacy</a>
+                    <a href="{% url 'searchengine:term' %}" class="footer-link">Terms</a>
+                    <a href="{% url 'searchengine:contact' %}" class="footer-link">Contact</a>
+                </div>
+                <p class="footer-tagline">Shop Black. Learn Black. Own the future.</p>
+            </div>
+        </footer>
+    </main>
+
+    <!-- Mobile Sidebar Script -->
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const mobileMenuToggle = document.getElementById('mobile-menu-toggle');
+        const mobileSidebar = document.getElementById('mobile-sidebar');
+        const mobileSidebarOverlay = document.getElementById('mobile-sidebar-overlay');
+        const mobileSidebarClose = document.getElementById('mobile-sidebar-close');
+
+        function openMobileSidebar() {
+            if (mobileSidebar) mobileSidebar.classList.add('open');
+            if (mobileSidebarOverlay) mobileSidebarOverlay.classList.add('show');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeMobileSidebar() {
+            if (mobileSidebar) mobileSidebar.classList.remove('open');
+            if (mobileSidebarOverlay) mobileSidebarOverlay.classList.remove('show');
+            document.body.style.overflow = '';
+        }
+
+        if (mobileMenuToggle) mobileMenuToggle.addEventListener('click', openMobileSidebar);
+        if (mobileSidebarClose) mobileSidebarClose.addEventListener('click', closeMobileSidebar);
+        if (mobileSidebarOverlay) mobileSidebarOverlay.addEventListener('click', closeMobileSidebar);
+
+        document.querySelectorAll('.mobile-nav-item').forEach(item => {
+            item.addEventListener('click', closeMobileSidebar);
+        });
+
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') closeMobileSidebar();
+        });
+
+        // Smooth scroll for TOC links
+        document.querySelectorAll('.toc a').forEach(link => {
+            link.addEventListener('click', function(e) {
+                e.preventDefault();
+                const targetId = this.getAttribute('href').substring(1);
+                const targetElement = document.getElementById(targetId);
+                if (targetElement) {
+                    const headerOffset = 100;
+                    const elementPosition = targetElement.getBoundingClientRect().top;
+                    const offsetPosition = elementPosition + window.pageYOffset - headerOffset;
+                    window.scrollTo({
+                        top: offsetPosition,
+                        behavior: 'smooth'
+                    });
+                }
+            });
+        });
+    });
+    </script>
+</body>
+</html>

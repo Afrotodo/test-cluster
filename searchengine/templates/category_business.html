@@ -444,7 +444,9 @@
     <footer class="footer">
         <div class="footer-inner">
             <div class="footer-logo"><span class="a">A</span><span class="f">f</span><span class="r">r</span><span class="o">o</span>Todo</div>
-            <nav class="footer-links"><a href="#" class="footer-link">About</a><a href="#" class="footer-link">Contact</a><a href="#" class="footer-link">Privacy</a><a href="#" class="footer-link">Terms</a></nav>
+            <nav class="footer-links"><a href="{% url 'searchengine:about' %}" class="footer-link">About</a><a href="{% url 'searchengine:contact' %}" class="footer-link">Contact</a><a href="{% url 'searchengine:privacy' %}" class="footer-link">Privacy</a><a href="{% url 'searchengine:term' %}" class="footer-link">Terms</a></nav>
+
+            
         </div>
     </footer>
 

@@ -61,6 +61,11 @@ urlpatterns = [
     path('community/', views.community_category, name='community'),
     path('api/track-click/', track_click, name='track_click'),
     path('api/facets/', views.facets_api, name='facets_api'),
+    path('about',views.about,name="about"),
+    path('privacy',views.privacy,name="privacy"),
+    path('terms',views.term,name="term"),
+    path('contact-us',views.contact,name="contact"),
+
 
  
     # path('api/update-session-activity/', views.update_session_activity, name='update_session_activity'),  # ← Missing?
@@ -73,6 +78,15 @@ urlpatterns = [
     # ==================== CITY-SPECIFIC ROUTES (OPTIONAL) ====================
     # Community by city (alternative URL pattern)
     path('community/<str:city_slug>/', views.community_by_city, name='community_by_city'),
+
+
+    #  Testing endpoints 
+
+    path('debug/business/', views.debug_business_search, name='debug_business'),
+    path('debug/schema/', views.debug_schema, name='debug_schema'),
+    # If you want to test the fixed view:
+    path('business-test/', views.business_category_fixed, name='business_test'),
+
 ]
 
     # path('api/search', views.search_api, name='search_api'),

@@ -3113,6 +3113,11 @@ from .geolocation import (
 )
 
 
+
+
+
+
+
 # =============================================================================
 # DYNAMIC TAB LABEL MAPPINGS
 # =============================================================================
@@ -4700,11 +4705,11 @@ def generic_category_view(request, category_slug: str, city: str):
 # VIEW: BUSINESS CATEGORY
 # =============================================================================
 
+
 def business_category(request):
     """Business directory with faceted search."""
     
-    city = get_user_city(request)
-    
+    # Get query parameters
     query = sanitize_query(request.GET.get('q', ''))
     selected_subcategory = sanitize_filter_value(request.GET.get('subcategory', ''))
     selected_category = sanitize_filter_value(request.GET.get('category', ''))
@@ -4712,10 +4717,13 @@ def business_category(request):
     sort = validate_sort(request.GET.get('sort', ''), ['authority', 'recent', 'name'], 'authority')
     page = validate_page(request.GET.get('page', 1))
     
+    # Validate subcategory
     if selected_subcategory and selected_subcategory not in SUBCATEGORY_MAP:
         selected_subcategory = ''
     
+    # Build filter - only filter by business schema
     filters = ['document_schema:=business']
+    
     if selected_category:
         filters.append(f'document_category:={selected_category}')
     if selected_brand:
@@ -4723,38 +4731,67 @@ def business_category(request):
     
     filter_by = build_filter_string(filters)
     
-    search_query = query if query else '*'
+    # Build search query - NO CITY!
+    search_query = '*'  # Default: return ALL businesses
     
-    if selected_subcategory and selected_subcategory in SUBCATEGORY_MAP:
-        subcategory_terms = ' '.join(SUBCATEGORY_MAP[selected_subcategory])
-        if search_query == '*':
-            search_query = subcategory_terms
-        else:
-            search_query = f"{search_query} {subcategory_terms}"
+    if query:
+        search_query = query
+    elif selected_subcategory and selected_subcategory in SUBCATEGORY_MAP:
+        search_query = ' '.join(SUBCATEGORY_MAP[selected_subcategory])
     
-    if search_query == '*':
-        search_query = city
-    
+    # ==========================================================================
+    # FIX: Use _text_match for sorting instead of authority_score
+    # authority_score may not exist in your schema, causing search to fail
+    # ==========================================================================
     sort_options = {
-        'authority': 'authority_score:desc',
-        'recent': 'created_at:desc',
+        'authority': '_text_match:desc',  # Changed from authority_score:desc
+        'recent': '_text_match:desc',     # Changed from created_at:desc  
         'name': 'document_title:asc',
     }
-    sort_by = sort_options.get(sort, 'authority_score:desc')
+    sort_by = sort_options.get(sort, '_text_match:desc')
     
-    results = typesense_search(
-        query=search_query,
-        filter_by=filter_by,
-        sort_by=sort_by,
-        facet_by='document_category,document_brand',
-        per_page=20,
-        page=page,
-    )
+    # ==========================================================================
+    # Execute search directly using typesense_manager to avoid any issues
+    # ==========================================================================
+    search_params = {
+        'q': search_query,
+        'query_by': 'document_title,document_summary,keywords,primary_keywords',
+        'filter_by': filter_by,
+        'per_page': 20,
+        'page': page,
+        'facet_by': 'document_category,document_brand',
+        'max_facet_values': 20,
+    }
     
-    browse_results = safe_get_hits(results)
-    total = safe_get_total(results)
-    facets = parse_facets(results)
+    # Only add sort_by if not using wildcard (Typesense doesn't sort well on *)
+    if search_query != '*':
+        search_params['sort_by'] = sort_by
     
+    # Debug output
+    print(f"\n=== BUSINESS SEARCH ===")
+    print(f"Query: '{search_query}'")
+    print(f"Filter: '{filter_by}'")
+    print(f"Params: {search_params}")
+    
+    # Execute search
+    results = typesense_manager.search(COLLECTION_NAME, search_params)
+    
+    print(f"Results: {type(results)}, is None: {results is None}")
+    if results:
+        print(f"Found: {results.get('found', 0)}, Hits: {len(results.get('hits', []))}")
+    print("=== END ===\n")
+    
+    # Process results
+    if results:
+        browse_results = results.get('hits', [])
+        total = results.get('found', 0)
+        facets = parse_facets(results)
+    else:
+        browse_results = []
+        total = 0
+        facets = {'category': [], 'brand': []}
+    
+    # Build stats
     stats = {
         'business_count': total,
         'categories_count': len(facets.get('category', [])) or 24,
@@ -4772,8 +4809,9 @@ def business_category(request):
         bool(selected_brand),
     ])
     
+    # Build context
     context = {
-        'city': city,
+        'city': '',  # No city filtering
         'supported_cities': list(SUPPORTED_CITIES),
         'query': query,
         'selected_subcategory': selected_subcategory,
@@ -4791,6 +4829,7 @@ def business_category(request):
     }
     
     return render(request, 'category_business.html', context)
+
 
 
 # =============================================================================
@@ -5372,6 +5411,8 @@ def culture_category(request, city: str = None):
     }
     
     return render(request, 'category_culture.html', context)
+
+
 
 
 # ==================== HELPER FUNCTIONS (add to your utils.py) ====================
@@ -6474,3 +6515,548 @@ def click_redirect(request):
                 logger.warning(f"Click redirect tracking error: {e}")
     
     return redirect(destination_url)
+
+
+
+
+# ============================================================================================== FOOTER FUNCTIONS=======================================================================
+# ======================================================================================================================================================================================
+
+
+def about(request):
+    return render(request,'about.html') 
+
+def privacy(request):
+    return render(request,'privacy.html') 
+
+def term(request):
+    return render(request,'terms.html') 
+
+def contact(request):
+    return render(request,'contact.html') 
+
+
+
+
+
+
+# TESTING SECTION                             ADD THIS DIAGNOSTIC VIEW TO YOUR views.py
+# =============================================================================
+# =============================================================================
+# DEBUG VIEW - ADD TO END OF views.py - REMOVE IN PRODUCTION
+
+
+
+# =============================================================================
+
+
+
+
+
+# =============================================================================
+# DIAGNOSTIC VIEW - Add to views.py temporarily
+# =============================================================================
+# Visit: /debug/schema/ to see your Typesense schema and sample documents
+# This will show us what location fields are available
+
+def debug_schema(request):
+    """Diagnostic view to inspect Typesense schema and sample business documents."""
+    
+    debug_info = {
+        'collection_schema': None,
+        'sample_businesses': [],
+        'all_fields_in_businesses': set(),
+        'location_fields_found': [],
+        'errors': [],
+    }
+    
+    # ==========================================================================
+    # 1. GET COLLECTION SCHEMA
+    # ==========================================================================
+    try:
+        schema = typesense_manager._client.collections[COLLECTION_NAME].retrieve()
+        debug_info['collection_schema'] = {
+            'name': schema.get('name'),
+            'num_documents': schema.get('num_documents'),
+            'fields': [
+                {
+                    'name': f.get('name'),
+                    'type': f.get('type'),
+                    'facet': f.get('facet', False),
+                    'optional': f.get('optional', False),
+                }
+                for f in schema.get('fields', [])
+            ]
+        }
+    except Exception as e:
+        debug_info['errors'].append(f"Schema retrieval error: {e}")
+    
+    # ==========================================================================
+    # 2. GET SAMPLE BUSINESS DOCUMENTS (show ALL fields)
+    # ==========================================================================
+    try:
+        results = typesense_manager.search(COLLECTION_NAME, {
+            'q': '*',
+            'query_by': 'document_title',
+            'filter_by': 'document_schema:=business',
+            'per_page': 5,
+        })
+        
+        if results and results.get('hits'):
+            for hit in results['hits']:
+                doc = hit.get('document', {})
+                
+                # Collect all field names
+                debug_info['all_fields_in_businesses'].update(doc.keys())
+                
+                # Store full document for inspection
+                debug_info['sample_businesses'].append(doc)
+            
+            # Convert set to sorted list for JSON serialization
+            debug_info['all_fields_in_businesses'] = sorted(list(debug_info['all_fields_in_businesses']))
+            
+            # Identify potential location fields
+            location_keywords = ['city', 'state', 'location', 'address', 'lat', 'lng', 'geo', 'place', 'zip', 'postal', 'country', 'region']
+            for field in debug_info['all_fields_in_businesses']:
+                field_lower = field.lower()
+                if any(kw in field_lower for kw in location_keywords):
+                    debug_info['location_fields_found'].append(field)
+                    
+    except Exception as e:
+        debug_info['errors'].append(f"Sample documents error: {e}")
+    
+    # ==========================================================================
+    # 3. CHECK FOR EMBEDDING/VECTOR FIELDS
+    # ==========================================================================
+    vector_fields = []
+    if debug_info.get('collection_schema'):
+        for field in debug_info['collection_schema'].get('fields', []):
+            if 'vec' in field['name'].lower() or 'embed' in field['name'].lower() or field['type'].startswith('float'):
+                vector_fields.append(field)
+    debug_info['vector_fields'] = vector_fields
+    
+    # ==========================================================================
+    # 4. SEARCH TEST - Check what happens with "atlanta barbers"
+    # ==========================================================================
+    try:
+        test_results = typesense_manager.search(COLLECTION_NAME, {
+            'q': 'atlanta barbers',
+            'query_by': 'document_title,document_summary,keywords,primary_keywords',
+            'filter_by': 'document_schema:=business',
+            'per_page': 5,
+        })
+        
+        debug_info['atlanta_barbers_test'] = {
+            'found': test_results.get('found', 0) if test_results else 0,
+            'results': [
+                {
+                    'title': hit.get('document', {}).get('document_title'),
+                    'keywords': hit.get('document', {}).get('keywords', [])[:5],
+                    'primary_keywords': hit.get('document', {}).get('primary_keywords', [])[:5],
+                }
+                for hit in (test_results.get('hits', []) if test_results else [])
+            ]
+        }
+    except Exception as e:
+        debug_info['errors'].append(f"Atlanta barbers test error: {e}")
+    
+    # ==========================================================================
+    # 5. CHECK WHAT'S IN KEYWORDS FIELD
+    # ==========================================================================
+    try:
+        # Get businesses and look at their keywords
+        keyword_sample = typesense_manager.search(COLLECTION_NAME, {
+            'q': '*',
+            'query_by': 'document_title',
+            'filter_by': 'document_schema:=business',
+            'per_page': 10,
+        })
+        
+        if keyword_sample and keyword_sample.get('hits'):
+            debug_info['keyword_samples'] = [
+                {
+                    'title': hit.get('document', {}).get('document_title', '')[:50],
+                    'keywords': hit.get('document', {}).get('keywords', []),
+                    'primary_keywords': hit.get('document', {}).get('primary_keywords', []),
+                    'document_brand': hit.get('document', {}).get('document_brand', ''),
+                }
+                for hit in keyword_sample['hits'][:5]
+            ]
+    except Exception as e:
+        debug_info['errors'].append(f"Keyword sample error: {e}")
+    
+    return JsonResponse(debug_info, json_dumps_params={'indent': 2})
+
+
+# =============================================================================
+# ADD THIS URL TO urls.py:
+# path('debug/schema/', views.debug_schema, name='debug_schema'),
+# =============================================================================
+
+
+def debug_business_search(request):
+    """Diagnostic endpoint to debug why businesses aren't showing."""
+    
+    debug_info = {
+        'typesense_available': False,
+        'total_documents': 0,
+        'business_schema_count': 0,
+        'sample_documents': [],
+        'errors': [],
+        'schema_values': [],
+    }
+    
+    # Check Typesense connection (typesense_manager is already in this file)
+    debug_info['typesense_available'] = typesense_manager.available
+    debug_info['collection_name'] = COLLECTION_NAME
+    
+    if not typesense_manager.available:
+        debug_info['errors'].append("Typesense is not connected")
+        return JsonResponse(debug_info, json_dumps_params={'indent': 2})
+    
+    # Test 1: Get ALL documents (no filter)
+    try:
+        all_results = typesense_manager.search(COLLECTION_NAME, {
+            'q': '*',
+            'query_by': 'document_title',
+            'per_page': 10,
+            'facet_by': 'document_schema,document_category,document_brand',
+            'max_facet_values': 50,
+        })
+        
+        if all_results:
+            debug_info['total_documents'] = all_results.get('found', 0)
+            debug_info['sample_documents'] = [
+                {
+                    'id': hit.get('document', {}).get('id'),
+                    'title': hit.get('document', {}).get('document_title'),
+                    'schema': hit.get('document', {}).get('document_schema'),
+                    'category': hit.get('document', {}).get('document_category'),
+                    'brand': hit.get('document', {}).get('document_brand'),
+                }
+                for hit in all_results.get('hits', [])
+            ]
+            
+            # Extract all facet values
+            for facet in all_results.get('facet_counts', []):
+                field = facet.get('field_name')
+                counts = [{'value': c['value'], 'count': c['count']} for c in facet.get('counts', [])]
+                debug_info[f'{field}_values'] = counts
+        else:
+            debug_info['errors'].append("Search returned None")
+                
+    except Exception as e:
+        debug_info['errors'].append(f"Search error: {str(e)}")
+    
+    # Test 2: Search with business filter
+    try:
+        business_results = typesense_manager.search(COLLECTION_NAME, {
+            'q': '*',
+            'query_by': 'document_title',
+            'filter_by': 'document_schema:=business',
+            'per_page': 5,
+        })
+        
+        if business_results:
+            debug_info['business_schema_count'] = business_results.get('found', 0)
+    except Exception as e:
+        debug_info['errors'].append(f"Business filter error: {str(e)}")
+    
+    return JsonResponse(debug_info, json_dumps_params={'indent': 2})
+
+
+# =============================================================================
+# STEP 2: UPDATED business_category() WITH BETTER ERROR HANDLING
+# =============================================================================
+
+def business_category_fixed(request):
+    """
+    Business directory with faceted search.
+    
+    CHANGES FROM ORIGINAL:
+    1. Added debug logging
+    2. Falls back to no filter if business schema returns 0 results
+    3. Better error messages
+    4. Prints diagnostic info to console
+    """
+    
+    # Import your existing functions (adjust imports as needed)
+    # These should already be in your views.py
+    from .views import (
+        get_user_city, sanitize_query, sanitize_filter_value, 
+        validate_sort, validate_page, SUBCATEGORY_MAP, SUPPORTED_CITIES,
+        typesense_search, safe_get_hits, safe_get_total, parse_facets,
+        build_filter_string
+    )
+    import logging
+    
+    logger = logging.getLogger(__name__)
+    
+    city = get_user_city(request)
+    
+    query = sanitize_query(request.GET.get('q', ''))
+    selected_subcategory = sanitize_filter_value(request.GET.get('subcategory', ''))
+    selected_category = sanitize_filter_value(request.GET.get('category', ''))
+    selected_brand = sanitize_filter_value(request.GET.get('brand', ''))
+    sort = validate_sort(request.GET.get('sort', ''), ['authority', 'recent', 'name'], 'authority')
+    page = validate_page(request.GET.get('page', 1))
+    
+    if selected_subcategory and selected_subcategory not in SUBCATEGORY_MAP:
+        selected_subcategory = ''
+    
+    # ==========================================================================
+    # KEY FIX: Check what schema values actually exist in your data
+    # ==========================================================================
+    
+    # First, try with the business schema filter
+    filters = ['document_schema:=business']
+    if selected_category:
+        filters.append(f'document_category:={selected_category}')
+    if selected_brand:
+        filters.append(f'document_brand:={selected_brand}')
+    
+    filter_by = build_filter_string(filters)
+    
+    search_query = query if query else '*'
+    
+    if selected_subcategory and selected_subcategory in SUBCATEGORY_MAP:
+        subcategory_terms = ' '.join(SUBCATEGORY_MAP[selected_subcategory])
+        if search_query == '*':
+            search_query = subcategory_terms
+        else:
+            search_query = f"{search_query} {subcategory_terms}"
+    
+    if search_query == '*':
+        search_query = city
+    
+    sort_options = {
+        'authority': 'authority_score:desc',
+        'recent': 'created_at:desc',
+        'name': 'document_title:asc',
+    }
+    sort_by = sort_options.get(sort, 'authority_score:desc')
+    
+    # ==========================================================================
+    # DIAGNOSTIC: Log what we're searching for
+    # ==========================================================================
+    logger.info(f"Business search: query='{search_query}', filter='{filter_by}'")
+    print(f"\n=== BUSINESS SEARCH DEBUG ===")
+    print(f"Query: {search_query}")
+    print(f"Filter: {filter_by}")
+    print(f"Sort: {sort_by}")
+    
+    results = typesense_search(
+        query=search_query,
+        filter_by=filter_by,
+        sort_by=sort_by,
+        facet_by='document_category,document_brand',
+        per_page=20,
+        page=page,
+    )
+    
+    # ==========================================================================
+    # DIAGNOSTIC: Check results
+    # ==========================================================================
+    if results is None:
+        print("ERROR: typesense_search returned None!")
+        logger.error("Typesense search returned None")
+        browse_results = []
+        total = 0
+        facets = {'category': [], 'brand': []}
+    else:
+        print(f"Found: {results.get('found', 0)} results")
+        browse_results = safe_get_hits(results)
+        total = safe_get_total(results)
+        facets = parse_facets(results)
+        print(f"Hits extracted: {len(browse_results)}")
+        
+        # Print first result for debugging
+        if browse_results:
+            first = browse_results[0]
+            print(f"First result: {first.get('document', {}).get('document_title', 'NO TITLE')}")
+        else:
+            print("No hits in results!")
+    
+    # ==========================================================================
+    # FALLBACK: If no results with business filter, try without filter
+    # ==========================================================================
+    if total == 0 and 'document_schema:=business' in filter_by:
+        print("\nFALLBACK: Trying search without schema filter...")
+        
+        # Remove schema filter, keep other filters
+        fallback_filters = []
+        if selected_category:
+            fallback_filters.append(f'document_category:={selected_category}')
+        if selected_brand:
+            fallback_filters.append(f'document_brand:={selected_brand}')
+        
+        fallback_filter_by = build_filter_string(fallback_filters) if fallback_filters else ''
+        
+        fallback_results = typesense_search(
+            query=search_query,
+            filter_by=fallback_filter_by,
+            sort_by=sort_by,
+            facet_by='document_category,document_brand,document_schema',
+            per_page=20,
+            page=page,
+        )
+        
+        if fallback_results and fallback_results.get('found', 0) > 0:
+            print(f"FALLBACK found {fallback_results.get('found', 0)} results!")
+            browse_results = safe_get_hits(fallback_results)
+            total = safe_get_total(fallback_results)
+            facets = parse_facets(fallback_results)
+            
+            # Log what schemas actually exist
+            for fc in fallback_results.get('facet_counts', []):
+                if fc.get('field_name') == 'document_schema':
+                    schemas = [f"{c['value']}:{c['count']}" for c in fc.get('counts', [])]
+                    print(f"Schema values in your data: {schemas}")
+                    logger.warning(f"No 'business' schema found. Available schemas: {schemas}")
+    
+    print(f"=== END DEBUG (total={total}, hits={len(browse_results)}) ===\n")
+    
+    # ==========================================================================
+    # BUILD CONTEXT (same as original)
+    # ==========================================================================
+    stats = {
+        'business_count': total,
+        'categories_count': len(facets.get('category', [])) or 24,
+        'verified_pct': 78,
+    }
+    
+    trending_searches = [
+        'black barber near me', 'soul food', 'black accountant',
+        'african restaurant', 'natural hair salon', 'black owned clothing',
+    ]
+    
+    active_filter_count = sum([
+        bool(selected_subcategory),
+        bool(selected_category),
+        bool(selected_brand),
+    ])
+    
+    context = {
+        'city': city,
+        'supported_cities': list(SUPPORTED_CITIES),
+        'query': query,
+        'selected_subcategory': selected_subcategory,
+        'selected_category': selected_category,
+        'selected_brand': selected_brand,
+        'results': browse_results,  # This is passed to template!
+        'total': total,
+        'facets': facets,
+        'stats': stats,
+        'trending_searches': trending_searches,
+        'active_filter_count': active_filter_count,
+        'page': page,
+        'has_more': (page * 20) < total,
+        'sort': sort,
+        # Debug info (remove in production)
+        'debug_info': {
+            'filter_used': filter_by,
+            'query_used': search_query,
+            'results_type': type(browse_results).__name__,
+            'results_count': len(browse_results),
+        }
+    }
+    
+    return render(request, 'category_business.html', context)
+
+
+# =============================================================================
+# STEP 3: URL CONFIGURATION
+# =============================================================================
+
+"""
+Add these to your urls.py:
+
+from django.urls import path
+from . import views
+
+urlpatterns = [
+    # ... your existing URLs ...
+    
+    # Add debug endpoint (REMOVE IN PRODUCTION)
+    path('debug/business/', views.debug_business_search, name='debug_business'),
+    
+    # If you want to test the fixed view:
+    # path('business-test/', views.business_category_fixed, name='business_test'),
+]
+"""
+
+
+# =============================================================================
+# STEP 4: QUICK INLINE FIX FOR YOUR EXISTING business_category()
+# =============================================================================
+
+"""
+If you just want to add debugging to your existing function, add these lines
+after the typesense_search() call (around line 1185 in your views.py):
+
+    results = typesense_search(
+        query=search_query,
+        filter_by=filter_by,
+        sort_by=sort_by,
+        facet_by='document_category,document_brand',
+        per_page=20,
+        page=page,
+    )
+    
+    # === ADD THIS DEBUG BLOCK ===
+    print(f"\\n=== BUSINESS SEARCH DEBUG ===")
+    print(f"Query: {search_query}")
+    print(f"Filter: {filter_by}")
+    if results:
+        print(f"Found: {results.get('found', 0)}")
+        print(f"Hits: {len(results.get('hits', []))}")
+        if results.get('hits'):
+            print(f"First hit: {results['hits'][0].get('document', {}).get('document_title')}")
+    else:
+        print("Results is None!")
+    print("=== END DEBUG ===\\n")
+    # === END DEBUG BLOCK ===
+    
+    browse_results = safe_get_hits(results)
+"""
+
+
+# =============================================================================
+# STEP 5: CHECK YOUR TYPESENSE DATA
+# =============================================================================
+
+"""
+Run this in Django shell to check your Typesense data:
+
+    python manage.py shell
+
+Then:
+
+    from searchengine.views import typesense_manager, COLLECTION_NAME
+    
+    # Check if connected
+    print(f"Typesense available: {typesense_manager.available}")
+    
+    # Search all documents
+    results = typesense_manager.search(COLLECTION_NAME, {
+        'q': '*',
+        'query_by': 'document_title',
+        'per_page': 3,
+        'facet_by': 'document_schema',
+    })
+    
+    print(f"Total documents: {results.get('found', 0)}")
+    
+    # Show schema values
+    for facet in results.get('facet_counts', []):
+        if facet['field_name'] == 'document_schema':
+            print("Schema values:")
+            for c in facet['counts']:
+                print(f"  - {c['value']}: {c['count']}")
+    
+    # Show first few documents
+    print("\\nSample documents:")
+    for hit in results.get('hits', [])[:3]:
+        doc = hit.get('document', {})
+        print(f"  - {doc.get('document_title')} (schema: {doc.get('document_schema')})")
+"""
