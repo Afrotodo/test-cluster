@@ -1266,7 +1266,7 @@ logger = logging.getLogger(__name__)
 # ============================================================================
 
 # Redis URL - supports multiple databases via URL path (e.g., redis://localhost:6379/2)
-REDIS_ANALYTICS_URL = config('REDIS_ANALYTICS_URL', default='redis://localhost:6379/2')
+REDIS_ANALYTICS_URL = config('REDIS_ANALYTICS_URL')
 
 SESSION_EXPIRE_HOURS = config('SESSION_EXPIRE_HOURS', default=24, cast=int)
 ANALYTICS_RETENTION_DAYS = config('ANALYTICS_RETENTION_DAYS', default=90, cast=int)

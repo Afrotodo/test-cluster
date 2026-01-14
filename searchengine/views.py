@@ -4893,9 +4893,253 @@ def business_category(request):
     
 #     return render(request, 'category_culture.html', context)
 
-def culture_category(request, city: str):
-    """Culture & heritage page with faceted search."""
+# def culture_category(request, city: str):
+#     """Culture & heritage page with faceted search."""
     
+#     query = sanitize_query(request.GET.get('q', ''))
+#     selected_topic = sanitize_filter_value(request.GET.get('topic', ''))
+#     selected_category = sanitize_filter_value(request.GET.get('category', ''))
+#     selected_brand = sanitize_filter_value(request.GET.get('brand', ''))
+#     sort = validate_sort(request.GET.get('sort', ''), ['authority', 'recent'], 'authority')
+#     page = validate_page(request.GET.get('page', 1))
+    
+#     today = date.today()
+    
+#     # Base filter for culture page
+#     filters = ['document_schema:=culture']
+    
+#     valid_topics = {'hbcus', 'film', 'music', 'art', 'literature', 'food', 'fashion', 'history', 'theater', 'events'}
+#     if selected_topic and selected_topic not in valid_topics:
+#         selected_topic = ''
+    
+#     # Topic-based filtering - FIX: use document_category for hbcus
+#     if selected_topic == 'hbcus':
+#         filters = ['document_category:=hbcu']  # Changed from document_schema:=education
+#     elif selected_topic == 'film':
+#         filters = ['(document_schema:=culture || document_schema:=media)']
+#     elif selected_topic == 'music':
+#         filters = ['document_schema:=culture', 'document_category:=music']
+#     elif selected_topic == 'art':
+#         filters = ['document_schema:=culture', 'document_category:=art']
+#     elif selected_topic == 'literature':
+#         filters = ['document_schema:=culture', 'document_category:=literature']
+#     elif selected_topic == 'food':
+#         filters = ['document_schema:=culture', 'document_category:=food']
+#     elif selected_topic == 'fashion':
+#         filters = ['document_schema:=culture', 'document_category:=fashion']
+#     elif selected_topic == 'history':
+#         filters = ['document_schema:=culture', 'document_category:=history']
+#     elif selected_topic == 'theater':
+#         filters = ['document_schema:=culture', 'document_category:=theater']
+#     elif selected_topic == 'events':
+#         filters = ['document_schema:=culture', 'document_category:=events']
+    
+#     # Additional filters from sidebar
+#     if selected_category:
+#         filters.append(f'document_category:={selected_category}')
+#     if selected_brand:
+#         filters.append(f'document_brand:={selected_brand}')
+    
+#     filter_by = build_filter_string(filters)
+#     sort_by = 'authority_score:desc' if sort == 'authority' else 'created_at:desc'
+    
+#     results = typesense_search(
+#         query=query or '*',
+#         filter_by=filter_by,
+#         sort_by=sort_by,
+#         facet_by='document_category,document_brand',
+#         per_page=18,
+#         page=page,
+#     )
+    
+#     browse_results = safe_get_hits(results)
+#     total = safe_get_total(results)
+#     facets = parse_facets(results)
+    
+#     # HBCU Spotlight - FIX: filter by document_category:=hbcu
+#     hbcu_results = typesense_search(
+#         query='*',
+#         filter_by='document_category:=hbcu',  # Changed from document_schema:=education
+#         sort_by='authority_score:desc',
+#         per_page=4,
+#     )
+#     hbcus = safe_get_hits(hbcu_results)
+    
+#     featured_results = typesense_search(
+#         query='*',
+#         filter_by='document_schema:=culture && document_category:=history',
+#         sort_by='authority_score:desc',
+#         per_page=1,
+#     )
+    
+#     featured_article = None
+#     featured_hits = safe_get_hits(featured_results)
+#     if featured_hits:
+#         doc = featured_hits[0].get('document', {})
+#         featured_article = {
+#             'title': doc.get('document_title'),
+#             'excerpt': (doc.get('document_summary', '') or '')[:200],
+#             'url': doc.get('document_url'),
+#             'image': doc.get('image_url', [None])[0] if doc.get('image_url') else None,
+#         }
+    
+#     active_filter_count = sum([
+#         bool(selected_topic),
+#         bool(selected_category),
+#         bool(selected_brand),
+#     ])
+    
+#     context = {
+#         'city': city,
+#         'query': query,
+#         'today': {'day': today.day, 'month': today.strftime('%b').upper()},
+#         'featured_article': featured_article,
+#         'hbcus': hbcus,
+#         'results': browse_results,
+#         'total': total,
+#         'facets': facets,
+#         'selected_topic': selected_topic,
+#         'selected_category': selected_category,
+#         'selected_brand': selected_brand,
+#         'active_filter_count': active_filter_count,
+#         'page': page,
+#         'has_more': (page * 18) < total,
+#         'sort': sort,
+#     }
+    
+#     return render(request, 'category_culture.html', context)
+
+
+"""
+Updated culture_category view with Redis analytics integration.
+
+CHANGES MADE:
+1. Added start_session() call on every page load
+2. Added track_search() call when searches are performed
+3. Added track_event() for filter/topic selections
+4. Passes analytics context to template for client-side tracking
+5. Added helper functions for extracting user/device info
+
+INTEGRATION:
+- Replace your existing culture_category view with this one
+- Make sure redis_analytics.py is importable
+- Add the analytics JavaScript to your template (see category_culture_analytics.html)
+"""
+
+import logging
+import time
+import hashlib
+from datetime import date
+from django.shortcuts import render
+from user_agents import parse as parse_user_agent  # pip install user-agents
+
+# Your existing imports
+# from .utils import sanitize_query, sanitize_filter_value, validate_sort, validate_page
+# from .utils import build_filter_string, typesense_search, safe_get_hits, safe_get_total, parse_facets
+
+# Analytics import
+# from redis_analytics import SearchAnalytics
+
+
+logger = logging.getLogger(__name__)
+
+# Initialize analytics (singleton pattern recommended)
+_analytics = None
+
+def get_analytics():
+    """Get or create SearchAnalytics instance."""
+    global _analytics
+    if _analytics is None:
+        _analytics = SearchAnalytics()
+    return _analytics
+
+
+def get_client_ip(request):
+    """Extract client IP from request, handling proxies."""
+    x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+    if x_forwarded_for:
+        return x_forwarded_for.split(',')[0].strip()
+    return request.META.get('REMOTE_ADDR', '')
+
+
+def get_device_info(request):
+    """Parse user agent to extract device/browser info."""
+    ua_string = request.META.get('HTTP_USER_AGENT', '')
+    try:
+        ua = parse_user_agent(ua_string)
+        return {
+            'user_agent': ua_string[:500],
+            'browser': ua.browser.family or 'Unknown',
+            'browser_version': ua.browser.version_string or '',
+            'os_name': ua.os.family or 'Unknown',
+            'os_version': ua.os.version_string or '',
+            'is_mobile': ua.is_mobile,
+            'is_tablet': ua.is_tablet,
+            'is_bot': ua.is_bot,
+            'device_type': 'mobile' if ua.is_mobile else ('tablet' if ua.is_tablet else 'desktop'),
+        }
+    except Exception as e:
+        logger.warning(f"Failed to parse user agent: {e}")
+        return {
+            'user_agent': ua_string[:500],
+            'browser': 'Unknown',
+            'browser_version': '',
+            'os_name': 'Unknown',
+            'os_version': '',
+            'is_mobile': False,
+            'is_tablet': False,
+            'is_bot': False,
+            'device_type': 'unknown',
+        }
+
+
+def get_location_from_request(request):
+    """
+    Extract location from request.
+    
+    This assumes you have GeoIP middleware or similar that adds location to request.
+    Modify based on your actual location detection method.
+    """
+    # Option 1: If using django-geoip2 or similar middleware
+    if hasattr(request, 'geo'):
+        return {
+            'city': getattr(request.geo, 'city', ''),
+            'region': getattr(request.geo, 'region', ''),
+            'country': getattr(request.geo, 'country_name', ''),
+            'country_code': getattr(request.geo, 'country_code', ''),
+            'lat': getattr(request.geo, 'latitude', ''),
+            'lng': getattr(request.geo, 'longitude', ''),
+            'timezone': getattr(request.geo, 'timezone', ''),
+        }
+    
+    # Option 2: If location is stored in session
+    if 'location' in request.session:
+        return request.session['location']
+    
+    # Option 3: Return empty dict (location tracking disabled)
+    return {}
+
+
+def generate_request_id(session_id):
+    """Generate unique request ID for tracking."""
+    return f"{session_id}:{time.time()}:{hashlib.md5(str(time.time()).encode()).hexdigest()[:8]}"
+
+
+def culture_category(request, city: str = None):
+    """
+    Culture & heritage page with faceted search.
+    
+    NOW WITH ANALYTICS TRACKING:
+    - Tracks session on every page load
+    - Tracks searches when query is present
+    - Tracks filter/topic selections as events
+    - Passes data to template for click tracking
+    """
+    
+    # ==================== START TIMING ====================
+    search_start_time = time.time()
+    
+    # ==================== YOUR EXISTING CODE ====================
     query = sanitize_query(request.GET.get('q', ''))
     selected_topic = sanitize_filter_value(request.GET.get('topic', ''))
     selected_category = sanitize_filter_value(request.GET.get('category', ''))
@@ -4912,9 +5156,9 @@ def culture_category(request, city: str):
     if selected_topic and selected_topic not in valid_topics:
         selected_topic = ''
     
-    # Topic-based filtering - FIX: use document_category for hbcus
+    # Topic-based filtering
     if selected_topic == 'hbcus':
-        filters = ['document_category:=hbcu']  # Changed from document_schema:=education
+        filters = ['document_category:=hbcu']
     elif selected_topic == 'film':
         filters = ['(document_schema:=culture || document_schema:=media)']
     elif selected_topic == 'music':
@@ -4943,6 +5187,7 @@ def culture_category(request, city: str):
     filter_by = build_filter_string(filters)
     sort_by = 'authority_score:desc' if sort == 'authority' else 'created_at:desc'
     
+    # ==================== MAIN SEARCH ====================
     results = typesense_search(
         query=query or '*',
         filter_by=filter_by,
@@ -4956,15 +5201,19 @@ def culture_category(request, city: str):
     total = safe_get_total(results)
     facets = parse_facets(results)
     
-    # HBCU Spotlight - FIX: filter by document_category:=hbcu
+    # Calculate search time
+    search_time_ms = (time.time() - search_start_time) * 1000
+    
+    # ==================== HBCU SPOTLIGHT ====================
     hbcu_results = typesense_search(
         query='*',
-        filter_by='document_category:=hbcu',  # Changed from document_schema:=education
+        filter_by='document_category:=hbcu',
         sort_by='authority_score:desc',
         per_page=4,
     )
     hbcus = safe_get_hits(hbcu_results)
     
+    # ==================== FEATURED ARTICLE ====================
     featured_results = typesense_search(
         query='*',
         filter_by='document_schema:=culture && document_category:=history',
@@ -4989,6 +5238,111 @@ def culture_category(request, city: str):
         bool(selected_brand),
     ])
     
+    # ==================== ANALYTICS TRACKING ====================
+    analytics = get_analytics()
+    
+    # Ensure session exists
+    if not request.session.session_key:
+        request.session.create()
+    session_id = request.session.session_key
+    
+    # Get user info
+    user_id = str(request.user.id) if request.user.is_authenticated else None
+    device_info = get_device_info(request)
+    location = get_location_from_request(request)
+    ip_address = get_client_ip(request)
+    referrer = request.META.get('HTTP_REFERER', '')
+    
+    # Generate unique request ID for this page load
+    request_id = generate_request_id(session_id)
+    
+    # Track session (call on every page load)
+    try:
+        analytics.start_session(
+            session_id=session_id,
+            user_id=user_id,
+            device_type=device_info['device_type'],
+            user_agent=device_info['user_agent'],
+            ip_address=ip_address,
+            location=location if location else None,
+            referrer=referrer,
+            browser=device_info['browser'],
+            browser_version=device_info['browser_version'],
+            os_name=device_info['os_name'],
+            os_version=device_info['os_version'],
+            is_mobile=device_info['is_mobile'],
+            is_bot=device_info['is_bot'],
+        )
+    except Exception as e:
+        logger.error(f"Failed to start session: {e}")
+    
+    # Track search (when query is present OR when browsing with filters)
+    # We track all page loads as "searches" since they query the database
+    try:
+        search_query = query if query else f"[browse:{selected_topic or 'all'}]"
+        
+        analytics.track_search(
+            session_id=session_id,
+            query=search_query,
+            results_count=total,
+            alt_mode='n',  # semantic search
+            user_id=user_id,
+            location=location if location else None,
+            device_type=device_info['device_type'],
+            search_time_ms=search_time_ms,
+            search_strategy='faceted',
+            filters_applied={
+                'topic': selected_topic,
+                'category': selected_category,
+                'brand': selected_brand,
+                'sort': sort,
+            } if any([selected_topic, selected_category, selected_brand]) else None,
+            page=page,
+            intent='culture_browse',
+            request_id=request_id,
+            browser=device_info['browser'],
+            browser_version=device_info['browser_version'],
+            os_name=device_info['os_name'],
+            os_version=device_info['os_version'],
+            is_mobile=device_info['is_mobile'],
+            is_bot=device_info['is_bot'],
+        )
+    except Exception as e:
+        logger.error(f"Failed to track search: {e}")
+    
+    # Track filter/topic selection as events
+    if selected_topic:
+        try:
+            analytics.track_event(
+                session_id=session_id,
+                event_type='topic_selected',
+                event_data={
+                    'topic': selected_topic,
+                    'page': 'culture',
+                },
+                user_id=user_id,
+                location=location if location else None,
+            )
+        except Exception as e:
+            logger.error(f"Failed to track topic event: {e}")
+    
+    if selected_category or selected_brand:
+        try:
+            analytics.track_event(
+                session_id=session_id,
+                event_type='filter_applied',
+                event_data={
+                    'category': selected_category,
+                    'brand': selected_brand,
+                    'page': 'culture',
+                },
+                user_id=user_id,
+                location=location if location else None,
+            )
+        except Exception as e:
+            logger.error(f"Failed to track filter event: {e}")
+    
+    # ==================== BUILD CONTEXT ====================
     context = {
         'city': city,
         'query': query,
@@ -5005,9 +5359,75 @@ def culture_category(request, city: str):
         'page': page,
         'has_more': (page * 18) < total,
         'sort': sort,
+        
+        # Analytics context for client-side tracking
+        'analytics_context': {
+            'session_id': session_id,
+            'request_id': request_id,
+            'query': query,
+            'results_count': total,
+            'page': page,
+            'user_id': user_id or '',
+        },
     }
     
     return render(request, 'category_culture.html', context)
+
+
+# ==================== HELPER FUNCTIONS (add to your utils.py) ====================
+# These are placeholders - replace with your actual implementations
+
+def sanitize_query(query):
+    """Sanitize search query."""
+    if not query:
+        return ''
+    return str(query).strip()[:500]
+
+def sanitize_filter_value(value):
+    """Sanitize filter value."""
+    if not value:
+        return ''
+    return str(value).strip()[:200]
+
+def validate_sort(sort, valid_sorts, default):
+    """Validate sort parameter."""
+    return sort if sort in valid_sorts else default
+
+def validate_page(page):
+    """Validate page parameter."""
+    try:
+        page = int(page)
+        return max(1, min(page, 1000))
+    except (TypeError, ValueError):
+        return 1
+
+def build_filter_string(filters):
+    """Build Typesense filter string."""
+    return ' && '.join(filters) if filters else ''
+
+def typesense_search(**kwargs):
+    """Your Typesense search function."""
+    # Implement your actual Typesense search
+    pass
+
+def safe_get_hits(results):
+    """Safely get hits from results."""
+    if not results:
+        return []
+    return results.get('hits', [])
+
+def safe_get_total(results):
+    """Safely get total count from results."""
+    if not results:
+        return 0
+    return results.get('found', 0)
+
+def parse_facets(results):
+    """Parse facets from results."""
+    if not results:
+        return {}
+    # Implement your facet parsing
+    return {}
 
 # =============================================================================
 # VIEW: HEALTH CATEGORY

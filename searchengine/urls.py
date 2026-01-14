@@ -2,6 +2,7 @@ from django.urls import path
 from . import views
 from .views import track_click, click_redirect
 from . import searchapi
+from . import cache_views  # ← Add this
 
 app_name="searchengine"
 
@@ -38,6 +39,15 @@ urlpatterns = [
     
     # Community API
     path('api/community/search/', views.community_search_api, name='community_search_api'),
+
+
+
+    # Cache API endpoints
+    path('api/cache/reload/', cache_views.reload_cache_view, name='cache_reload'),
+    path('api/cache/reload-from-file/', cache_views.reload_cache_from_file_view, name='cache_reload_file'),
+    path('api/cache/status/', cache_views.cache_status_view, name='cache_status'),
+    path('api/cache/test/', cache_views.cache_test_view, name='cache_test'),
+
     
     # ==================== CATEGORY PAGES ====================
     # Generic category router (handles all categories)

@@ -255,13 +255,7 @@
                 <span class="hero-badge">Featured</span>
                 <h1 class="hero-title">{{ featured_article.title|default:"The Legacy of HBCUs: 150 Years of Excellence" }}</h1>
                 <p class="hero-description">{{ featured_article.excerpt|default:"Explore the rich history, groundbreaking achievements, and lasting impact of Historically Black Colleges and Universities on American education and culture." }}</p>
-                <a href="{{ featured_article.url|default:'#' }}" 
-                   class="hero-cta"
-                   data-track-click="featured"
-                   data-click-url="{{ featured_article.url|default:'#' }}"
-                   data-click-title="{{ featured_article.title|default:'Featured Article' }}"
-                   data-click-position="0"
-                   data-click-section="hero">Explore Story →</a>
+                <a href="{{ featured_article.url|default:'#' }}" class="hero-cta">Explore Story →</a>
             </div>
         </div>
     </section>
@@ -269,16 +263,16 @@
 <section class="topics-section">
     <div class="section-header"><h2 class="section-title">Explore by Topic</h2></div>
     <div class="topics-grid">
-        <a href="?topic=music" class="topic-card {% if selected_topic == 'music' %}active{% endif %}" data-track-click="topic" data-click-topic="music"><div class="topic-icon">🎵</div><div class="topic-name">Music</div></a>
-        <a href="?topic=art" class="topic-card {% if selected_topic == 'art' %}active{% endif %}" data-track-click="topic" data-click-topic="art"><div class="topic-icon">🎨</div><div class="topic-name">Art</div></a>
-        <a href="?topic=literature" class="topic-card {% if selected_topic == 'literature' %}active{% endif %}" data-track-click="topic" data-click-topic="literature"><div class="topic-icon">📚</div><div class="topic-name">Literature</div></a>
-        <a href="?topic=film" class="topic-card {% if selected_topic == 'film' %}active{% endif %}" data-track-click="topic" data-click-topic="film"><div class="topic-icon">🎬</div><div class="topic-name">Film & TV</div></a>
-        <a href="?topic=hbcus" class="topic-card {% if selected_topic == 'hbcus' %}active{% endif %}" data-track-click="topic" data-click-topic="hbcus"><div class="topic-icon">🎓</div><div class="topic-name">HBCUs</div></a>
-        <a href="?topic=food" class="topic-card {% if selected_topic == 'food' %}active{% endif %}" data-track-click="topic" data-click-topic="food"><div class="topic-icon">🍽️</div><div class="topic-name">Food</div></a>
-        <a href="?topic=fashion" class="topic-card {% if selected_topic == 'fashion' %}active{% endif %}" data-track-click="topic" data-click-topic="fashion"><div class="topic-icon">👗</div><div class="topic-name">Fashion</div></a>
-        <a href="?topic=history" class="topic-card {% if selected_topic == 'history' %}active{% endif %}" data-track-click="topic" data-click-topic="history"><div class="topic-icon">🏛️</div><div class="topic-name">History</div></a>
-        <a href="?topic=theater" class="topic-card {% if selected_topic == 'theater' %}active{% endif %}" data-track-click="topic" data-click-topic="theater"><div class="topic-icon">🎭</div><div class="topic-name">Theater</div></a>
-        <a href="?topic=events" class="topic-card {% if selected_topic == 'events' %}active{% endif %}" data-track-click="topic" data-click-topic="events"><div class="topic-icon">📅</div><div class="topic-name">Events</div></a>
+        <a href="?topic=music" class="topic-card {% if selected_topic == 'music' %}active{% endif %}"><div class="topic-icon">🎵</div><div class="topic-name">Music</div></a>
+        <a href="?topic=art" class="topic-card {% if selected_topic == 'art' %}active{% endif %}"><div class="topic-icon">🎨</div><div class="topic-name">Art</div></a>
+        <a href="?topic=literature" class="topic-card {% if selected_topic == 'literature' %}active{% endif %}"><div class="topic-icon">📚</div><div class="topic-name">Literature</div></a>
+        <a href="?topic=film" class="topic-card {% if selected_topic == 'film' %}active{% endif %}"><div class="topic-icon">🎬</div><div class="topic-name">Film & TV</div></a>
+        <a href="?topic=hbcus" class="topic-card {% if selected_topic == 'hbcus' %}active{% endif %}"><div class="topic-icon">🎓</div><div class="topic-name">HBCUs</div></a>
+        <a href="?topic=food" class="topic-card {% if selected_topic == 'food' %}active{% endif %}"><div class="topic-icon">🍽️</div><div class="topic-name">Food</div></a>
+        <a href="?topic=fashion" class="topic-card {% if selected_topic == 'fashion' %}active{% endif %}"><div class="topic-icon">👗</div><div class="topic-name">Fashion</div></a>
+        <a href="?topic=history" class="topic-card {% if selected_topic == 'history' %}active{% endif %}"><div class="topic-icon">🏛️</div><div class="topic-name">History</div></a>
+        <a href="?topic=theater" class="topic-card {% if selected_topic == 'theater' %}active{% endif %}"><div class="topic-icon">🎭</div><div class="topic-name">Theater</div></a>
+        <a href="?topic=events" class="topic-card {% if selected_topic == 'events' %}active{% endif %}"><div class="topic-icon">📅</div><div class="topic-name">Events</div></a>
     </div>
 </section>
 
@@ -293,7 +287,7 @@
                 <h2>{{ history_event.title|default:"1863 — Emancipation Proclamation Takes Effect" }}</h2>
                 <p>{{ history_event.description|default:"President Abraham Lincoln's executive order declared all enslaved people in Confederate states to be forever free, marking a pivotal moment in American history." }}</p>
             </div>
-            <a href="?topic=history" class="history-link" data-track-click="topic" data-click-topic="history">View Full Timeline →</a>
+            <a href="?topic=history" class="history-link">View Full Timeline →</a>
         </div>
     </section>
 
@@ -304,14 +298,7 @@
     </div>
     <div class="hbcu-grid">
         {% for hbcu in hbcus %}
-        <a href="{{ hbcu.document.document_url }}" target="_blank" class="hbcu-card"
-           data-track-click="result"
-           data-click-url="{{ hbcu.document.document_url }}"
-           data-click-title="{{ hbcu.document.document_title }}"
-           data-click-position="{{ forloop.counter }}"
-           data-click-section="hbcu_spotlight"
-           data-click-id="{{ hbcu.document.id }}"
-           data-click-source="{{ hbcu.document.document_brand }}">
+        <a href="{{ hbcu.document.document_url }}" target="_blank" class="hbcu-card">
             <div class="hbcu-image">
                 {% if hbcu.document.image_url %}<img src="{{ hbcu.document.image_url.0 }}" alt="{{ hbcu.document.document_title }}">{% endif %}
                 <span class="hbcu-badge">HBCU</span>
@@ -331,7 +318,7 @@
     <section class="browse-section">
         <div class="browse-header">
             <h2 class="section-title">Browse All Culture</h2>
-            <form class="search-box" method="GET" id="search-form">
+            <form class="search-box" method="GET">
                 {% if selected_topic %}<input type="hidden" name="topic" value="{{ selected_topic }}">{% endif %}
                 {% if selected_category %}<input type="hidden" name="category" value="{{ selected_category }}">{% endif %}
                 {% if selected_brand %}<input type="hidden" name="brand" value="{{ selected_brand }}">{% endif %}
@@ -352,11 +339,7 @@
                     <div class="filter-group">
                         <h4 class="filter-group-title">Category</h4>
                         {% for facet in facets.category %}
-                        <a href="?category={{ facet.value|urlencode }}{% if selected_topic %}&topic={{ selected_topic }}{% endif %}{% if selected_brand %}&brand={{ selected_brand|urlencode }}{% endif %}{% if query %}&q={{ query|urlencode }}{% endif %}" 
-                           class="filter-option {% if selected_category == facet.value %}active{% endif %}"
-                           data-track-click="filter"
-                           data-click-filter-type="category"
-                           data-click-filter-value="{{ facet.value }}">
+                        <a href="?category={{ facet.value|urlencode }}{% if selected_topic %}&topic={{ selected_topic }}{% endif %}{% if selected_brand %}&brand={{ selected_brand|urlencode }}{% endif %}{% if query %}&q={{ query|urlencode }}{% endif %}" class="filter-option {% if selected_category == facet.value %}active{% endif %}">
                             <div class="filter-option-left"><div class="filter-checkbox"></div><span class="filter-label">{{ facet.value|title }}</span></div>
                             <span class="filter-count">{{ facet.count }}</span>
                         </a>
@@ -370,11 +353,7 @@
                     <div class="filter-group">
                         <h4 class="filter-group-title">Source</h4>
                         {% for facet in facets.brand %}
-                        <a href="?brand={{ facet.value|urlencode }}{% if selected_topic %}&topic={{ selected_topic }}{% endif %}{% if selected_category %}&category={{ selected_category|urlencode }}{% endif %}{% if query %}&q={{ query|urlencode }}{% endif %}" 
-                           class="filter-option {% if selected_brand == facet.value %}active{% endif %}"
-                           data-track-click="filter"
-                           data-click-filter-type="brand"
-                           data-click-filter-value="{{ facet.value }}">
+                        <a href="?brand={{ facet.value|urlencode }}{% if selected_topic %}&topic={{ selected_topic }}{% endif %}{% if selected_category %}&category={{ selected_category|urlencode }}{% endif %}{% if query %}&q={{ query|urlencode }}{% endif %}" class="filter-option {% if selected_brand == facet.value %}active{% endif %}">
                             <div class="filter-option-left"><div class="filter-checkbox"></div><span class="filter-label">{{ facet.value }}</span></div>
                             <span class="filter-count">{{ facet.count }}</span>
                         </a>
@@ -410,15 +389,7 @@
 
                 <div class="results-grid">
                     {% for hit in results %}
-                    <a href="{{ hit.document.document_url }}" target="_blank" class="result-card"
-                       data-track-click="result"
-                       data-click-url="{{ hit.document.document_url }}"
-                       data-click-title="{{ hit.document.document_title }}"
-                       data-click-position="{{ forloop.counter }}"
-                       data-click-section="browse_results"
-                       data-click-id="{{ hit.document.id }}"
-                       data-click-source="{{ hit.document.document_brand }}"
-                       data-click-category="{{ hit.document.document_category }}">
+                    <a href="{{ hit.document.document_url }}" target="_blank" class="result-card">
                         <div class="result-image">{% if hit.document.image_url %}<img src="{{ hit.document.image_url.0 }}" alt="{{ hit.document.document_title }}">{% endif %}<span class="result-category">{{ hit.document.document_category|default:"Culture" }}</span></div>
                         <div class="result-content">
                             <h3 class="result-title">{{ hit.document.document_title }}</h3>
@@ -502,12 +473,12 @@
         <div class="authors-inner">
             <div class="section-header"><h2 class="section-title">Black Authors to Read</h2></div>
             <div class="books-scroll">
-                {% for book in books %}<a href="#" class="book-card" data-track-click="book" data-click-title="{{ book.title }}" data-click-author="{{ book.author }}"><div class="book-cover"></div><h4 class="book-title">{{ book.title }}</h4><p class="book-author">{{ book.author }}</p></a>{% empty %}
-                <a href="#" class="book-card" data-track-click="book" data-click-title="Beloved" data-click-author="Toni Morrison"><div class="book-cover"></div><h4 class="book-title">Beloved</h4><p class="book-author">Toni Morrison</p></a>
-                <a href="#" class="book-card" data-track-click="book" data-click-title="Between the World and Me" data-click-author="Ta-Nehisi Coates"><div class="book-cover"></div><h4 class="book-title">Between the World and Me</h4><p class="book-author">Ta-Nehisi Coates</p></a>
-                <a href="#" class="book-card" data-track-click="book" data-click-title="The Color Purple" data-click-author="Alice Walker"><div class="book-cover"></div><h4 class="book-title">The Color Purple</h4><p class="book-author">Alice Walker</p></a>
-                <a href="#" class="book-card" data-track-click="book" data-click-title="Kindred" data-click-author="Octavia Butler"><div class="book-cover"></div><h4 class="book-title">Kindred</h4><p class="book-author">Octavia Butler</p></a>
-                <a href="#" class="book-card" data-track-click="book" data-click-title="Invisible Man" data-click-author="Ralph Ellison"><div class="book-cover"></div><h4 class="book-title">Invisible Man</h4><p class="book-author">Ralph Ellison</p></a>{% endfor %}
+                {% for book in books %}<a href="#" class="book-card"><div class="book-cover"></div><h4 class="book-title">{{ book.title }}</h4><p class="book-author">{{ book.author }}</p></a>{% empty %}
+                <a href="#" class="book-card"><div class="book-cover"></div><h4 class="book-title">Beloved</h4><p class="book-author">Toni Morrison</p></a>
+                <a href="#" class="book-card"><div class="book-cover"></div><h4 class="book-title">Between the World and Me</h4><p class="book-author">Ta-Nehisi Coates</p></a>
+                <a href="#" class="book-card"><div class="book-cover"></div><h4 class="book-title">The Color Purple</h4><p class="book-author">Alice Walker</p></a>
+                <a href="#" class="book-card"><div class="book-cover"></div><h4 class="book-title">Kindred</h4><p class="book-author">Octavia Butler</p></a>
+                <a href="#" class="book-card"><div class="book-cover"></div><h4 class="book-title">Invisible Man</h4><p class="book-author">Ralph Ellison</p></a>{% endfor %}
             </div>
         </div>
     </section>
@@ -518,137 +489,6 @@
             <nav class="footer-links"><a href="#" class="footer-link">About</a><a href="#" class="footer-link">Contact</a><a href="#" class="footer-link">Privacy</a><a href="#" class="footer-link">Terms</a></nav>
         </div>
     </footer>
-
-    <!-- ==================== ANALYTICS JAVASCRIPT ==================== -->
-    <script>
-    (function() {
-        'use strict';
-        
-        // Analytics configuration from Django context
-        const analyticsConfig = {
-            sessionId: '{{ analytics_context.session_id|default:"" }}',
-            requestId: '{{ analytics_context.request_id|default:"" }}',
-            query: '{{ analytics_context.query|default:""|escapejs }}',
-            resultsCount: {{ analytics_context.results_count|default:0 }},
-            page: {{ analytics_context.page|default:1 }},
-            userId: '{{ analytics_context.user_id|default:"" }}',
-            trackClickUrl: '{% url "searchengine:track_click" %}',
-            csrfToken: '{{ csrf_token }}'
-        };
-        
-        // Track page load time
-        const pageLoadTime = Date.now();
-        
-        /**
-         * Send click tracking data to the server
-         */
-        function trackClick(clickData) {
-            // Calculate time from page load to click
-            clickData.time_to_click_ms = Date.now() - pageLoadTime;
-            clickData.session_id = analyticsConfig.sessionId;
-            clickData.request_id = analyticsConfig.requestId;
-            clickData.query = analyticsConfig.query;
-            clickData.results_count = analyticsConfig.resultsCount;
-            clickData.page = analyticsConfig.page;
-            clickData.user_id = analyticsConfig.userId;
-            
-            // Use sendBeacon for reliability (doesn't block navigation)
-            if (navigator.sendBeacon) {
-                const blob = new Blob([JSON.stringify(clickData)], { type: 'application/json' });
-                navigator.sendBeacon(analyticsConfig.trackClickUrl, blob);
-            } else {
-                // Fallback to fetch for older browsers
-                fetch(analyticsConfig.trackClickUrl, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': analyticsConfig.csrfToken
-                    },
-                    body: JSON.stringify(clickData),
-                    keepalive: true
-                }).catch(function(err) {
-                    console.warn('Click tracking failed:', err);
-                });
-            }
-        }
-        
-        /**
-         * Handle click events on trackable elements
-         */
-        function handleTrackedClick(event) {
-            const element = event.currentTarget;
-            const trackType = element.dataset.trackClick;
-            
-            if (!trackType) return;
-            
-            const clickData = {
-                click_type: trackType,
-                clicked_url: element.href || element.dataset.clickUrl || '',
-                clicked_title: element.dataset.clickTitle || element.textContent.trim().substring(0, 200),
-                clicked_position: parseInt(element.dataset.clickPosition) || 0,
-                section: element.dataset.clickSection || '',
-                result_id: element.dataset.clickId || '',
-                result_source: element.dataset.clickSource || '',
-                category: element.dataset.clickCategory || '',
-                // For filter clicks
-                filter_type: element.dataset.clickFilterType || '',
-                filter_value: element.dataset.clickFilterValue || '',
-                // For topic clicks
-                topic: element.dataset.clickTopic || '',
-                // For book clicks
-                book_title: element.dataset.clickTitle || '',
-                book_author: element.dataset.clickAuthor || ''
-            };
-            
-            trackClick(clickData);
-        }
-        
-        /**
-         * Initialize click tracking on all trackable elements
-         */
-        function initializeClickTracking() {
-            // Find all elements with data-track-click attribute
-            const trackableElements = document.querySelectorAll('[data-track-click]');
-            
-            trackableElements.forEach(function(element) {
-                element.addEventListener('click', handleTrackedClick);
-            });
-            
-            // Also track search form submissions
-            const searchForm = document.getElementById('search-form');
-            if (searchForm) {
-                searchForm.addEventListener('submit', function(event) {
-                    const searchInput = searchForm.querySelector('input[name="q"]');
-                    if (searchInput && searchInput.value.trim()) {
-                        trackClick({
-                            click_type: 'search_submit',
-                            query: searchInput.value.trim(),
-                            section: 'browse_search'
-                        });
-                    }
-                });
-            }
-        }
-        
-        // Initialize when DOM is ready
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', initializeClickTracking);
-        } else {
-            initializeClickTracking();
-        }
-        
-        // Track page visibility changes (user leaving/returning)
-        document.addEventListener('visibilitychange', function() {
-            if (document.visibilityState === 'hidden') {
-                trackClick({
-                    click_type: 'page_exit',
-                    time_on_page_ms: Date.now() - pageLoadTime
-                });
-            }
-        });
-        
-    })();
-    </script>
 
     <script>
         function openFilterSheet() {
