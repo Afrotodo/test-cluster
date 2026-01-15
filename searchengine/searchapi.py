@@ -9572,8 +9572,8 @@ from decouple import config
 # CONFIGURATION
 # =============================================================================
 
-REDIS_LOCATION = config('REDIS_LOCATION', default='localhost')
-REDIS_PORT = config('REDIS_PORT', default=6379, cast=int)
+REDIS_LOCATION = config('REDIS_LOCATION')
+REDIS_PORT = config('REDIS_PORT', cast=int)
 REDIS_DB = config('REDIS_DB', default=0, cast=int)
 REDIS_PASSWORD = config('REDIS_PASSWORD', default='')
 REDIS_USERNAME = config('REDIS_USERNAME', default='')

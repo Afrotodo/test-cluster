@@ -13656,8 +13656,3584 @@
 
 
 
+# """
+# typesense_calculations.py (OPTIMIZED v4.3)
+
+# OPTIMIZATIONS:
+# 1. Truncate long queries BEFORE embedding (biggest win for long sentences)
+# 2. Parallel execution: Word Discovery + Embedding run simultaneously  
+# 3. Connection pooling for FastAPI embedding calls
+# 4. Reuse Typesense client (already done)
+
+# NEW IN v4:
+# 5. Score-based strategy selection (uses Redis rank field)
+# 6. Semantic UUID support for related content
+# 7. Enhanced debug output with term scores
+
+# NEW IN v4.1:
+# 8. skip_embedding parameter for dropdown/keyword selections
+
+# NEW IN v4.2:
+# 9. DROPDOWN FAST PATH - skip word discovery entirely for dropdown selections
+#    When user selects from dropdown, search the exact phrase directly
+
+# NEW IN v4.3:
+# 10. Dynamic tab filter support (data_type, category, schema filters)
+# 11. Enhanced facet support for tabs
+# """
+
+# import typesense
+# from typing import Dict, List, Tuple, Optional, Any
+# import re
+# from decouple import config
+# from datetime import datetime
+# from concurrent.futures import ThreadPoolExecutor
+# import threading
+# import requests
+# from requests.adapters import HTTPAdapter
+# from urllib3.util.retry import Retry
+
+
+# # ============================================================================
+# # THREAD POOL - Reused across requests (3 workers for I/O-bound tasks)
+# # ============================================================================
+
+# _executor = ThreadPoolExecutor(max_workers=3)
+
+
+# # ============================================================================
+# # CONNECTION POOLING FOR EMBEDDING API
+# # ============================================================================
+
+# _http_session = None
+# _session_lock = threading.Lock()
+
+
+# def _get_http_session():
+#     """Reusable HTTP session with connection pooling."""
+#     global _http_session
+#     if _http_session is None:
+#         with _session_lock:
+#             if _http_session is None:
+#                 _http_session = requests.Session()
+#                 adapter = HTTPAdapter(
+#                     pool_connections=10,
+#                     pool_maxsize=10,
+#                     max_retries=Retry(total=2, backoff_factor=0.1)
+#                 )
+#                 _http_session.mount('http://', adapter)
+#                 _http_session.mount('https://', adapter)
+#     return _http_session
+
+
+# # ============================================================================
+# # QUERY PREPROCESSING - THE BIGGEST WIN FOR LONG QUERIES
+# # ============================================================================
+
+# FILLER_PATTERNS = [
+#     re.compile(r'\b(i am |i\'m |i want to |i need to |can you |please |help me )\b', re.I),
+#     re.compile(r'\b(looking for |find me |search for |show me |tell me about )\b', re.I),
+#     re.compile(r'\b(what is |who is |where is |how to |how do i |how can i )\b', re.I),
+#     re.compile(r'\b(could you |would you |i would like |do you know |do you have )\b', re.I),
+#     re.compile(r'\b(the best |a good |some good |any good |really good |very good )\b', re.I),
+#     re.compile(r'\b(basically |actually |just |really |very |quite |pretty )\b', re.I),
+#     re.compile(r'\b(i think |i believe |i guess |maybe |perhaps |probably )\b', re.I),
+#     re.compile(r'\b(kind of |sort of |type of |lots of |a lot of )\b', re.I),
+# ]
+
+
+# def truncate_for_embedding(query: str, max_words: int = 40) -> str:
+#     """
+#     Strip filler words and truncate for faster embedding.
+    
+#     Example:
+#     'I'm looking for a really good Italian restaurant in Buenos Aires 
+#      that has outdoor seating and serves authentic pasta with wine'
+    
+#     Becomes:
+#     'Italian restaurant Buenos Aires outdoor seating authentic pasta wine'
+    
+#     This reduces embedding time from ~200ms to ~30ms for long queries.
+#     """
+#     cleaned = query
+    
+#     for pattern in FILLER_PATTERNS:
+#         cleaned = pattern.sub(' ', cleaned)
+    
+#     # Collapse whitespace
+#     cleaned = ' '.join(cleaned.split())
+    
+#     # Truncate to max words
+#     words = cleaned.split()
+#     if len(words) > max_words:
+#         cleaned = ' '.join(words[:max_words])
+    
+#     return cleaned.strip() or query[:200]
+
+
+# # ============================================================================
+# # EMBEDDING CLIENT (with pooling + truncation)
+# # ============================================================================
+
+# EMBEDDING_SERVICE_URL = config('EMBEDDING_SERVICE_URL')
+
+
+# def get_query_embedding(query: str) -> Optional[List[float]]:
+#     """
+#     Get embedding with:
+#     1. Query truncation (faster inference)
+#     2. Connection pooling (faster HTTP)
+#     """
+#     # Truncate BEFORE sending to model
+#     clean_query = truncate_for_embedding(query, max_words=40)
+    
+#     try:
+#         session = _get_http_session()
+#         response = session.post(
+#             EMBEDDING_SERVICE_URL,
+#             json={"text": clean_query},
+#             timeout=2  # Reduced from 5 to fail faster
+#         )
+#         response.raise_for_status()
+#         return response.json().get("embedding")
+#     except Exception as e:
+#         print(f"⚠️ Embedding error: {e}")
+#         return None
+
+
+# # ============================================================================
+# # WORD DISCOVERY
+# # ============================================================================
+
+# try:
+#     from .word_discovery import (
+#         process_query_optimized,
+#         get_search_strategy,
+#         get_filter_terms,
+#         get_loose_terms,
+#         get_all_search_terms,
+#         get_term_scores,
+#         get_high_score_terms
+#     )
+#     WORD_DISCOVERY_AVAILABLE = True
+# except ImportError:
+#     try:
+#         from word_discovery import (
+#             process_query_optimized,
+#             get_search_strategy,
+#             get_filter_terms,
+#             get_loose_terms,
+#             get_all_search_terms,
+#             get_term_scores,
+#             get_high_score_terms
+#         )
+#         WORD_DISCOVERY_AVAILABLE = True
+#     except ImportError:
+#         WORD_DISCOVERY_AVAILABLE = False
+#         print("⚠️ word_discovery not available, using basic search")
+        
+#         # Fallback implementations
+#         def get_term_scores(result):
+#             return []
+        
+#         def get_high_score_terms(result, min_score=500):
+#             return []
+
+
+# def _do_word_discovery(query: str) -> Dict:
+#     """Wrapper for thread pool."""
+#     if WORD_DISCOVERY_AVAILABLE:
+#         return process_query_optimized(query, verbose=False)
+#     return {
+#         'valid_count': 0,
+#         'unknown_count': len(query.split()),
+#         'search_strategy': 'semantic',
+#         'corrected_query': query,
+#         'corrected_terms': [],
+#         'total_score': 0,
+#         'average_score': 0,
+#         'max_score': 0,
+#         'terms': []
+#     }
+
+
+# def _do_embedding(query: str) -> Optional[List[float]]:
+#     """Wrapper for thread pool."""
+#     return get_query_embedding(query)
+
+
+# # ============================================================================
+# # PARALLEL EXECUTION HELPER
+# # ============================================================================
+
+# def run_parallel_prep(query: str, skip_embedding: bool = False) -> Tuple[Dict, Optional[List[float]]]:
+#     """
+#     Run word discovery and embedding IN PARALLEL.
+    
+#     Saves ~30ms by not waiting for word discovery before embedding.
+    
+#     Args:
+#         query: Search query string
+#         skip_embedding: If True, skip embedding call entirely (for dropdown/keyword selections)
+#     """
+#     if skip_embedding:
+#         # Dropdown/keyword selection - skip embedding entirely
+#         discovery = _do_word_discovery(query)
+#         return discovery, None
+    
+#     # Submit both tasks
+#     discovery_future = _executor.submit(_do_word_discovery, query)
+#     embedding_future = _executor.submit(_do_embedding, query)
+    
+#     # Wait for both
+#     discovery = discovery_future.result()
+#     embedding = embedding_future.result()
+    
+#     # Check if we need to re-embed due to significant correction
+#     corrected_query = discovery.get('corrected_query', query)
+#     if corrected_query.lower() != query.lower():
+#         corrections = discovery.get('corrected_terms', [])
+#         significant = any(
+#             c.get('original', '').lower() != c.get('corrected', '').lower()
+#             for c in corrections
+#         )
+#         if significant and embedding is not None:
+#             # Re-embed with corrected query
+#             embedding = get_query_embedding(corrected_query)
+    
+#     return discovery, embedding
+
+
+# # ============================================================================
+# # PRE-COMPILED REGEX PATTERNS
+# # ============================================================================
+
+# LOCATION_PATTERNS = [
+#     re.compile(r'\b(in|near|around|at)\s+\w+'),
+#     re.compile(r'\b(city|state|country|region)\b'),
+#     re.compile(r'\b(restaurant|store|shop|hotel|near me)\b'),
+# ]
+
+# HISTORICAL_PATTERNS = [
+#     re.compile(r'\b(history|historical|ancient|medieval|colonial)\b'),
+#     re.compile(r'\b(1[0-9]{3}|20[0-2][0-9])\b'),
+#     re.compile(r'\b([0-9]{2}th|[0-9]{2}st)\s+century\b'),
+#     re.compile(r'\b(war|empire|kingdom|dynasty|era|period)\b'),
+# ]
+
+# PRODUCT_PATTERNS = [
+#     re.compile(r'\b(buy|price|cheap|expensive|review|best)\b'),
+#     re.compile(r'\b(product|item|purchase|order|shipping)\b'),
+#     re.compile(r'\$[0-9]+'),
+# ]
+
+# PERSON_PATTERNS = [
+#     re.compile(r'\b(who is|biography|born|died|life of)\b'),
+#     re.compile(r'\b(ceo|president|founder|actor|artist|author)\b'),
+#     re.compile(r'\b(first\s+(?:black|african american|woman|female))\b'),
+# ]
+
+# MEDIA_PATTERNS = [
+#     re.compile(r'\b(movie|film|song|album|video|watch|listen)\b'),
+#     re.compile(r'\b(trailer|episode|season|soundtrack)\b'),
+# ]
+
+# LOCATION_EXTRACT_PATTERNS = [
+#     re.compile(r'\b(?:in|near|around|at)\s+([a-zA-Z\s]+?)(?:\s+(?:for|with|and)|$)'),
+#     re.compile(r'\b([a-zA-Z\s]+?)\s+(?:restaurants?|stores?|shops?|hotels?)\b'),
+# ]
+
+# DECADE_PATTERN = re.compile(r'\b(\d{4})s\b')
+# CENTURY_PATTERN = re.compile(r'\b(\d{1,2})(?:st|nd|rd|th)\s+century\b')
+
+
+# # ============================================================================
+# # CLIENT SETUP
+# # ============================================================================
+
+# client = typesense.Client({
+#     'api_key': config('TYPESENSE_API_KEY'),
+#     'nodes': [{
+#         'host': config('TYPESENSE_HOST'),
+#         'port': config('TYPESENSE_PORT'),
+#         'protocol': config('TYPESENSE_PROTOCOL')
+#     }],
+#     'connection_timeout_seconds': 5
+# })
+
+# COLLECTION_NAME = 'documents'
+
+
+# # ============================================================================
+# # FIELD CONFIGURATION
+# # ============================================================================
+
+# SEARCH_FIELDS = [
+#     'key_facts',
+#     'document_title',
+#     'primary_keywords',
+#     'entity_names'
+# ]
+
+# DEFAULT_WEIGHTS = [10, 5, 3, 2]
+
+# INTENT_WEIGHTS = {
+#     'general':    [10, 5, 3, 2],
+#     'location':   [8, 5, 3, 4],
+#     'historical': [10, 4, 4, 3],
+#     'product':    [8, 6, 4, 2],
+#     'person':     [10, 5, 3, 5],
+#     'media':      [9, 5, 4, 3],
+# }
+
+# MIN_SCORE_THRESHOLD = 0.5
+
+# SOURCE_AUTHORITY = {
+#     'britannica': 95,
+#     'wikipedia': 90,
+#     'government': 90,
+#     'academic': 88,
+#     'news': 70,
+#     'blog': 50,
+#     'social': 40,
+#     'default': 60
+# }
+
+
+# # ============================================================================
+# # VALID FILTER VALUES (for validation)
+# # ============================================================================
+
+# VALID_DATA_TYPES = frozenset([
+#     'article', 'person', 'business', 'place', 'media', 'event', 'product'
+# ])
+
+# VALID_SCHEMAS = frozenset([
+#     'Article', 'BlogPosting', 'NewsArticle', 'HowTo', 'Recipe',
+#     'WebPage', 'FAQPage', 'Product', 'Service', 'LocalBusiness',
+#     'Person', 'Organization', 'Event', 'VideoObject', 'ImageGallery',
+#     'AudioObject', 'Book', 'Movie', 'MusicRecording'
+# ])
+
+# VALID_CATEGORIES = frozenset([
+#     'healthcare_medical', 'fashion', 'beauty', 'food_recipes',
+#     'travel_tourism', 'entertainment', 'business', 'education',
+#     'technology', 'sports', 'finance', 'real_estate', 'automotive',
+#     'lifestyle', 'news', 'culture', 'politics', 'science', 'general'
+# ])
+
+
+# # ============================================================================
+# # INTENT DETECTION
+# # ============================================================================
+
+# def detect_query_intent(query: str, pos_tags: List[Tuple] = None) -> str:
+#     """Analyzes query to determine user intent."""
+#     query_lower = query.lower()
+    
+#     for pattern in LOCATION_PATTERNS:
+#         if pattern.search(query_lower):
+#             return 'location'
+    
+#     for pattern in HISTORICAL_PATTERNS:
+#         if pattern.search(query_lower):
+#             return 'historical'
+    
+#     for pattern in PRODUCT_PATTERNS:
+#         if pattern.search(query_lower):
+#             return 'product'
+    
+#     for pattern in PERSON_PATTERNS:
+#         if pattern.search(query_lower):
+#             return 'person'
+    
+#     for pattern in MEDIA_PATTERNS:
+#         if pattern.search(query_lower):
+#             return 'media'
+    
+#     return 'general'
+
+
+# def extract_location_from_query(query: str) -> Optional[str]:
+#     """Extracts location from query."""
+#     stopwords = {'the', 'a', 'best', 'good', 'top'}
+    
+#     for pattern in LOCATION_EXTRACT_PATTERNS:
+#         match = pattern.search(query.lower())
+#         if match:
+#             location = match.group(1).strip()
+#             if location not in stopwords:
+#                 return location
+#     return None
+
+
+# def extract_time_period_from_query(query: str) -> Tuple[Optional[int], Optional[int]]:
+#     """Extracts time period from query."""
+#     query_lower = query.lower()
+    
+#     match = DECADE_PATTERN.search(query_lower)
+#     if match:
+#         decade = int(match.group(1))
+#         return (decade, decade + 99)
+    
+#     match = CENTURY_PATTERN.search(query_lower)
+#     if match:
+#         century = int(match.group(1))
+#         start = (century - 1) * 100
+#         return (start, start + 99)
+    
+#     era_ranges = {
+#         'ancient': (-3000, 500),
+#         'medieval': (500, 1500),
+#         'colonial': (1500, 1900),
+#         'modern': (1900, 2024),
+#         'contemporary': (1990, 2024)
+#     }
+    
+#     for era, (start, end) in era_ranges.items():
+#         if era in query_lower:
+#             return (start, end)
+    
+#     return (None, None)
+
+
+# def extract_content_type_from_query(query: str) -> Optional[str]:
+#     """Detects if user wants specific content type."""
+#     query_lower = query.lower()
+    
+#     type_indicators = {
+#         'video': ['video', 'watch', 'documentary', 'film', 'movie', 'youtube', 'tiktok'],
+#         'article': ['article', 'read', 'blog', 'post', 'news'],
+#         'product': ['buy', 'purchase', 'price', 'shop', 'store'],
+#         'service': ['hire', 'book', 'appointment', 'service'],
+#         'person': ['who is', 'biography', 'profile']
+#     }
+    
+#     for content_type, indicators in type_indicators.items():
+#         for indicator in indicators:
+#             if indicator in query_lower:
+#                 return content_type
+#     return None
+
+
+# # ============================================================================
+# # FILTER & SORT BUILDING (UPDATED FOR DYNAMIC TABS)
+# # ============================================================================
+
+# def build_filter_string(
+#     filters: Dict = None,
+#     time_start: int = None,
+#     time_end: int = None,
+#     location: str = None,
+#     content_type: str = None
+# ) -> str:
+#     """
+#     Builds Typesense filter_by string.
+    
+#     Supports dynamic tab filters:
+#     - data_type: document_data_type (content, service, product, person, media, location)
+#     - category: document_category (healthcare_medical, fashion, beauty, etc.)
+#     - schema: document_schema (Article, BlogPosting, Product, Service, etc.)
+#     - source: document_brand
+    
+#     Also supports:
+#     - time_start/time_end: time_period_start/time_period_end
+#     - location: location_city, location_state, location_country, location_region
+#     - content_type: document_data_type (from query extraction)
+#     """
+#     conditions = []
+    
+#     if filters:
+#         # Dynamic tab filter: data_type → document_data_type
+#         data_type = filters.get('data_type')
+#         if data_type:
+#             # Validate against allowed values
+#             if data_type in VALID_DATA_TYPES:
+#                 conditions.append(f"document_data_type:={data_type}")
+#             else:
+#                 print(f"⚠️ Invalid data_type filter: {data_type}")
+        
+#         # Dynamic tab filter: category → document_category
+#         category = filters.get('category')
+#         if category:
+#             # Allow any category (might have custom ones)
+#             # Sanitize to prevent injection
+#             safe_category = re.sub(r'[^a-zA-Z0-9_]', '', category)
+#             if safe_category:
+#                 conditions.append(f"document_category:={safe_category}")
+        
+#         # Dynamic tab filter: schema → document_schema
+#         schema = filters.get('schema')
+#         if schema:
+#             if schema in VALID_SCHEMAS:
+#                 conditions.append(f"document_schema:={schema}")
+#             else:
+#                 print(f"⚠️ Invalid schema filter: {schema}")
+        
+#         # Source filter → document_brand
+#         source = filters.get('source')
+#         if source:
+#             # Sanitize
+#             safe_source = re.sub(r'[&|!=<>:;\[\]{}()\'"\\]', '', source)
+#             if safe_source:
+#                 conditions.append(f"document_brand:={safe_source}")
+        
+#         # Time range filter
+#         time_range = filters.get('time_range')
+#         if time_range:
+#             time_conditions = _parse_time_range_filter(time_range)
+#             if time_conditions:
+#                 conditions.extend(time_conditions)
+        
+#         # Location filter from filters dict
+#         loc_filter = filters.get('location')
+#         if loc_filter:
+#             safe_loc = re.sub(r'[&|!=<>:;\[\]{}()\'"\\]', '', loc_filter)
+#             if safe_loc:
+#                 conditions.append(
+#                     f"(location_city:={safe_loc} || location_state:={safe_loc} || "
+#                     f"location_country:={safe_loc} || location_region:={safe_loc})"
+#                 )
+    
+#     # Time period from query extraction
+#     if time_start is not None:
+#         conditions.append(f"time_period_start:>={time_start}")
+#     if time_end is not None:
+#         conditions.append(f"time_period_end:<={time_end}")
+    
+#     # Location from query extraction (if not already set by filters)
+#     if location and not (filters and filters.get('location')):
+#         conditions.append(
+#             f"(location_city:={location} || location_state:={location} || "
+#             f"location_country:={location} || location_region:={location})"
+#         )
+    
+#     # Content type from query extraction (if not already set by data_type filter)
+#     if content_type and not (filters and filters.get('data_type')):
+#         if content_type in VALID_DATA_TYPES:
+#             conditions.append(f"document_data_type:={content_type}")
+    
+#     return ' && '.join(conditions) if conditions else ''
+
+
+# def _parse_time_range_filter(time_range: str) -> List[str]:
+#     """Parse time_range filter value into Typesense conditions."""
+#     conditions = []
+    
+#     now = datetime.now()
+    
+#     if time_range == 'day':
+#         # Last 24 hours
+#         timestamp = int((now.timestamp() - 86400) * 1000)
+#         conditions.append(f"created_at:>={timestamp}")
+#     elif time_range == 'week':
+#         # Last 7 days
+#         timestamp = int((now.timestamp() - 604800) * 1000)
+#         conditions.append(f"created_at:>={timestamp}")
+#     elif time_range == 'month':
+#         # Last 30 days
+#         timestamp = int((now.timestamp() - 2592000) * 1000)
+#         conditions.append(f"created_at:>={timestamp}")
+#     elif time_range == 'year':
+#         # Last 365 days
+#         timestamp = int((now.timestamp() - 31536000) * 1000)
+#         conditions.append(f"created_at:>={timestamp}")
+    
+#     return conditions
+
+
+# def build_sort_string(intent: str, user_location: Tuple[float, float] = None) -> str:
+#     """Builds Typesense sort_by string."""
+#     if intent == 'location' and user_location:
+#         lat, lng = user_location
+#         return f"location_geopoint({lat},{lng}):asc,authority_score:desc"
+    
+#     return "authority_score:desc,published_date:desc"
+
+
+# def build_vector_query(
+#     query_embedding: List[float],
+#     k: int = 20,
+#     alpha: float = 1.0
+# ) -> str:
+#     """Builds the vector_query string for Typesense."""
+#     embedding_str = ','.join(str(x) for x in query_embedding)
+#     return f"embedding:([{embedding_str}], k:{k}, alpha:{alpha})"
+
+
+# # ============================================================================
+# # SEARCH PARAMETER BUILDERS
+# # ============================================================================
+
+# def build_semantic_params(
+#     query_embedding: List[float],
+#     filters: Dict = None,
+#     page: int = 1,
+#     per_page: int = 20,
+#     query: str = ''
+# ) -> Dict:
+#     """SEMANTIC MODE: Pure vector search, NO full-text matching."""
+#     location = extract_location_from_query(query)
+#     time_start, time_end = extract_time_period_from_query(query)
+#     content_type = extract_content_type_from_query(query)
+    
+#     params = {
+#         'q': '*',
+#         'vector_query': build_vector_query(
+#             query_embedding=query_embedding,
+#             k=per_page * 2,
+#             alpha=1.0
+#         ),
+#         'page': page,
+#         'per_page': per_page,
+#         'exclude_fields': 'embedding',
+#     }
+    
+#     filter_str = build_filter_string(
+#         filters=filters,
+#         time_start=time_start,
+#         time_end=time_end,
+#         location=location,
+#         content_type=content_type
+#     )
+#     if filter_str:
+#         params['filter_by'] = filter_str
+    
+#     return params
+
+
+# def build_mixed_params(
+#     query: str,
+#     query_embedding: List[float],
+#     filters: Dict = None,
+#     page: int = 1,
+#     per_page: int = 20,
+#     intent: str = 'general'
+# ) -> Dict:
+#     """MIXED MODE: Light text matching + vector."""
+#     location = extract_location_from_query(query)
+#     time_start, time_end = extract_time_period_from_query(query)
+#     content_type = extract_content_type_from_query(query)
+    
+#     params = {
+#         'q': query,
+#         'query_by': 'document_title,key_facts',
+#         'query_by_weights': '5,3',
+#         'vector_query': build_vector_query(
+#             query_embedding=query_embedding,
+#             k=per_page * 2,
+#             alpha=0.8
+#         ),
+#         'page': page,
+#         'per_page': per_page,
+#         'exclude_fields': 'embedding',
+#         'drop_tokens_threshold': 10,
+#         'typo_tokens_threshold': 10,
+#         'num_typos': 2,
+#     }
+    
+#     filter_str = build_filter_string(
+#         filters=filters,
+#         time_start=time_start,
+#         time_end=time_end,
+#         location=location,
+#         content_type=content_type
+#     )
+#     if filter_str:
+#         params['filter_by'] = filter_str
+    
+#     return params
+
+
+# def build_strict_params(
+#     query: str,
+#     valid_terms: List[str],
+#     query_embedding: Optional[List[float]] = None,
+#     filters: Dict = None,
+#     page: int = 1,
+#     per_page: int = 20,
+#     intent: str = 'general'
+# ) -> Dict:
+#     """STRICT MODE: Text search on valid terms + optional vector rerank."""
+#     location = extract_location_from_query(query)
+#     time_start, time_end = extract_time_period_from_query(query)
+#     content_type = extract_content_type_from_query(query)
+    
+#     search_query = ' '.join(valid_terms)
+#     weights = INTENT_WEIGHTS.get(intent, DEFAULT_WEIGHTS)
+    
+#     params = {
+#         'q': search_query,
+#         'query_by': ','.join(SEARCH_FIELDS),
+#         'query_by_weights': ','.join(str(w) for w in weights),
+#         'page': page,
+#         'per_page': per_page,
+#         'exclude_fields': 'embedding',
+#         'drop_tokens_threshold': 1,
+#         'typo_tokens_threshold': 2,
+#         'num_typos': 0,
+#     }
+    
+#     if query_embedding:
+#         params['vector_query'] = build_vector_query(
+#             query_embedding=query_embedding,
+#             k=per_page,
+#             alpha=0.3
+#         )
+    
+#     filter_str = build_filter_string(
+#         filters=filters,
+#         time_start=time_start,
+#         time_end=time_end,
+#         location=location,
+#         content_type=content_type
+#     )
+#     if filter_str:
+#         params['filter_by'] = filter_str
+    
+#     return params
+
+
+# def build_fallback_text_params(
+#     query: str,
+#     filters: Dict = None,
+#     page: int = 1,
+#     per_page: int = 20,
+#     intent: str = 'general'
+# ) -> Dict:
+#     """FALLBACK: Full text search when embedding fails."""
+#     location = extract_location_from_query(query)
+#     time_start, time_end = extract_time_period_from_query(query)
+#     content_type = extract_content_type_from_query(query)
+    
+#     weights = INTENT_WEIGHTS.get(intent, DEFAULT_WEIGHTS)
+    
+#     params = {
+#         'q': query,
+#         'query_by': ','.join(SEARCH_FIELDS),
+#         'query_by_weights': ','.join(str(w) for w in weights),
+#         'page': page,
+#         'per_page': per_page,
+#         'drop_tokens_threshold': 5,
+#         'typo_tokens_threshold': 3,
+#         'num_typos': 1,
+#     }
+    
+#     filter_str = build_filter_string(
+#         filters=filters,
+#         time_start=time_start,
+#         time_end=time_end,
+#         location=location,
+#         content_type=content_type
+#     )
+#     if filter_str:
+#         params['filter_by'] = filter_str
+    
+#     return params
+
+
+# def build_exact_phrase_params(
+#     phrase: str,
+#     filters: Dict = None,
+#     page: int = 1,
+#     per_page: int = 20,
+#     intent: str = 'general'
+# ) -> Dict:
+#     """
+#     EXACT PHRASE MODE: For dropdown selections.
+#     Searches for the exact phrase without splitting or processing.
+#     """
+#     location = extract_location_from_query(phrase)
+#     time_start, time_end = extract_time_period_from_query(phrase)
+#     content_type = extract_content_type_from_query(phrase)
+    
+#     weights = INTENT_WEIGHTS.get(intent, DEFAULT_WEIGHTS)
+    
+#     params = {
+#         'q': f'"{phrase}"',  # Quote for exact phrase matching
+#         'query_by': ','.join(SEARCH_FIELDS),
+#         'query_by_weights': ','.join(str(w) for w in weights),
+#         'page': page,
+#         'per_page': per_page,
+#         'exclude_fields': 'embedding',
+#         'num_typos': 0,  # No typos for exact match
+#     }
+    
+#     filter_str = build_filter_string(
+#         filters=filters,
+#         time_start=time_start,
+#         time_end=time_end,
+#         location=location,
+#         content_type=content_type
+#     )
+#     if filter_str:
+#         params['filter_by'] = filter_str
+    
+#     return params
+
+
+# # ============================================================================
+# # RESULT PROCESSING
+# # ============================================================================
+
+# def calculate_final_score(hit: Dict, query: str = '') -> float:
+#     """Combines vector_distance and authority scores."""
+#     vector_distance = hit.get('vector_distance', 1.0)
+#     vector_similarity = max(0, 1 - vector_distance)
+    
+#     doc = hit.get('document', {})
+#     authority = doc.get('authority_score', SOURCE_AUTHORITY['default']) / 100
+    
+#     text_score = hit.get('text_match', 0) / 100000000
+    
+#     if text_score > 0:
+#         final_score = (vector_similarity * 0.5) + (text_score * 0.3) + (authority * 0.2)
+#     else:
+#         final_score = (vector_similarity * 0.7) + (authority * 0.3)
+    
+#     return round(min(1.0, final_score), 4)
+
+
+# def format_result(hit: Dict, query: str = '') -> Dict:
+#     """Transforms a Typesense hit into clean response format."""
+#     doc = hit.get('document', {})
+#     highlights = hit.get('highlights', [])
+    
+#     highlight_map = {}
+#     for h in highlights:
+#         field = h.get('field')
+#         snippet = h.get('value') or h.get('snippet') or h.get('snippets', [''])[0]
+#         highlight_map[field] = snippet
+    
+#     vector_distance = hit.get('vector_distance')
+#     semantic_score = round(1 - vector_distance, 3) if vector_distance else None
+    
+#     return {
+#         'id': doc.get('document_uuid'),
+#         'title': doc.get('document_title', 'Untitled'),
+#         'title_highlighted': highlight_map.get('document_title', doc.get('document_title', '')),
+#         'summary': doc.get('document_summary', ''),
+#         'summary_highlighted': highlight_map.get('document_summary', doc.get('document_summary', '')),
+#         'url': doc.get('document_url', ''),
+#         'source': doc.get('document_brand', 'unknown'),
+#         'site_name': doc.get('document_brand', 'Website'),
+#         'image': (doc.get('image_url') or [None])[0],
+#         'category': doc.get('document_category', ''),
+#         'data_type': doc.get('document_data_type', ''),
+#         'schema': doc.get('document_schema', ''),  # Include schema for filtering
+#         'date': doc.get('published_date_string', ''),
+#         'published_date': doc.get('published_date_string', ''),
+#         'authority_score': doc.get('authority_score', 0),
+#         'cluster_uuid': doc.get('cluster_uuid'),
+#         'semantic_uuid': doc.get('semantic_uuid'),
+#         'key_facts': doc.get('key_facts', []),
+#         'key_facts_highlighted': highlight_map.get('key_facts', ''),
+#         'semantic_score': semantic_score,
+#         'location': {
+#             'city': doc.get('location_city'),
+#             'state': doc.get('location_state'),
+#             'country': doc.get('location_country'),
+#             'region': doc.get('location_region')
+#         },
+#         'time_period': {
+#             'start': doc.get('time_period_start'),
+#             'end': doc.get('time_period_end'),
+#             'context': doc.get('time_context')
+#         },
+#         'score': calculate_final_score(hit, query),
+#         'related_sources': []
+#     }
+
+
+# def process_results(raw_response: Dict, query: str = '') -> List[Dict]:
+#     """Processes Typesense response into clean result list."""
+#     hits = raw_response.get('hits', [])
+    
+#     if not hits:
+#         return []
+    
+#     results = [format_result(hit, query) for hit in hits]
+#     results.sort(key=lambda x: x['score'], reverse=True)
+    
+#     if not results:
+#         return []
+    
+#     top_score = results[0]['score']
+#     relative_cutoff = top_score * 0.7
+#     effective_cutoff = max(MIN_SCORE_THRESHOLD, relative_cutoff)
+    
+#     filtered_results = [r for r in results if r['score'] >= effective_cutoff]
+    
+#     if not filtered_results and results:
+#         filtered_results = [results[0]]
+    
+#     return filtered_results[:20]
+
+
+# # ============================================================================
+# # SEARCH EXECUTION
+# # ============================================================================
+
+# def execute_search_multi(search_params: Dict) -> Dict:
+#     """Execute search using multi_search endpoint."""
+#     search_requests = {
+#         'searches': [{
+#             'collection': COLLECTION_NAME,
+#             **search_params
+#         }]
+#     }
+    
+#     try:
+#         response = client.multi_search.perform(search_requests, {})
+#         return response['results'][0]
+#     except Exception as e:
+#         print(f"TYPESENSE ERROR: {e}")
+#         return {'hits': [], 'found': 0, 'error': str(e)}
+
+
+# # ============================================================================
+# # TWO-STAGE SEARCH: Keyword Filter -> Vector Rerank
+# # ============================================================================
+
+# def stage1_keyword_filter(
+#     query: str,
+#     filters: Dict = None,
+#     max_candidates: int = 50
+# ) -> List[str]:
+#     """STAGE 1: Text search to find candidate documents."""
+#     location = extract_location_from_query(query)
+#     time_start, time_end = extract_time_period_from_query(query)
+#     content_type = extract_content_type_from_query(query)
+    
+#     params = {
+#         'q': query,
+#         'query_by': 'key_facts,document_title,primary_keywords,entity_names',
+#         'query_by_weights': '10,8,5,3',
+#         'per_page': max_candidates,
+#         'include_fields': 'document_uuid,document_title',
+#         'drop_tokens_threshold': 1,
+#         'typo_tokens_threshold': 1,
+#         'num_typos': 1,
+#     }
+    
+#     filter_str = build_filter_string(
+#         filters=filters,
+#         time_start=time_start,
+#         time_end=time_end,
+#         location=location,
+#         content_type=content_type
+#     )
+#     if filter_str:
+#         params['filter_by'] = filter_str
+    
+#     try:
+#         response = client.collections[COLLECTION_NAME].documents.search(params)
+#         hits = response.get('hits', [])
+        
+#         doc_ids = [hit['document']['document_uuid'] for hit in hits if hit.get('document', {}).get('document_uuid')]
+        
+#         print(f"📝 Stage 1 (keyword filter): Found {len(doc_ids)} candidates")
+#         for hit in hits[:5]:
+#             print(f"   - {hit['document'].get('document_title', 'NO TITLE')}")
+        
+#         return doc_ids
+        
+#     except Exception as e:
+#         print(f"❌ Stage 1 error: {e}")
+#         return []
+
+
+# def stage2_vector_rerank(
+#     query_embedding: List[float],
+#     document_ids: List[str],
+#     per_page: int = 20
+# ) -> Dict:
+#     """STAGE 2: Vector search filtered to specific documents."""
+#     if not document_ids:
+#         return {'hits': [], 'found': 0}
+    
+#     if not query_embedding:
+#         id_filter = ','.join([f'`{doc_id}`' for doc_id in document_ids[:per_page]])
+#         params = {
+#             'q': '*',
+#             'filter_by': f'document_uuid:[{id_filter}]',
+#             'per_page': per_page,
+#         }
+#         return execute_search_multi(params)
+    
+#     id_filter = ','.join([f'`{doc_id}`' for doc_id in document_ids])
+    
+#     embedding_str = ','.join(str(x) for x in query_embedding)
+    
+#     params = {
+#         'q': '*',
+#         'filter_by': f'document_uuid:[{id_filter}]',
+#         'vector_query': f"embedding:([{embedding_str}], k:{len(document_ids)}, alpha:1.0)",
+#         'per_page': per_page,
+#         'exclude_fields': 'embedding',
+#     }
+    
+#     print(f"🔍 Stage 2 (vector rerank): Reranking {len(document_ids)} documents")
+    
+#     return execute_search_multi(params)
+
+
+# def execute_two_stage_search(
+#     query: str,
+#     query_embedding: Optional[List[float]],
+#     filters: Dict = None,
+#     page: int = 1,
+#     per_page: int = 20
+# ) -> Dict:
+#     """Two-stage search: Keyword filter THEN vector rerank."""
+#     candidate_ids = stage1_keyword_filter(
+#         query=query,
+#         filters=filters,
+#         max_candidates=50
+#     )
+    
+#     if not candidate_ids:
+#         print("⚠️ Stage 1 found no candidates, falling back to semantic search")
+#         if query_embedding:
+#             params = build_semantic_params(
+#                 query_embedding=query_embedding,
+#                 filters=filters,
+#                 page=page,
+#                 per_page=per_page,
+#                 query=query
+#             )
+#             return execute_search_multi(params)
+#         else:
+#             return {'hits': [], 'found': 0}
+    
+#     result = stage2_vector_rerank(
+#         query_embedding=query_embedding,
+#         document_ids=candidate_ids,
+#         per_page=per_page
+#     )
+    
+#     return result
+
+
+# # ============================================================================
+# # MAIN SEARCH FUNCTION (OPTIMIZED)
+# # ============================================================================
+
+# def execute_full_search(
+#     query: str,
+#     session_id: str = None,
+#     filters: Dict = None,
+#     page: int = 1,
+#     per_page: int = 20,
+#     user_location: Tuple[float, float] = None,
+#     pos_tags: List[Tuple] = None,
+#     safe_search: bool = True,
+#     alt_mode: str = 'n',
+#     skip_embedding: bool = False,
+#     search_source: str = None
+# ) -> Dict:
+#     """
+#     Main entry point for search - OPTIMIZED VERSION v4.3.
+    
+#     OPTIMIZATIONS:
+#     1. Query truncation before embedding (biggest win for long queries)
+#     2. Parallel word discovery + embedding
+#     3. Connection pooling for HTTP requests
+#     4. Score-based strategy selection
+#     5. skip_embedding for dropdown/keyword selections
+#     6. DROPDOWN FAST PATH - skip word discovery entirely (v4.2)
+#     7. Dynamic tab filter support (v4.3)
+    
+#     Args:
+#         query: Search query string
+#         session_id: User session identifier
+#         filters: Dict of filter conditions including:
+#             - data_type: Filter by document_data_type (content, service, product, etc.)
+#             - category: Filter by document_category
+#             - schema: Filter by document_schema (Article, Product, etc.)
+#             - source: Filter by document_brand
+#             - time_range: Filter by time (day, week, month, year)
+#             - location: Filter by location
+#         page: Page number for pagination
+#         per_page: Results per page
+#         user_location: (lat, lng) tuple for location-based sorting
+#         pos_tags: Pre-computed POS tags (optional)
+#         safe_search: Enable safe search filtering
+#         alt_mode: 'y' to force semantic search, 'n' for normal
+#         skip_embedding: True to skip embedding (for dropdown/keyword selections)
+#         search_source: Source of search ('dropdown', 'keyboard', 'home', etc.)
+#     """
+#     import time
+#     times = {}
+#     t0 = time.time()
+    
+#     # Log active filters for debugging
+#     if filters:
+#         active_filters = {k: v for k, v in filters.items() if v}
+#         if active_filters:
+#             print(f"🎛️ Active filters: {active_filters}")
+    
+#     # =========================================================================
+#     # DROPDOWN FAST PATH - Skip everything, just search the exact phrase
+#     # =========================================================================
+#     is_dropdown = search_source in ('dropdown', 'keyword', 'suggestion', 'autocomplete')
+
+#     # alt_mode='y' forces full semantic processing, even for dropdowns
+#     if alt_mode == 'y':
+#         is_dropdown = False
+
+#     if is_dropdown:
+#         print(f"⚡ DROPDOWN FAST PATH: '{query}'")
+        
+#         t1 = time.time()
+#         intent = detect_query_intent(query, pos_tags)
+        
+#         # Build exact phrase search params
+#         search_params = build_exact_phrase_params(
+#             phrase=query,
+#             filters=filters,
+#             page=page,
+#             per_page=per_page,
+#             intent=intent
+#         )
+        
+#         t2 = time.time()
+#         raw_response = execute_search_multi(search_params)
+#         times['typesense'] = round((time.time() - t2) * 1000, 2)
+#         times['total'] = round((time.time() - t0) * 1000, 2)
+        
+#         # Debug output
+#         print(f"⏱️ TIMING: {times}")
+#         print(f"🔍 Strategy: EXACT_PHRASE (dropdown) | Found: {raw_response.get('found', 0)}")
+#         print(f"   Search phrase: \"{query}\"")
+        
+#         # Process results
+#         results = process_results(raw_response, query)
+        
+#         raw_count = len(raw_response.get('hits', []))
+#         filtered_count = len(results)
+#         if raw_count > 0:
+#             top_score = results[0]['score'] if results else 0
+#             print(f"📊 Filtering: {raw_count} → {filtered_count} results")
+#             print(f"   Top score: {top_score:.4f} | Cutoff: {max(MIN_SCORE_THRESHOLD, top_score * 0.7):.4f}")
+        
+#         # Build response
+#         search_time = round(time.time() - t0, 3)
+        
+#         return {
+#             'query': query,
+#             'corrected_query': query,  # No correction for dropdown
+#             'intent': intent,
+#             'results': results,
+#             'total': len(results), 
+#             'page': page,
+#             'per_page': per_page,
+#             'search_time': search_time,
+#             'session_id': session_id,
+#             'semantic_enabled': False,
+#             'search_strategy': 'exact_phrase',
+#             'alt_mode': alt_mode,
+#             'skip_embedding': True,
+#             'search_source': search_source or 'dropdown',
+#             'valid_terms': [query],  # Whole phrase is the term
+#             'unknown_terms': [],
+#             'word_discovery': {
+#                 'valid_count': 1,
+#                 'unknown_count': 0,
+#                 'corrections': [],
+#                 'total_score': 0,
+#                 'average_score': 0,
+#                 'max_score': 0,
+#                 'term_scores': []
+#             },
+#             'timings': times,
+#             'filters_applied': {
+#                 'data_type': filters.get('data_type') if filters else None,
+#                 'category': filters.get('category') if filters else None,
+#                 'schema': filters.get('schema') if filters else None,
+#                 'time_period': extract_time_period_from_query(query),
+#                 'location': extract_location_from_query(query),
+#                 'content_type': extract_content_type_from_query(query)
+#             }
+#         }
+    
+#     # =========================================================================
+#     # NORMAL PATH - Full word discovery + embedding
+#     # =========================================================================
+    
+#     # STEP 1 + 2: Word Discovery + Embedding (parallel or skip)
+#     t1 = time.time()
+    
+#     discovery, query_embedding = run_parallel_prep(query, skip_embedding=skip_embedding)
+    
+#     times['parallel_prep'] = round((time.time() - t1) * 1000, 2)
+    
+#     # Extract discovery results
+#     if WORD_DISCOVERY_AVAILABLE:
+#         search_strategy = discovery.get('search_strategy', 'semantic')
+#         valid_terms = get_filter_terms(discovery)
+#         unknown_terms = get_loose_terms(discovery)
+#     else:
+#         search_strategy = 'semantic'
+#         valid_terms = []
+#         unknown_terms = query.split()
+    
+#     corrected_query = discovery.get('corrected_query', query)
+    
+#     # Override to semantic if alt_mode='y'
+#     if alt_mode == 'y':
+#         search_strategy = 'semantic'
+    
+#     # If we skipped embedding and strategy wants semantic, force to strict/text
+#     if skip_embedding and search_strategy == 'semantic':
+#         if valid_terms:
+#             search_strategy = 'strict'
+#         else:
+#             search_strategy = 'text_fallback'
+    
+#     semantic_enabled = query_embedding is not None
+    
+#     # =========================================================================
+#     # STEP 3: Detect intent
+#     # =========================================================================
+#     intent = detect_query_intent(query, pos_tags)
+    
+#     # =========================================================================
+#     # STEP 4: Execute search based on strategy
+#     # =========================================================================
+    
+#     if not semantic_enabled:
+#         actual_strategy = 'text_fallback'
+#         search_params = build_fallback_text_params(
+#             query=corrected_query,
+#             filters=filters,
+#             page=page,
+#             per_page=per_page,
+#             intent=intent
+#         )
+#         t3 = time.time()
+#         raw_response = execute_search_multi(search_params)
+#         times['typesense'] = round((time.time() - t3) * 1000, 2)
+        
+#     elif search_strategy in ('strict', 'mixed') and valid_terms:
+#         actual_strategy = f'two_stage_{search_strategy}'
+#         t3 = time.time()
+#         raw_response = execute_two_stage_search(
+#             query=corrected_query,
+#             query_embedding=query_embedding,
+#             filters=filters,
+#             page=page,
+#             per_page=per_page
+#         )
+#         times['typesense'] = round((time.time() - t3) * 1000, 2)
+        
+#     else:
+#         actual_strategy = 'semantic'
+#         search_params = build_semantic_params(
+#             query_embedding=query_embedding,
+#             filters=filters,
+#             page=page,
+#             per_page=per_page,
+#             query=query
+#         )
+#         t3 = time.time()
+#         raw_response = execute_search_multi(search_params)
+#         times['typesense'] = round((time.time() - t3) * 1000, 2)
+    
+#     times['total'] = round((time.time() - t0) * 1000, 2)
+    
+#     # =========================================================================
+#     # DEBUG OUTPUT (Enhanced with scores)
+#     # =========================================================================
+#     print(f"⏱️ TIMING: {times}")
+#     print(f"🔍 Strategy: {actual_strategy.upper()} | Found: {raw_response.get('found', 0)}")
+#     print(f"📊 Scores: avg={discovery.get('average_score', 0)}, total={discovery.get('total_score', 0)}, max={discovery.get('max_score', 0)}")
+    
+#     if skip_embedding:
+#         print(f"⚡ Embedding skipped (source: {search_source or 'skip_embedding=True'})")
+    
+#     if valid_terms:
+#         print(f"   Valid terms: {valid_terms}")
+#         # Show individual term scores
+#         for term in discovery.get('terms', []):
+#             if term.get('rank_score', 0) > 0:
+#                 print(f"      • {term['search_word']}: {term['rank_score']} pts")
+    
+#     if discovery.get('corrected_terms'):
+#         print(f"   Corrections: {[(c.get('original'), c.get('corrected')) for c in discovery.get('corrected_terms', [])]}")
+    
+#     # =========================================================================
+#     # STEP 5: Process results
+#     # =========================================================================
+#     results = process_results(raw_response, query)
+    
+#     raw_count = len(raw_response.get('hits', []))
+#     filtered_count = len(results)
+#     if raw_count > 0:
+#         top_score = results[0]['score'] if results else 0
+#         print(f"📊 Filtering: {raw_count} → {filtered_count} results")
+#         print(f"   Top score: {top_score:.4f} | Cutoff: {max(MIN_SCORE_THRESHOLD, top_score * 0.7):.4f}")
+    
+#     # =========================================================================
+#     # STEP 6: Build response
+#     # =========================================================================
+#     search_time = round(time.time() - t0, 3)
+    
+#     return {
+#         'query': query,
+#         'corrected_query': corrected_query,
+#         'intent': intent,
+#         'results': results,
+#         'total': len(results), 
+#         'page': page,
+#         'per_page': per_page,
+#         'search_time': search_time,
+#         'session_id': session_id,
+#         'semantic_enabled': semantic_enabled,
+#         'search_strategy': actual_strategy,
+#         'alt_mode': alt_mode,
+#         'skip_embedding': skip_embedding,
+#         'search_source': search_source,
+#         'valid_terms': valid_terms,
+#         'unknown_terms': unknown_terms,
+#         'word_discovery': {
+#             'valid_count': discovery.get('valid_count', 0),
+#             'unknown_count': discovery.get('unknown_count', 0),
+#             'corrections': discovery.get('corrected_terms', []),
+#             # Score metrics
+#             'total_score': discovery.get('total_score', 0),
+#             'average_score': discovery.get('average_score', 0),
+#             'max_score': discovery.get('max_score', 0),
+#             'term_scores': [
+#                 {'term': t['search_word'], 'score': t.get('rank_score', 0)}
+#                 for t in discovery.get('terms', [])
+#                 if t.get('rank_score', 0) > 0
+#             ]
+#         },
+#         'timings': times,
+#         'filters_applied': {
+#             'data_type': filters.get('data_type') if filters else None,
+#             'category': filters.get('category') if filters else None,
+#             'schema': filters.get('schema') if filters else None,
+#             'time_period': extract_time_period_from_query(query),
+#             'location': extract_location_from_query(query),
+#             'content_type': extract_content_type_from_query(query)
+#         }
+#     }
+
+
+# # ============================================================================
+# # CONVENIENCE FUNCTIONS
+# # ============================================================================
+
+# def quick_search(query: str, limit: int = 10) -> List[Dict]:
+#     """Quick semantic search for autocomplete."""
+#     query_embedding = get_query_embedding(query)
+    
+#     if not query_embedding:
+#         params = {
+#             'q': query,
+#             'query_by': 'document_title,key_facts',
+#             'per_page': limit,
+#             'include_fields': 'document_uuid,document_title,document_url,key_facts'
+#         }
+#         try:
+#             response = client.collections[COLLECTION_NAME].documents.search(params)
+#             return [hit['document'] for hit in response.get('hits', [])]
+#         except:
+#             return []
+    
+#     params = {
+#         'q': '*',
+#         'vector_query': build_vector_query(query_embedding, k=limit, alpha=1.0),
+#         'per_page': limit,
+#         'exclude_fields': 'embedding',
+#         'include_fields': 'document_uuid,document_title,document_url,key_facts'
+#     }
+    
+#     response = execute_search_multi(params)
+#     return [hit['document'] for hit in response.get('hits', [])]
+
+
+# def find_similar_documents(document_uuid: str, limit: int = 5) -> List[Dict]:
+#     """
+#     Find documents similar to a given document.
+    
+#     Strategy:
+#     1. If document has semantic_uuid, find others in same cluster first
+#     2. Fall back to vector similarity if no semantic_uuid or need more results
+#     """
+#     try:
+#         doc = client.collections[COLLECTION_NAME].documents[document_uuid].retrieve()
+        
+#         results = []
+#         semantic_uuid = doc.get('semantic_uuid')
+        
+#         # Strategy 1: Use semantic_uuid cluster
+#         if semantic_uuid and '-' in semantic_uuid:
+#             parts = semantic_uuid.split('-')
+#             if len(parts) >= 2:
+#                 prefix = parts[0]  # e.g., "DOC"
+#                 cluster = parts[1]  # e.g., "11"
+                
+#                 # Find documents in same cluster (excluding self)
+#                 # Only use cluster-based search if cluster != 00 (00 = no semantic clustering)
+#                 if cluster != '00':
+#                     try:
+#                         # Search for documents with same prefix-cluster pattern
+#                         params = {
+#                             'q': '*',
+#                             'filter_by': f'semantic_uuid:>={prefix}-{cluster}-0000 && semantic_uuid:<={prefix}-{cluster}-9999 && document_uuid:!={document_uuid}',
+#                             'per_page': limit,
+#                             'exclude_fields': 'embedding'
+#                         }
+                        
+#                         response = execute_search_multi(params)
+#                         results = [hit['document'] for hit in response.get('hits', [])]
+                        
+#                         print(f"🔗 Found {len(results)} related docs in cluster {prefix}-{cluster}")
+                        
+#                         if len(results) >= limit:
+#                             return results[:limit]
+#                     except Exception as e:
+#                         print(f"⚠️ Cluster search failed: {e}")
+#                         # Fall through to vector search
+        
+#         # Strategy 2: Vector similarity (for remaining slots or fallback)
+#         embedding = doc.get('embedding')
+        
+#         if embedding and len(results) < limit:
+#             remaining = limit - len(results)
+#             existing_ids = [r.get('document_uuid') for r in results] + [document_uuid]
+            
+#             # Build exclusion filter
+#             exclude_parts = [f'document_uuid:!={uid}' for uid in existing_ids if uid]
+#             exclude_filter = ' && '.join(exclude_parts) if exclude_parts else ''
+            
+#             params = {
+#                 'q': '*',
+#                 'vector_query': f"embedding:([{','.join(str(x) for x in embedding)}], k:{remaining + 1})",
+#                 'per_page': remaining,
+#                 'exclude_fields': 'embedding',
+#             }
+            
+#             if exclude_filter:
+#                 params['filter_by'] = exclude_filter
+            
+#             response = execute_search_multi(params)
+#             vector_results = [hit['document'] for hit in response.get('hits', [])]
+#             results.extend(vector_results)
+            
+#             print(f"🔍 Found {len(vector_results)} similar docs via vector search")
+        
+#         return results[:limit]
+    
+#     except Exception as e:
+#         print(f"Error finding similar documents: {e}")
+#         return []
+
+
+# def find_documents_in_cluster(semantic_uuid: str, limit: int = 10) -> List[Dict]:
+#     """
+#     Find all documents in the same semantic cluster.
+    
+#     Args:
+#         semantic_uuid: e.g., "DOC-11-0042"
+#         limit: Maximum documents to return
+        
+#     Returns:
+#         List of documents in the same cluster
+#     """
+#     if not semantic_uuid or '-' not in semantic_uuid:
+#         return []
+    
+#     parts = semantic_uuid.split('-')
+#     if len(parts) < 2:
+#         return []
+    
+#     prefix = parts[0]  # e.g., "DOC"
+#     cluster = parts[1]  # e.g., "11"
+    
+#     try:
+#         params = {
+#             'q': '*',
+#             'filter_by': f'semantic_uuid:>={prefix}-{cluster}-0000 && semantic_uuid:<={prefix}-{cluster}-9999',
+#             'per_page': limit,
+#             'exclude_fields': 'embedding',
+#             'sort_by': 'semantic_uuid:asc'
+#         }
+        
+#         response = execute_search_multi(params)
+#         return [hit['document'] for hit in response.get('hits', [])]
+    
+#     except Exception as e:
+#         print(f"Error finding cluster documents: {e}")
+#         return []
+
+
+# # ============================================================================
+# # HELPER FUNCTIONS (Required by views.py)
+# # ============================================================================
+
+# def get_facets(query: str) -> dict:
+#     """Returns available filter options based on result set."""
+#     search_params = {
+#         'q': query,
+#         'query_by': ','.join(SEARCH_FIELDS),
+#         'facet_by': 'document_category,document_data_type,document_schema,document_brand,location_country,temporal_relevance',
+#         'max_facet_values': 20,
+#         'per_page': 0
+#     }
+    
+#     try:
+#         response = client.collections[COLLECTION_NAME].documents.search(search_params)
+#         facets = {}
+        
+#         for facet in response.get('facet_counts', []):
+#             field = facet['field_name']
+#             facets[field] = [
+#                 {'value': count['value'], 'count': count['count']}
+#                 for count in facet['counts']
+#             ]
+        
+#         return facets
+#     except:
+#         return {}
+
+
+# def get_tab_facets(query: str) -> dict:
+#     """
+#     Get facet counts specifically for dynamic tabs.
+    
+#     Returns facets for:
+#     - document_data_type (main tabs)
+#     - document_category (secondary filter)
+#     - document_schema (tertiary filter)
+    
+#     This is called WITHOUT any filters to get total counts.
+#     """
+#     search_params = {
+#         'q': query if query else '*',
+#         'query_by': ','.join(SEARCH_FIELDS),
+#         'facet_by': 'document_data_type,document_category,document_schema',
+#         'max_facet_values': 20,
+#         'per_page': 0  # Only need facets, not results
+#     }
+    
+#     try:
+#         response = client.collections[COLLECTION_NAME].documents.search(search_params)
+        
+#         facets = {
+#             'data_type': [],
+#             'category': [],
+#             'schema': []
+#         }
+        
+#         # Label mappings
+#         data_type_labels = {
+#                     'article': 'Articles',
+#                     'person': 'People',
+#                     'business': 'Businesses',
+#                     'place': 'Places',
+#                     'media': 'Media',
+#                     'event': 'Events',
+#                     'product': 'Products',
+#                 }
+        
+#         category_labels = {
+#             'healthcare_medical': 'Healthcare',
+#             'fashion': 'Fashion',
+#             'beauty': 'Beauty',
+#             'food_recipes': 'Food & Recipes',
+#             'travel_tourism': 'Travel',
+#             'entertainment': 'Entertainment',
+#             'business': 'Business',
+#             'education': 'Education',
+#             'technology': 'Technology',
+#             'sports': 'Sports',
+#             'finance': 'Finance',
+#             'real_estate': 'Real Estate',
+#             'lifestyle': 'Lifestyle',
+#             'news': 'News',
+#             'culture': 'Culture',
+#             'general': 'General',
+#         }
+        
+#         for facet in response.get('facet_counts', []):
+#             field = facet['field_name']
+#             counts = facet['counts']
+            
+#             if field == 'document_data_type':
+#                 facets['data_type'] = [
+#                     {
+#                         'value': c['value'],
+#                         'count': c['count'],
+#                         'label': data_type_labels.get(c['value'], c['value'].title())
+#                     }
+#                     for c in counts if c['count'] > 0
+#                 ]
+            
+#             elif field == 'document_category':
+#                 facets['category'] = [
+#                     {
+#                         'value': c['value'],
+#                         'count': c['count'],
+#                         'label': category_labels.get(c['value'], c['value'].replace('_', ' ').title())
+#                     }
+#                     for c in counts if c['count'] > 0
+#                 ]
+            
+#             elif field == 'document_schema':
+#                 facets['schema'] = [
+#                     {
+#                         'value': c['value'],
+#                         'count': c['count'],
+#                         'label': c['value']
+#                     }
+#                     for c in counts if c['count'] > 0
+#                 ]
+        
+#         return facets
+        
+#     except Exception as e:
+#         print(f"Error getting tab facets: {e}")
+#         return {'data_type': [], 'category': [], 'schema': []}
+
+
+# def get_related_searches(query: str, intent: str) -> list:
+#     """Returns 'People also search for' suggestions."""
+#     search_params = {
+#         'q': query,
+#         'query_by': 'primary_keywords,keywords,key_facts',
+#         'per_page': 10,
+#         'include_fields': 'primary_keywords,keywords,key_facts'
+#     }
+    
+#     try:
+#         response = client.collections[COLLECTION_NAME].documents.search(search_params)
+        
+#         all_keywords = set()
+#         query_words = set(query.lower().split())
+        
+#         for hit in response.get('hits', []):
+#             doc = hit.get('document', {})
+#             for kw in doc.get('primary_keywords', []):
+#                 if kw.lower() not in query_words:
+#                     all_keywords.add(kw)
+#             for kw in doc.get('keywords', [])[:5]:
+#                 if kw.lower() not in query_words:
+#                     all_keywords.add(kw)
+#             for fact in doc.get('key_facts', [])[:3]:
+#                 fact_words = [w for w in fact.split() if len(w) > 4 and w.lower() not in query_words]
+#                 all_keywords.update(fact_words[:2])
+        
+#         related = list(all_keywords)[:6]
+#         return [{'query': f"{query} {kw}", 'label': kw} for kw in related]
+    
+#     except:
+#         return []
+
+
+# def get_featured_result(query: str, intent: str, results: list) -> dict:
+#     """Returns featured content: knowledge panel or featured snippet."""
+#     if not results:
+#         return None
+    
+#     top_result = results[0]
+    
+#     if top_result.get('authority_score', 0) >= 85 and top_result.get('score', 0) >= 0.7:
+        
+#         if intent == 'person' and top_result.get('data_type') == 'person':
+#             return {
+#                 'type': 'person_card',
+#                 'data': top_result
+#             }
+        
+#         if intent == 'location':
+#             return {
+#                 'type': 'place_card',
+#                 'data': top_result
+#             }
+        
+#         return {
+#             'type': 'featured_snippet',
+#             'title': top_result.get('title'),
+#             'snippet': top_result.get('summary', ''),
+#             'key_facts': top_result.get('key_facts', [])[:3],
+#             'source': top_result.get('source'),
+#             'url': top_result.get('url'),
+#             'image': top_result.get('image')
+#         }
+    
+#     return None
+
+
+# def log_search_event(
+#     query: str,
+#     corrected_query: str,
+#     session_id: str,
+#     intent: str,
+#     total_results: int,
+#     filters: dict,
+#     page: int,
+#     semantic_enabled: bool = False,
+#     semantic_boost: float = 0.0,
+#     alt_mode: str = 'n'
+# ):
+#     """Logs search event for analytics."""
+#     event = {
+#         'timestamp': datetime.now().isoformat(),
+#         'session_id': session_id,
+#         'query': query,
+#         'corrected_query': corrected_query,
+#         'intent': intent,
+#         'total_results': total_results,
+#         'filters': filters,
+#         'page': page,
+#         'zero_results': total_results == 0,
+#         'semantic_enabled': semantic_enabled,
+#         'semantic_boost': semantic_boost,
+#         'alt_mode': alt_mode
+#     }
+    
+#     # Replace with your implementation
+#     # SearchLog.objects.create(**event)
+#     pass
+
+
+
+# """
+# typesense_calculations.py (OPTIMIZED v4.4)
+
+# OPTIMIZATIONS:
+# 1. Truncate long queries BEFORE embedding (biggest win for long sentences)
+# 2. Parallel execution: Word Discovery + Embedding run simultaneously  
+# 3. Connection pooling for FastAPI embedding calls
+# 4. Reuse Typesense client (already done)
+
+# NEW IN v4:
+# 5. Score-based strategy selection (uses Redis rank field)
+# 6. Semantic UUID support for related content
+# 7. Enhanced debug output with term scores
+
+# NEW IN v4.1:
+# 8. skip_embedding parameter for dropdown/keyword selections
+
+# NEW IN v4.2:
+# 9. DROPDOWN FAST PATH - skip word discovery entirely for dropdown selections
+#    When user selects from dropdown, search the exact phrase directly
+
+# NEW IN v4.3:
+# 10. Dynamic tab filter support (data_type, category, schema filters)
+# 11. Enhanced facet support for tabs
+
+# NEW IN v4.4:
+# 12. FIXED: Location filtering now handles case sensitivity and state abbreviations
+#     - Extracts location as title case ('Georgia' not 'georgia')
+#     - Searches for BOTH full state name AND abbreviation ('Georgia' OR 'GA')
+#     - Properly matches data regardless of format
+# """
+
+# import typesense
+# from typing import Dict, List, Tuple, Optional, Any
+# import re
+# from decouple import config
+# from datetime import datetime
+# from concurrent.futures import ThreadPoolExecutor
+# import threading
+# import requests
+# from requests.adapters import HTTPAdapter
+# from urllib3.util.retry import Retry
+
+
+# # ============================================================================
+# # THREAD POOL - Reused across requests (3 workers for I/O-bound tasks)
+# # ============================================================================
+
+# _executor = ThreadPoolExecutor(max_workers=3)
+
+
+# # ============================================================================
+# # CONNECTION POOLING FOR EMBEDDING API
+# # ============================================================================
+
+# _http_session = None
+# _session_lock = threading.Lock()
+
+
+# def _get_http_session():
+#     """Reusable HTTP session with connection pooling."""
+#     global _http_session
+#     if _http_session is None:
+#         with _session_lock:
+#             if _http_session is None:
+#                 _http_session = requests.Session()
+#                 adapter = HTTPAdapter(
+#                     pool_connections=10,
+#                     pool_maxsize=10,
+#                     max_retries=Retry(total=2, backoff_factor=0.1)
+#                 )
+#                 _http_session.mount('http://', adapter)
+#                 _http_session.mount('https://', adapter)
+#     return _http_session
+
+
+# # ============================================================================
+# # US STATE ABBREVIATION MAPPING (NEW in v4.4)
+# # ============================================================================
+
+# US_STATE_ABBREV = {
+#     'alabama': 'AL', 'alaska': 'AK', 'arizona': 'AZ', 'arkansas': 'AR',
+#     'california': 'CA', 'colorado': 'CO', 'connecticut': 'CT', 'delaware': 'DE',
+#     'florida': 'FL', 'georgia': 'GA', 'hawaii': 'HI', 'idaho': 'ID',
+#     'illinois': 'IL', 'indiana': 'IN', 'iowa': 'IA', 'kansas': 'KS',
+#     'kentucky': 'KY', 'louisiana': 'LA', 'maine': 'ME', 'maryland': 'MD',
+#     'massachusetts': 'MA', 'michigan': 'MI', 'minnesota': 'MN', 'mississippi': 'MS',
+#     'missouri': 'MO', 'montana': 'MT', 'nebraska': 'NE', 'nevada': 'NV',
+#     'new hampshire': 'NH', 'new jersey': 'NJ', 'new mexico': 'NM', 'new york': 'NY',
+#     'north carolina': 'NC', 'north dakota': 'ND', 'ohio': 'OH', 'oklahoma': 'OK',
+#     'oregon': 'OR', 'pennsylvania': 'PA', 'rhode island': 'RI', 'south carolina': 'SC',
+#     'south dakota': 'SD', 'tennessee': 'TN', 'texas': 'TX', 'utah': 'UT',
+#     'vermont': 'VT', 'virginia': 'VA', 'washington': 'WA', 'west virginia': 'WV',
+#     'wisconsin': 'WI', 'wyoming': 'WY', 'district of columbia': 'DC',
+# }
+
+# # Reverse mapping: abbreviation → full name
+# US_STATE_FULL = {v: k.title() for k, v in US_STATE_ABBREV.items()}
+
+
+# # ============================================================================
+# # QUERY PREPROCESSING - THE BIGGEST WIN FOR LONG QUERIES
+# # ============================================================================
+
+# FILLER_PATTERNS = [
+#     re.compile(r'\b(i am |i\'m |i want to |i need to |can you |please |help me )\b', re.I),
+#     re.compile(r'\b(looking for |find me |search for |show me |tell me about )\b', re.I),
+#     re.compile(r'\b(what is |who is |where is |how to |how do i |how can i )\b', re.I),
+#     re.compile(r'\b(could you |would you |i would like |do you know |do you have )\b', re.I),
+#     re.compile(r'\b(the best |a good |some good |any good |really good |very good )\b', re.I),
+#     re.compile(r'\b(basically |actually |just |really |very |quite |pretty )\b', re.I),
+#     re.compile(r'\b(i think |i believe |i guess |maybe |perhaps |probably )\b', re.I),
+#     re.compile(r'\b(kind of |sort of |type of |lots of |a lot of )\b', re.I),
+# ]
+
+
+# def truncate_for_embedding(query: str, max_words: int = 40) -> str:
+#     """
+#     Strip filler words and truncate for faster embedding.
+    
+#     Example:
+#     'I'm looking for a really good Italian restaurant in Buenos Aires 
+#      that has outdoor seating and serves authentic pasta with wine'
+    
+#     Becomes:
+#     'Italian restaurant Buenos Aires outdoor seating authentic pasta wine'
+    
+#     This reduces embedding time from ~200ms to ~30ms for long queries.
+#     """
+#     cleaned = query
+    
+#     for pattern in FILLER_PATTERNS:
+#         cleaned = pattern.sub(' ', cleaned)
+    
+#     # Collapse whitespace
+#     cleaned = ' '.join(cleaned.split())
+    
+#     # Truncate to max words
+#     words = cleaned.split()
+#     if len(words) > max_words:
+#         cleaned = ' '.join(words[:max_words])
+    
+#     return cleaned.strip() or query[:200]
+
+
+# # ============================================================================
+# # EMBEDDING CLIENT (with pooling + truncation)
+# # ============================================================================
+
+# EMBEDDING_SERVICE_URL = config('EMBEDDING_SERVICE_URL')
+
+
+# def get_query_embedding(query: str) -> Optional[List[float]]:
+#     """
+#     Get embedding with:
+#     1. Query truncation (faster inference)
+#     2. Connection pooling (faster HTTP)
+#     """
+#     # Truncate BEFORE sending to model
+#     clean_query = truncate_for_embedding(query, max_words=40)
+    
+#     try:
+#         session = _get_http_session()
+#         response = session.post(
+#             EMBEDDING_SERVICE_URL,
+#             json={"text": clean_query},
+#             timeout=2  # Reduced from 5 to fail faster
+#         )
+#         response.raise_for_status()
+#         return response.json().get("embedding")
+#     except Exception as e:
+#         print(f"⚠️ Embedding error: {e}")
+#         return None
+
+
+# # ============================================================================
+# # WORD DISCOVERY
+# # ============================================================================
+
+# try:
+#     from .word_discovery import (
+#         process_query_optimized,
+#         get_search_strategy,
+#         get_filter_terms,
+#         get_loose_terms,
+#         get_all_search_terms,
+#         get_term_scores,
+#         get_high_score_terms
+#     )
+#     WORD_DISCOVERY_AVAILABLE = True
+# except ImportError:
+#     try:
+#         from word_discovery import (
+#             process_query_optimized,
+#             get_search_strategy,
+#             get_filter_terms,
+#             get_loose_terms,
+#             get_all_search_terms,
+#             get_term_scores,
+#             get_high_score_terms
+#         )
+#         WORD_DISCOVERY_AVAILABLE = True
+#     except ImportError:
+#         WORD_DISCOVERY_AVAILABLE = False
+#         print("⚠️ word_discovery not available, using basic search")
+        
+#         # Fallback implementations
+#         def get_term_scores(result):
+#             return []
+        
+#         def get_high_score_terms(result, min_score=500):
+#             return []
+
+
+# def _do_word_discovery(query: str) -> Dict:
+#     """Wrapper for thread pool."""
+#     if WORD_DISCOVERY_AVAILABLE:
+#         return process_query_optimized(query, verbose=False)
+#     return {
+#         'valid_count': 0,
+#         'unknown_count': len(query.split()),
+#         'search_strategy': 'semantic',
+#         'corrected_query': query,
+#         'corrected_terms': [],
+#         'total_score': 0,
+#         'average_score': 0,
+#         'max_score': 0,
+#         'terms': []
+#     }
+
+
+# def _do_embedding(query: str) -> Optional[List[float]]:
+#     """Wrapper for thread pool."""
+#     return get_query_embedding(query)
+
+
+# # ============================================================================
+# # PARALLEL EXECUTION HELPER
+# # ============================================================================
+
+# def run_parallel_prep(query: str, skip_embedding: bool = False) -> Tuple[Dict, Optional[List[float]]]:
+#     """
+#     Run word discovery and embedding IN PARALLEL.
+    
+#     Saves ~30ms by not waiting for word discovery before embedding.
+    
+#     Args:
+#         query: Search query string
+#         skip_embedding: If True, skip embedding call entirely (for dropdown/keyword selections)
+#     """
+#     if skip_embedding:
+#         # Dropdown/keyword selection - skip embedding entirely
+#         discovery = _do_word_discovery(query)
+#         return discovery, None
+    
+#     # Submit both tasks
+#     discovery_future = _executor.submit(_do_word_discovery, query)
+#     embedding_future = _executor.submit(_do_embedding, query)
+    
+#     # Wait for both
+#     discovery = discovery_future.result()
+#     embedding = embedding_future.result()
+    
+#     # Check if we need to re-embed due to significant correction
+#     corrected_query = discovery.get('corrected_query', query)
+#     if corrected_query.lower() != query.lower():
+#         corrections = discovery.get('corrected_terms', [])
+#         significant = any(
+#             c.get('original', '').lower() != c.get('corrected', '').lower()
+#             for c in corrections
+#         )
+#         if significant and embedding is not None:
+#             # Re-embed with corrected query
+#             embedding = get_query_embedding(corrected_query)
+    
+#     return discovery, embedding
+
+
+# # ============================================================================
+# # PRE-COMPILED REGEX PATTERNS
+# # ============================================================================
+
+# LOCATION_PATTERNS = [
+#     re.compile(r'\b(in|near|around|at)\s+\w+'),
+#     re.compile(r'\b(city|state|country|region)\b'),
+#     re.compile(r'\b(restaurant|store|shop|hotel|near me)\b'),
+# ]
+
+# HISTORICAL_PATTERNS = [
+#     re.compile(r'\b(history|historical|ancient|medieval|colonial)\b'),
+#     re.compile(r'\b(1[0-9]{3}|20[0-2][0-9])\b'),
+#     re.compile(r'\b([0-9]{2}th|[0-9]{2}st)\s+century\b'),
+#     re.compile(r'\b(war|empire|kingdom|dynasty|era|period)\b'),
+# ]
+
+# PRODUCT_PATTERNS = [
+#     re.compile(r'\b(buy|price|cheap|expensive|review|best)\b'),
+#     re.compile(r'\b(product|item|purchase|order|shipping)\b'),
+#     re.compile(r'\$[0-9]+'),
+# ]
+
+# PERSON_PATTERNS = [
+#     re.compile(r'\b(who is|biography|born|died|life of)\b'),
+#     re.compile(r'\b(ceo|president|founder|actor|artist|author)\b'),
+#     re.compile(r'\b(first\s+(?:black|african american|woman|female))\b'),
+# ]
+
+# MEDIA_PATTERNS = [
+#     re.compile(r'\b(movie|film|song|album|video|watch|listen)\b'),
+#     re.compile(r'\b(trailer|episode|season|soundtrack)\b'),
+# ]
+
+# LOCATION_EXTRACT_PATTERNS = [
+#     re.compile(r'\b(?:in|near|around|at)\s+([a-zA-Z\s]+?)(?:\s+(?:for|with|and)|$)'),
+#     re.compile(r'\b([a-zA-Z\s]+?)\s+(?:restaurants?|stores?|shops?|hotels?)\b'),
+# ]
+
+# DECADE_PATTERN = re.compile(r'\b(\d{4})s\b')
+# CENTURY_PATTERN = re.compile(r'\b(\d{1,2})(?:st|nd|rd|th)\s+century\b')
+
+
+# # ============================================================================
+# # CLIENT SETUP
+# # ============================================================================
+
+# client = typesense.Client({
+#     'api_key': config('TYPESENSE_API_KEY'),
+#     'nodes': [{
+#         'host': config('TYPESENSE_HOST'),
+#         'port': config('TYPESENSE_PORT'),
+#         'protocol': config('TYPESENSE_PROTOCOL')
+#     }],
+#     'connection_timeout_seconds': 5
+# })
+
+# COLLECTION_NAME = 'documents'
+
+
+# # ============================================================================
+# # FIELD CONFIGURATION
+# # ============================================================================
+
+# SEARCH_FIELDS = [
+#     'key_facts',
+#     'document_title',
+#     'primary_keywords',
+#     'entity_names'
+# ]
+
+# DEFAULT_WEIGHTS = [10, 5, 3, 2]
+
+# INTENT_WEIGHTS = {
+#     'general':    [10, 5, 3, 2],
+#     'location':   [8, 5, 3, 4],
+#     'historical': [10, 4, 4, 3],
+#     'product':    [8, 6, 4, 2],
+#     'person':     [10, 5, 3, 5],
+#     'media':      [9, 5, 4, 3],
+# }
+
+# MIN_SCORE_THRESHOLD = 0.5
+
+# SOURCE_AUTHORITY = {
+#     'britannica': 95,
+#     'wikipedia': 90,
+#     'government': 90,
+#     'academic': 88,
+#     'news': 70,
+#     'blog': 50,
+#     'social': 40,
+#     'default': 60
+# }
+
+
+# # ============================================================================
+# # VALID FILTER VALUES (for validation)
+# # ============================================================================
+
+# VALID_DATA_TYPES = frozenset([
+#     'article', 'person', 'business', 'place', 'media', 'event', 'product'
+# ])
+
+# VALID_SCHEMAS = frozenset([
+#     'Article', 'BlogPosting', 'NewsArticle', 'HowTo', 'Recipe',
+#     'WebPage', 'FAQPage', 'Product', 'Service', 'LocalBusiness',
+#     'Person', 'Organization', 'Event', 'VideoObject', 'ImageGallery',
+#     'AudioObject', 'Book', 'Movie', 'MusicRecording'
+# ])
+
+# VALID_CATEGORIES = frozenset([
+#     'healthcare_medical', 'fashion', 'beauty', 'food_recipes',
+#     'travel_tourism', 'entertainment', 'business', 'education',
+#     'technology', 'sports', 'finance', 'real_estate', 'automotive',
+#     'lifestyle', 'news', 'culture', 'politics', 'science', 'general'
+# ])
+
+
+# # ============================================================================
+# # INTENT DETECTION
+# # ============================================================================
+
+# def detect_query_intent(query: str, pos_tags: List[Tuple] = None) -> str:
+#     """Analyzes query to determine user intent."""
+#     query_lower = query.lower()
+    
+#     for pattern in LOCATION_PATTERNS:
+#         if pattern.search(query_lower):
+#             return 'location'
+    
+#     for pattern in HISTORICAL_PATTERNS:
+#         if pattern.search(query_lower):
+#             return 'historical'
+    
+#     for pattern in PRODUCT_PATTERNS:
+#         if pattern.search(query_lower):
+#             return 'product'
+    
+#     for pattern in PERSON_PATTERNS:
+#         if pattern.search(query_lower):
+#             return 'person'
+    
+#     for pattern in MEDIA_PATTERNS:
+#         if pattern.search(query_lower):
+#             return 'media'
+    
+#     return 'general'
+
+
+# def extract_location_from_query(query: str) -> Optional[str]:
+#     """
+#     Extracts location from query.
+    
+#     FIXED in v4.4: Returns title case for proper Typesense matching.
+#     'georgia' -> 'Georgia'
+#     'new york' -> 'New York'
+#     """
+#     stopwords = {'the', 'a', 'best', 'good', 'top'}
+    
+#     for pattern in LOCATION_EXTRACT_PATTERNS:
+#         match = pattern.search(query.lower())
+#         if match:
+#             location = match.group(1).strip()
+#             if location not in stopwords:
+#                 return location.title()  # FIXED: Return title case
+#     return None
+
+
+# def extract_time_period_from_query(query: str) -> Tuple[Optional[int], Optional[int]]:
+#     """Extracts time period from query."""
+#     query_lower = query.lower()
+    
+#     match = DECADE_PATTERN.search(query_lower)
+#     if match:
+#         decade = int(match.group(1))
+#         return (decade, decade + 99)
+    
+#     match = CENTURY_PATTERN.search(query_lower)
+#     if match:
+#         century = int(match.group(1))
+#         start = (century - 1) * 100
+#         return (start, start + 99)
+    
+#     era_ranges = {
+#         'ancient': (-3000, 500),
+#         'medieval': (500, 1500),
+#         'colonial': (1500, 1900),
+#         'modern': (1900, 2024),
+#         'contemporary': (1990, 2024)
+#     }
+    
+#     for era, (start, end) in era_ranges.items():
+#         if era in query_lower:
+#             return (start, end)
+    
+#     return (None, None)
+
+
+# def extract_content_type_from_query(query: str) -> Optional[str]:
+#     """Detects if user wants specific content type."""
+#     query_lower = query.lower()
+    
+#     type_indicators = {
+#         'video': ['video', 'watch', 'documentary', 'film', 'movie', 'youtube', 'tiktok'],
+#         'article': ['article', 'read', 'blog', 'post', 'news'],
+#         'product': ['buy', 'purchase', 'price', 'shop', 'store'],
+#         'service': ['hire', 'book', 'appointment', 'service'],
+#         'person': ['who is', 'biography', 'profile']
+#     }
+    
+#     for content_type, indicators in type_indicators.items():
+#         for indicator in indicators:
+#             if indicator in query_lower:
+#                 return content_type
+#     return None
+
+
+# # ============================================================================
+# # LOCATION FILTER HELPER (NEW in v4.4)
+# # ============================================================================
+
+# def _build_location_filter(location: str) -> str:
+#     """
+#     Build a location filter that handles:
+#     1. Title case for proper matching ('Georgia' not 'georgia')
+#     2. State abbreviations ('GA' for Georgia, 'FL' for Florida)
+#     3. Both city and state fields
+    
+#     Returns a filter string or empty string.
+    
+#     Example:
+#         'georgia' -> (location_state:=Georgia || location_city:=Georgia || location_state:=GA)
+#         'atlanta' -> (location_state:=Atlanta || location_city:=Atlanta)
+#     """
+#     if not location:
+#         return ''
+    
+#     loc_title = location.title()
+#     loc_lower = location.lower()
+    
+#     # Get state abbreviation if this is a US state
+#     abbrev = US_STATE_ABBREV.get(loc_lower, '')
+    
+#     # Build filter parts
+#     filter_parts = [
+#         f"location_state:={loc_title}",
+#         f"location_city:={loc_title}",
+#     ]
+    
+#     # Add abbreviation variant for states
+#     if abbrev:
+#         filter_parts.append(f"location_state:={abbrev}")
+    
+#     return '(' + ' || '.join(filter_parts) + ')'
+
+
+# # ============================================================================
+# # FILTER & SORT BUILDING (UPDATED FOR DYNAMIC TABS + LOCATION FIX)
+# # ============================================================================
+
+# def build_filter_string(
+#     filters: Dict = None,
+#     time_start: int = None,
+#     time_end: int = None,
+#     location: str = None,
+#     content_type: str = None
+# ) -> str:
+#     """
+#     Builds Typesense filter_by string.
+    
+#     Supports dynamic tab filters:
+#     - data_type: document_data_type (content, service, product, person, media, location)
+#     - category: document_category (healthcare_medical, fashion, beauty, etc.)
+#     - schema: document_schema (Article, BlogPosting, Product, Service, etc.)
+#     - source: document_brand
+    
+#     Also supports:
+#     - time_start/time_end: time_period_start/time_period_end
+#     - location: location_city, location_state, location_country, location_region
+#     - content_type: document_data_type (from query extraction)
+    
+#     FIXED in v4.4: Location filter now handles case sensitivity and state abbreviations.
+#     """
+#     conditions = []
+    
+#     if filters:
+#         # Dynamic tab filter: data_type → document_data_type
+#         data_type = filters.get('data_type')
+#         if data_type:
+#             # Validate against allowed values
+#             if data_type in VALID_DATA_TYPES:
+#                 conditions.append(f"document_data_type:={data_type}")
+#             else:
+#                 print(f"⚠️ Invalid data_type filter: {data_type}")
+        
+#         # Dynamic tab filter: category → document_category
+#         category = filters.get('category')
+#         if category:
+#             # Allow any category (might have custom ones)
+#             # Sanitize to prevent injection
+#             safe_category = re.sub(r'[^a-zA-Z0-9_]', '', category)
+#             if safe_category:
+#                 conditions.append(f"document_category:={safe_category}")
+        
+#         # Dynamic tab filter: schema → document_schema
+#         schema = filters.get('schema')
+#         if schema:
+#             if schema in VALID_SCHEMAS:
+#                 conditions.append(f"document_schema:={schema}")
+#             else:
+#                 print(f"⚠️ Invalid schema filter: {schema}")
+        
+#         # Source filter → document_brand
+#         source = filters.get('source')
+#         if source:
+#             # Sanitize
+#             safe_source = re.sub(r'[&|!=<>:;\[\]{}()\'"\\]', '', source)
+#             if safe_source:
+#                 conditions.append(f"document_brand:={safe_source}")
+        
+#         # Time range filter
+#         time_range = filters.get('time_range')
+#         if time_range:
+#             time_conditions = _parse_time_range_filter(time_range)
+#             if time_conditions:
+#                 conditions.extend(time_conditions)
+        
+#         # Location filter from filters dict (FIXED in v4.4)
+#         loc_filter = filters.get('location')
+#         if loc_filter:
+#             safe_loc = re.sub(r'[&|!=<>:;\[\]{}()\'"\\]', '', loc_filter)
+#             if safe_loc:
+#                 location_condition = _build_location_filter(safe_loc)
+#                 if location_condition:
+#                     conditions.append(location_condition)
+    
+#     # Time period from query extraction
+#     if time_start is not None:
+#         conditions.append(f"time_period_start:>={time_start}")
+#     if time_end is not None:
+#         conditions.append(f"time_period_end:<={time_end}")
+    
+#     # Location from query extraction (FIXED in v4.4)
+#     if location and not (filters and filters.get('location')):
+#         location_condition = _build_location_filter(location)
+#         if location_condition:
+#             conditions.append(location_condition)
+    
+#     # Content type from query extraction (if not already set by data_type filter)
+#     if content_type and not (filters and filters.get('data_type')):
+#         if content_type in VALID_DATA_TYPES:
+#             conditions.append(f"document_data_type:={content_type}")
+    
+#     return ' && '.join(conditions) if conditions else ''
+
+
+# def _parse_time_range_filter(time_range: str) -> List[str]:
+#     """Parse time_range filter value into Typesense conditions."""
+#     conditions = []
+    
+#     now = datetime.now()
+    
+#     if time_range == 'day':
+#         # Last 24 hours
+#         timestamp = int((now.timestamp() - 86400) * 1000)
+#         conditions.append(f"created_at:>={timestamp}")
+#     elif time_range == 'week':
+#         # Last 7 days
+#         timestamp = int((now.timestamp() - 604800) * 1000)
+#         conditions.append(f"created_at:>={timestamp}")
+#     elif time_range == 'month':
+#         # Last 30 days
+#         timestamp = int((now.timestamp() - 2592000) * 1000)
+#         conditions.append(f"created_at:>={timestamp}")
+#     elif time_range == 'year':
+#         # Last 365 days
+#         timestamp = int((now.timestamp() - 31536000) * 1000)
+#         conditions.append(f"created_at:>={timestamp}")
+    
+#     return conditions
+
+
+# def build_sort_string(intent: str, user_location: Tuple[float, float] = None) -> str:
+#     """Builds Typesense sort_by string."""
+#     if intent == 'location' and user_location:
+#         lat, lng = user_location
+#         return f"location_geopoint({lat},{lng}):asc,authority_score:desc"
+    
+#     return "authority_score:desc,published_date:desc"
+
+
+# def build_vector_query(
+#     query_embedding: List[float],
+#     k: int = 20,
+#     alpha: float = 1.0
+# ) -> str:
+#     """Builds the vector_query string for Typesense."""
+#     embedding_str = ','.join(str(x) for x in query_embedding)
+#     return f"embedding:([{embedding_str}], k:{k}, alpha:{alpha})"
+
+
+# # ============================================================================
+# # SEARCH PARAMETER BUILDERS
+# # ============================================================================
+
+# def build_semantic_params(
+#     query_embedding: List[float],
+#     filters: Dict = None,
+#     page: int = 1,
+#     per_page: int = 20,
+#     query: str = ''
+# ) -> Dict:
+#     """SEMANTIC MODE: Pure vector search, NO full-text matching."""
+#     location = extract_location_from_query(query)
+#     time_start, time_end = extract_time_period_from_query(query)
+#     content_type = extract_content_type_from_query(query)
+    
+#     params = {
+#         'q': '*',
+#         'vector_query': build_vector_query(
+#             query_embedding=query_embedding,
+#             k=per_page * 2,
+#             alpha=1.0
+#         ),
+#         'page': page,
+#         'per_page': per_page,
+#         'exclude_fields': 'embedding',
+#     }
+    
+#     filter_str = build_filter_string(
+#         filters=filters,
+#         time_start=time_start,
+#         time_end=time_end,
+#         location=location,
+#         content_type=content_type
+#     )
+#     if filter_str:
+#         params['filter_by'] = filter_str
+    
+#     return params
+
+
+# def build_mixed_params(
+#     query: str,
+#     query_embedding: List[float],
+#     filters: Dict = None,
+#     page: int = 1,
+#     per_page: int = 20,
+#     intent: str = 'general'
+# ) -> Dict:
+#     """MIXED MODE: Light text matching + vector."""
+#     location = extract_location_from_query(query)
+#     time_start, time_end = extract_time_period_from_query(query)
+#     content_type = extract_content_type_from_query(query)
+    
+#     params = {
+#         'q': query,
+#         'query_by': 'document_title,key_facts',
+#         'query_by_weights': '5,3',
+#         'vector_query': build_vector_query(
+#             query_embedding=query_embedding,
+#             k=per_page * 2,
+#             alpha=0.8
+#         ),
+#         'page': page,
+#         'per_page': per_page,
+#         'exclude_fields': 'embedding',
+#         'drop_tokens_threshold': 10,
+#         'typo_tokens_threshold': 10,
+#         'num_typos': 2,
+#     }
+    
+#     filter_str = build_filter_string(
+#         filters=filters,
+#         time_start=time_start,
+#         time_end=time_end,
+#         location=location,
+#         content_type=content_type
+#     )
+#     if filter_str:
+#         params['filter_by'] = filter_str
+    
+#     return params
+
+
+# def build_strict_params(
+#     query: str,
+#     valid_terms: List[str],
+#     query_embedding: Optional[List[float]] = None,
+#     filters: Dict = None,
+#     page: int = 1,
+#     per_page: int = 20,
+#     intent: str = 'general'
+# ) -> Dict:
+#     """STRICT MODE: Text search on valid terms + optional vector rerank."""
+#     location = extract_location_from_query(query)
+#     time_start, time_end = extract_time_period_from_query(query)
+#     content_type = extract_content_type_from_query(query)
+    
+#     search_query = ' '.join(valid_terms)
+#     weights = INTENT_WEIGHTS.get(intent, DEFAULT_WEIGHTS)
+    
+#     params = {
+#         'q': search_query,
+#         'query_by': ','.join(SEARCH_FIELDS),
+#         'query_by_weights': ','.join(str(w) for w in weights),
+#         'page': page,
+#         'per_page': per_page,
+#         'exclude_fields': 'embedding',
+#         'drop_tokens_threshold': 1,
+#         'typo_tokens_threshold': 2,
+#         'num_typos': 0,
+#     }
+    
+#     if query_embedding:
+#         params['vector_query'] = build_vector_query(
+#             query_embedding=query_embedding,
+#             k=per_page,
+#             alpha=0.3
+#         )
+    
+#     filter_str = build_filter_string(
+#         filters=filters,
+#         time_start=time_start,
+#         time_end=time_end,
+#         location=location,
+#         content_type=content_type
+#     )
+#     if filter_str:
+#         params['filter_by'] = filter_str
+    
+#     return params
+
+
+# def build_fallback_text_params(
+#     query: str,
+#     filters: Dict = None,
+#     page: int = 1,
+#     per_page: int = 20,
+#     intent: str = 'general'
+# ) -> Dict:
+#     """FALLBACK: Full text search when embedding fails."""
+#     location = extract_location_from_query(query)
+#     time_start, time_end = extract_time_period_from_query(query)
+#     content_type = extract_content_type_from_query(query)
+    
+#     weights = INTENT_WEIGHTS.get(intent, DEFAULT_WEIGHTS)
+    
+#     params = {
+#         'q': query,
+#         'query_by': ','.join(SEARCH_FIELDS),
+#         'query_by_weights': ','.join(str(w) for w in weights),
+#         'page': page,
+#         'per_page': per_page,
+#         'drop_tokens_threshold': 5,
+#         'typo_tokens_threshold': 3,
+#         'num_typos': 1,
+#     }
+    
+#     filter_str = build_filter_string(
+#         filters=filters,
+#         time_start=time_start,
+#         time_end=time_end,
+#         location=location,
+#         content_type=content_type
+#     )
+#     if filter_str:
+#         params['filter_by'] = filter_str
+    
+#     return params
+
+
+# def build_exact_phrase_params(
+#     phrase: str,
+#     filters: Dict = None,
+#     page: int = 1,
+#     per_page: int = 20,
+#     intent: str = 'general'
+# ) -> Dict:
+#     """
+#     EXACT PHRASE MODE: For dropdown selections.
+#     Searches for the exact phrase without splitting or processing.
+#     """
+#     location = extract_location_from_query(phrase)
+#     time_start, time_end = extract_time_period_from_query(phrase)
+#     content_type = extract_content_type_from_query(phrase)
+    
+#     weights = INTENT_WEIGHTS.get(intent, DEFAULT_WEIGHTS)
+    
+#     params = {
+#         'q': f'"{phrase}"',  # Quote for exact phrase matching
+#         'query_by': ','.join(SEARCH_FIELDS),
+#         'query_by_weights': ','.join(str(w) for w in weights),
+#         'page': page,
+#         'per_page': per_page,
+#         'exclude_fields': 'embedding',
+#         'num_typos': 0,  # No typos for exact match
+#     }
+    
+#     filter_str = build_filter_string(
+#         filters=filters,
+#         time_start=time_start,
+#         time_end=time_end,
+#         location=location,
+#         content_type=content_type
+#     )
+#     if filter_str:
+#         params['filter_by'] = filter_str
+    
+#     return params
+
+
+# # ============================================================================
+# # RESULT PROCESSING
+# # ============================================================================
+
+# def calculate_final_score(hit: Dict, query: str = '') -> float:
+#     """Combines vector_distance and authority scores."""
+#     vector_distance = hit.get('vector_distance', 1.0)
+#     vector_similarity = max(0, 1 - vector_distance)
+    
+#     doc = hit.get('document', {})
+#     authority = doc.get('authority_score', SOURCE_AUTHORITY['default']) / 100
+    
+#     text_score = hit.get('text_match', 0) / 100000000
+    
+#     if text_score > 0:
+#         final_score = (vector_similarity * 0.5) + (text_score * 0.3) + (authority * 0.2)
+#     else:
+#         final_score = (vector_similarity * 0.7) + (authority * 0.3)
+    
+#     return round(min(1.0, final_score), 4)
+
+
+# def format_result(hit: Dict, query: str = '') -> Dict:
+#     """Transforms a Typesense hit into clean response format."""
+#     doc = hit.get('document', {})
+#     highlights = hit.get('highlights', [])
+    
+#     highlight_map = {}
+#     for h in highlights:
+#         field = h.get('field')
+#         snippet = h.get('value') or h.get('snippet') or h.get('snippets', [''])[0]
+#         highlight_map[field] = snippet
+    
+#     vector_distance = hit.get('vector_distance')
+#     semantic_score = round(1 - vector_distance, 3) if vector_distance else None
+    
+#     return {
+#         'id': doc.get('document_uuid'),
+#         'title': doc.get('document_title', 'Untitled'),
+#         'title_highlighted': highlight_map.get('document_title', doc.get('document_title', '')),
+#         'summary': doc.get('document_summary', ''),
+#         'summary_highlighted': highlight_map.get('document_summary', doc.get('document_summary', '')),
+#         'url': doc.get('document_url', ''),
+#         'source': doc.get('document_brand', 'unknown'),
+#         'site_name': doc.get('document_brand', 'Website'),
+#         'image': (doc.get('image_url') or [None])[0],
+#         'category': doc.get('document_category', ''),
+#         'data_type': doc.get('document_data_type', ''),
+#         'schema': doc.get('document_schema', ''),  # Include schema for filtering
+#         'date': doc.get('published_date_string', ''),
+#         'published_date': doc.get('published_date_string', ''),
+#         'authority_score': doc.get('authority_score', 0),
+#         'cluster_uuid': doc.get('cluster_uuid'),
+#         'semantic_uuid': doc.get('semantic_uuid'),
+#         'key_facts': doc.get('key_facts', []),
+#         'key_facts_highlighted': highlight_map.get('key_facts', ''),
+#         'semantic_score': semantic_score,
+#         'location': {
+#             'city': doc.get('location_city'),
+#             'state': doc.get('location_state'),
+#             'country': doc.get('location_country'),
+#             'region': doc.get('location_region')
+#         },
+#         'time_period': {
+#             'start': doc.get('time_period_start'),
+#             'end': doc.get('time_period_end'),
+#             'context': doc.get('time_context')
+#         },
+#         'score': calculate_final_score(hit, query),
+#         'related_sources': []
+#     }
+
+
+# def process_results(raw_response: Dict, query: str = '') -> List[Dict]:
+#     """Processes Typesense response into clean result list."""
+#     hits = raw_response.get('hits', [])
+    
+#     if not hits:
+#         return []
+    
+#     results = [format_result(hit, query) for hit in hits]
+#     results.sort(key=lambda x: x['score'], reverse=True)
+    
+#     if not results:
+#         return []
+    
+#     top_score = results[0]['score']
+#     relative_cutoff = top_score * 0.7
+#     effective_cutoff = max(MIN_SCORE_THRESHOLD, relative_cutoff)
+    
+#     filtered_results = [r for r in results if r['score'] >= effective_cutoff]
+    
+#     if not filtered_results and results:
+#         filtered_results = [results[0]]
+    
+#     return filtered_results[:20]
+
+
+# # ============================================================================
+# # SEARCH EXECUTION
+# # ============================================================================
+
+# def execute_search_multi(search_params: Dict) -> Dict:
+#     """Execute search using multi_search endpoint."""
+#     search_requests = {
+#         'searches': [{
+#             'collection': COLLECTION_NAME,
+#             **search_params
+#         }]
+#     }
+    
+#     try:
+#         response = client.multi_search.perform(search_requests, {})
+#         return response['results'][0]
+#     except Exception as e:
+#         print(f"TYPESENSE ERROR: {e}")
+#         return {'hits': [], 'found': 0, 'error': str(e)}
+
+
+# # ============================================================================
+# # TWO-STAGE SEARCH: Keyword Filter -> Vector Rerank
+# # ============================================================================
+
+# def stage1_keyword_filter(
+#     query: str,
+#     filters: Dict = None,
+#     max_candidates: int = 50
+# ) -> List[str]:
+#     """STAGE 1: Text search to find candidate documents."""
+#     location = extract_location_from_query(query)
+#     time_start, time_end = extract_time_period_from_query(query)
+#     content_type = extract_content_type_from_query(query)
+    
+#     params = {
+#         'q': query,
+#         'query_by': 'key_facts,document_title,primary_keywords,entity_names',
+#         'query_by_weights': '10,8,5,3',
+#         'per_page': max_candidates,
+#         'include_fields': 'document_uuid,document_title',
+#         'drop_tokens_threshold': 1,
+#         'typo_tokens_threshold': 1,
+#         'num_typos': 1,
+#     }
+    
+#     filter_str = build_filter_string(
+#         filters=filters,
+#         time_start=time_start,
+#         time_end=time_end,
+#         location=location,
+#         content_type=content_type
+#     )
+#     if filter_str:
+#         params['filter_by'] = filter_str
+    
+#     try:
+#         response = client.collections[COLLECTION_NAME].documents.search(params)
+#         hits = response.get('hits', [])
+        
+#         doc_ids = [hit['document']['document_uuid'] for hit in hits if hit.get('document', {}).get('document_uuid')]
+        
+#         print(f"📝 Stage 1 (keyword filter): Found {len(doc_ids)} candidates")
+#         for hit in hits[:5]:
+#             print(f"   - {hit['document'].get('document_title', 'NO TITLE')}")
+        
+#         return doc_ids
+        
+#     except Exception as e:
+#         print(f"❌ Stage 1 error: {e}")
+#         return []
+
+
+# def stage2_vector_rerank(
+#     query_embedding: List[float],
+#     document_ids: List[str],
+#     per_page: int = 20
+# ) -> Dict:
+#     """STAGE 2: Vector search filtered to specific documents."""
+#     if not document_ids:
+#         return {'hits': [], 'found': 0}
+    
+#     if not query_embedding:
+#         id_filter = ','.join([f'`{doc_id}`' for doc_id in document_ids[:per_page]])
+#         params = {
+#             'q': '*',
+#             'filter_by': f'document_uuid:[{id_filter}]',
+#             'per_page': per_page,
+#         }
+#         return execute_search_multi(params)
+    
+#     id_filter = ','.join([f'`{doc_id}`' for doc_id in document_ids])
+    
+#     embedding_str = ','.join(str(x) for x in query_embedding)
+    
+#     params = {
+#         'q': '*',
+#         'filter_by': f'document_uuid:[{id_filter}]',
+#         'vector_query': f"embedding:([{embedding_str}], k:{len(document_ids)}, alpha:1.0)",
+#         'per_page': per_page,
+#         'exclude_fields': 'embedding',
+#     }
+    
+#     print(f"🔍 Stage 2 (vector rerank): Reranking {len(document_ids)} documents")
+    
+#     return execute_search_multi(params)
+
+
+# def execute_two_stage_search(
+#     query: str,
+#     query_embedding: Optional[List[float]],
+#     filters: Dict = None,
+#     page: int = 1,
+#     per_page: int = 20
+# ) -> Dict:
+#     """Two-stage search: Keyword filter THEN vector rerank."""
+#     candidate_ids = stage1_keyword_filter(
+#         query=query,
+#         filters=filters,
+#         max_candidates=50
+#     )
+    
+#     if not candidate_ids:
+#         print("⚠️ Stage 1 found no candidates, falling back to semantic search")
+#         if query_embedding:
+#             params = build_semantic_params(
+#                 query_embedding=query_embedding,
+#                 filters=filters,
+#                 page=page,
+#                 per_page=per_page,
+#                 query=query
+#             )
+#             return execute_search_multi(params)
+#         else:
+#             return {'hits': [], 'found': 0}
+    
+#     result = stage2_vector_rerank(
+#         query_embedding=query_embedding,
+#         document_ids=candidate_ids,
+#         per_page=per_page
+#     )
+    
+#     return result
+
+
+# # ============================================================================
+# # MAIN SEARCH FUNCTION (OPTIMIZED)
+# # ============================================================================
+
+# def execute_full_search(
+#     query: str,
+#     session_id: str = None,
+#     filters: Dict = None,
+#     page: int = 1,
+#     per_page: int = 20,
+#     user_location: Tuple[float, float] = None,
+#     pos_tags: List[Tuple] = None,
+#     safe_search: bool = True,
+#     alt_mode: str = 'n',
+#     skip_embedding: bool = False,
+#     search_source: str = None
+# ) -> Dict:
+#     """
+#     Main entry point for search - OPTIMIZED VERSION v4.4.
+    
+#     OPTIMIZATIONS:
+#     1. Query truncation before embedding (biggest win for long queries)
+#     2. Parallel word discovery + embedding
+#     3. Connection pooling for HTTP requests
+#     4. Score-based strategy selection
+#     5. skip_embedding for dropdown/keyword selections
+#     6. DROPDOWN FAST PATH - skip word discovery entirely (v4.2)
+#     7. Dynamic tab filter support (v4.3)
+#     8. FIXED: Location filtering handles case + abbreviations (v4.4)
+    
+#     Args:
+#         query: Search query string
+#         session_id: User session identifier
+#         filters: Dict of filter conditions including:
+#             - data_type: Filter by document_data_type (content, service, product, etc.)
+#             - category: Filter by document_category
+#             - schema: Filter by document_schema (Article, Product, etc.)
+#             - source: Filter by document_brand
+#             - time_range: Filter by time (day, week, month, year)
+#             - location: Filter by location
+#         page: Page number for pagination
+#         per_page: Results per page
+#         user_location: (lat, lng) tuple for location-based sorting
+#         pos_tags: Pre-computed POS tags (optional)
+#         safe_search: Enable safe search filtering
+#         alt_mode: 'y' to force semantic search, 'n' for normal
+#         skip_embedding: True to skip embedding (for dropdown/keyword selections)
+#         search_source: Source of search ('dropdown', 'keyboard', 'home', etc.)
+#     """
+#     import time
+#     times = {}
+#     t0 = time.time()
+    
+#     # Log active filters for debugging
+#     if filters:
+#         active_filters = {k: v for k, v in filters.items() if v}
+#         if active_filters:
+#             print(f"🎛️ Active filters: {active_filters}")
+    
+#     # =========================================================================
+#     # DROPDOWN FAST PATH - Skip everything, just search the exact phrase
+#     # =========================================================================
+#     is_dropdown = search_source in ('dropdown', 'keyword', 'suggestion', 'autocomplete')
+
+#     # alt_mode='y' forces full semantic processing, even for dropdowns
+#     if alt_mode == 'y':
+#         is_dropdown = False
+
+#     if is_dropdown:
+#         print(f"⚡ DROPDOWN FAST PATH: '{query}'")
+        
+#         t1 = time.time()
+#         intent = detect_query_intent(query, pos_tags)
+        
+#         # Build exact phrase search params
+#         search_params = build_exact_phrase_params(
+#             phrase=query,
+#             filters=filters,
+#             page=page,
+#             per_page=per_page,
+#             intent=intent
+#         )
+        
+#         t2 = time.time()
+#         raw_response = execute_search_multi(search_params)
+#         times['typesense'] = round((time.time() - t2) * 1000, 2)
+#         times['total'] = round((time.time() - t0) * 1000, 2)
+        
+#         # Debug output
+#         print(f"⏱️ TIMING: {times}")
+#         print(f"🔍 Strategy: EXACT_PHRASE (dropdown) | Found: {raw_response.get('found', 0)}")
+#         print(f"   Search phrase: \"{query}\"")
+        
+#         # Process results
+#         results = process_results(raw_response, query)
+        
+#         raw_count = len(raw_response.get('hits', []))
+#         filtered_count = len(results)
+#         if raw_count > 0:
+#             top_score = results[0]['score'] if results else 0
+#             print(f"📊 Filtering: {raw_count} → {filtered_count} results")
+#             print(f"   Top score: {top_score:.4f} | Cutoff: {max(MIN_SCORE_THRESHOLD, top_score * 0.7):.4f}")
+        
+#         # Build response
+#         search_time = round(time.time() - t0, 3)
+        
+#         return {
+#             'query': query,
+#             'corrected_query': query,  # No correction for dropdown
+#             'intent': intent,
+#             'results': results,
+#             'total': len(results), 
+#             'page': page,
+#             'per_page': per_page,
+#             'search_time': search_time,
+#             'session_id': session_id,
+#             'semantic_enabled': False,
+#             'search_strategy': 'exact_phrase',
+#             'alt_mode': alt_mode,
+#             'skip_embedding': True,
+#             'search_source': search_source or 'dropdown',
+#             'valid_terms': [query],  # Whole phrase is the term
+#             'unknown_terms': [],
+#             'word_discovery': {
+#                 'valid_count': 1,
+#                 'unknown_count': 0,
+#                 'corrections': [],
+#                 'total_score': 0,
+#                 'average_score': 0,
+#                 'max_score': 0,
+#                 'term_scores': []
+#             },
+#             'timings': times,
+#             'filters_applied': {
+#                 'data_type': filters.get('data_type') if filters else None,
+#                 'category': filters.get('category') if filters else None,
+#                 'schema': filters.get('schema') if filters else None,
+#                 'time_period': extract_time_period_from_query(query),
+#                 'location': extract_location_from_query(query),
+#                 'content_type': extract_content_type_from_query(query)
+#             }
+#         }
+    
+#     # =========================================================================
+#     # NORMAL PATH - Full word discovery + embedding
+#     # =========================================================================
+    
+#     # STEP 1 + 2: Word Discovery + Embedding (parallel or skip)
+#     t1 = time.time()
+    
+#     discovery, query_embedding = run_parallel_prep(query, skip_embedding=skip_embedding)
+    
+#     times['parallel_prep'] = round((time.time() - t1) * 1000, 2)
+    
+#     # Extract discovery results
+#     if WORD_DISCOVERY_AVAILABLE:
+#         search_strategy = discovery.get('search_strategy', 'semantic')
+#         valid_terms = get_filter_terms(discovery)
+#         unknown_terms = get_loose_terms(discovery)
+#     else:
+#         search_strategy = 'semantic'
+#         valid_terms = []
+#         unknown_terms = query.split()
+    
+#     corrected_query = discovery.get('corrected_query', query)
+    
+#     # Override to semantic if alt_mode='y'
+#     if alt_mode == 'y':
+#         search_strategy = 'semantic'
+    
+#     # If we skipped embedding and strategy wants semantic, force to strict/text
+#     if skip_embedding and search_strategy == 'semantic':
+#         if valid_terms:
+#             search_strategy = 'strict'
+#         else:
+#             search_strategy = 'text_fallback'
+    
+#     semantic_enabled = query_embedding is not None
+    
+#     # =========================================================================
+#     # STEP 3: Detect intent
+#     # =========================================================================
+#     intent = detect_query_intent(query, pos_tags)
+    
+#     # =========================================================================
+#     # STEP 4: Execute search based on strategy
+#     # =========================================================================
+    
+#     if not semantic_enabled:
+#         actual_strategy = 'text_fallback'
+#         search_params = build_fallback_text_params(
+#             query=corrected_query,
+#             filters=filters,
+#             page=page,
+#             per_page=per_page,
+#             intent=intent
+#         )
+#         t3 = time.time()
+#         raw_response = execute_search_multi(search_params)
+#         times['typesense'] = round((time.time() - t3) * 1000, 2)
+        
+#     elif search_strategy in ('strict', 'mixed') and valid_terms:
+#         actual_strategy = f'two_stage_{search_strategy}'
+#         t3 = time.time()
+#         raw_response = execute_two_stage_search(
+#             query=corrected_query,
+#             query_embedding=query_embedding,
+#             filters=filters,
+#             page=page,
+#             per_page=per_page
+#         )
+#         times['typesense'] = round((time.time() - t3) * 1000, 2)
+        
+#     else:
+#         actual_strategy = 'semantic'
+#         search_params = build_semantic_params(
+#             query_embedding=query_embedding,
+#             filters=filters,
+#             page=page,
+#             per_page=per_page,
+#             query=query
+#         )
+#         t3 = time.time()
+#         raw_response = execute_search_multi(search_params)
+#         times['typesense'] = round((time.time() - t3) * 1000, 2)
+    
+#     times['total'] = round((time.time() - t0) * 1000, 2)
+    
+#     # =========================================================================
+#     # DEBUG OUTPUT (Enhanced with scores)
+#     # =========================================================================
+#     print(f"⏱️ TIMING: {times}")
+#     print(f"🔍 Strategy: {actual_strategy.upper()} | Found: {raw_response.get('found', 0)}")
+#     print(f"📊 Scores: avg={discovery.get('average_score', 0)}, total={discovery.get('total_score', 0)}, max={discovery.get('max_score', 0)}")
+    
+#     if skip_embedding:
+#         print(f"⚡ Embedding skipped (source: {search_source or 'skip_embedding=True'})")
+    
+#     if valid_terms:
+#         print(f"   Valid terms: {valid_terms}")
+#         # Show individual term scores
+#         for term in discovery.get('terms', []):
+#             if term.get('rank_score', 0) > 0:
+#                 print(f"      • {term['search_word']}: {term['rank_score']} pts")
+    
+#     if discovery.get('corrected_terms'):
+#         print(f"   Corrections: {[(c.get('original'), c.get('corrected')) for c in discovery.get('corrected_terms', [])]}")
+    
+#     # Log location filter for debugging (NEW in v4.4)
+#     location = extract_location_from_query(query)
+#     if location:
+#         abbrev = US_STATE_ABBREV.get(location.lower(), '')
+#         if abbrev:
+#             print(f"📍 Location filter: {location} (+ {abbrev})")
+#         else:
+#             print(f"📍 Location filter: {location}")
+    
+#     # =========================================================================
+#     # STEP 5: Process results
+#     # =========================================================================
+#     results = process_results(raw_response, query)
+    
+#     raw_count = len(raw_response.get('hits', []))
+#     filtered_count = len(results)
+#     if raw_count > 0:
+#         top_score = results[0]['score'] if results else 0
+#         print(f"📊 Filtering: {raw_count} → {filtered_count} results")
+#         print(f"   Top score: {top_score:.4f} | Cutoff: {max(MIN_SCORE_THRESHOLD, top_score * 0.7):.4f}")
+    
+#     # =========================================================================
+#     # STEP 6: Build response
+#     # =========================================================================
+#     search_time = round(time.time() - t0, 3)
+    
+#     return {
+#         'query': query,
+#         'corrected_query': corrected_query,
+#         'intent': intent,
+#         'results': results,
+#         'total': len(results), 
+#         'page': page,
+#         'per_page': per_page,
+#         'search_time': search_time,
+#         'session_id': session_id,
+#         'semantic_enabled': semantic_enabled,
+#         'search_strategy': actual_strategy,
+#         'alt_mode': alt_mode,
+#         'skip_embedding': skip_embedding,
+#         'search_source': search_source,
+#         'valid_terms': valid_terms,
+#         'unknown_terms': unknown_terms,
+#         'word_discovery': {
+#             'valid_count': discovery.get('valid_count', 0),
+#             'unknown_count': discovery.get('unknown_count', 0),
+#             'corrections': discovery.get('corrected_terms', []),
+#             # Score metrics
+#             'total_score': discovery.get('total_score', 0),
+#             'average_score': discovery.get('average_score', 0),
+#             'max_score': discovery.get('max_score', 0),
+#             'term_scores': [
+#                 {'term': t['search_word'], 'score': t.get('rank_score', 0)}
+#                 for t in discovery.get('terms', [])
+#                 if t.get('rank_score', 0) > 0
+#             ]
+#         },
+#         'timings': times,
+#         'filters_applied': {
+#             'data_type': filters.get('data_type') if filters else None,
+#             'category': filters.get('category') if filters else None,
+#             'schema': filters.get('schema') if filters else None,
+#             'time_period': extract_time_period_from_query(query),
+#             'location': extract_location_from_query(query),
+#             'content_type': extract_content_type_from_query(query)
+#         }
+#     }
+
+
+# # ============================================================================
+# # CONVENIENCE FUNCTIONS
+# # ============================================================================
+
+# def quick_search(query: str, limit: int = 10) -> List[Dict]:
+#     """Quick semantic search for autocomplete."""
+#     query_embedding = get_query_embedding(query)
+    
+#     if not query_embedding:
+#         params = {
+#             'q': query,
+#             'query_by': 'document_title,key_facts',
+#             'per_page': limit,
+#             'include_fields': 'document_uuid,document_title,document_url,key_facts'
+#         }
+#         try:
+#             response = client.collections[COLLECTION_NAME].documents.search(params)
+#             return [hit['document'] for hit in response.get('hits', [])]
+#         except:
+#             return []
+    
+#     params = {
+#         'q': '*',
+#         'vector_query': build_vector_query(query_embedding, k=limit, alpha=1.0),
+#         'per_page': limit,
+#         'exclude_fields': 'embedding',
+#         'include_fields': 'document_uuid,document_title,document_url,key_facts'
+#     }
+    
+#     response = execute_search_multi(params)
+#     return [hit['document'] for hit in response.get('hits', [])]
+
+
+# def find_similar_documents(document_uuid: str, limit: int = 5) -> List[Dict]:
+#     """
+#     Find documents similar to a given document.
+    
+#     Strategy:
+#     1. If document has semantic_uuid, find others in same cluster first
+#     2. Fall back to vector similarity if no semantic_uuid or need more results
+#     """
+#     try:
+#         doc = client.collections[COLLECTION_NAME].documents[document_uuid].retrieve()
+        
+#         results = []
+#         semantic_uuid = doc.get('semantic_uuid')
+        
+#         # Strategy 1: Use semantic_uuid cluster
+#         if semantic_uuid and '-' in semantic_uuid:
+#             parts = semantic_uuid.split('-')
+#             if len(parts) >= 2:
+#                 prefix = parts[0]  # e.g., "DOC"
+#                 cluster = parts[1]  # e.g., "11"
+                
+#                 # Find documents in same cluster (excluding self)
+#                 # Only use cluster-based search if cluster != 00 (00 = no semantic clustering)
+#                 if cluster != '00':
+#                     try:
+#                         # Search for documents with same prefix-cluster pattern
+#                         params = {
+#                             'q': '*',
+#                             'filter_by': f'semantic_uuid:>={prefix}-{cluster}-0000 && semantic_uuid:<={prefix}-{cluster}-9999 && document_uuid:!={document_uuid}',
+#                             'per_page': limit,
+#                             'exclude_fields': 'embedding'
+#                         }
+                        
+#                         response = execute_search_multi(params)
+#                         results = [hit['document'] for hit in response.get('hits', [])]
+                        
+#                         print(f"🔗 Found {len(results)} related docs in cluster {prefix}-{cluster}")
+                        
+#                         if len(results) >= limit:
+#                             return results[:limit]
+#                     except Exception as e:
+#                         print(f"⚠️ Cluster search failed: {e}")
+#                         # Fall through to vector search
+        
+#         # Strategy 2: Vector similarity (for remaining slots or fallback)
+#         embedding = doc.get('embedding')
+        
+#         if embedding and len(results) < limit:
+#             remaining = limit - len(results)
+#             existing_ids = [r.get('document_uuid') for r in results] + [document_uuid]
+            
+#             # Build exclusion filter
+#             exclude_parts = [f'document_uuid:!={uid}' for uid in existing_ids if uid]
+#             exclude_filter = ' && '.join(exclude_parts) if exclude_parts else ''
+            
+#             params = {
+#                 'q': '*',
+#                 'vector_query': f"embedding:([{','.join(str(x) for x in embedding)}], k:{remaining + 1})",
+#                 'per_page': remaining,
+#                 'exclude_fields': 'embedding',
+#             }
+            
+#             if exclude_filter:
+#                 params['filter_by'] = exclude_filter
+            
+#             response = execute_search_multi(params)
+#             vector_results = [hit['document'] for hit in response.get('hits', [])]
+#             results.extend(vector_results)
+            
+#             print(f"🔍 Found {len(vector_results)} similar docs via vector search")
+        
+#         return results[:limit]
+    
+#     except Exception as e:
+#         print(f"Error finding similar documents: {e}")
+#         return []
+
+
+# def find_documents_in_cluster(semantic_uuid: str, limit: int = 10) -> List[Dict]:
+#     """
+#     Find all documents in the same semantic cluster.
+    
+#     Args:
+#         semantic_uuid: e.g., "DOC-11-0042"
+#         limit: Maximum documents to return
+        
+#     Returns:
+#         List of documents in the same cluster
+#     """
+#     if not semantic_uuid or '-' not in semantic_uuid:
+#         return []
+    
+#     parts = semantic_uuid.split('-')
+#     if len(parts) < 2:
+#         return []
+    
+#     prefix = parts[0]  # e.g., "DOC"
+#     cluster = parts[1]  # e.g., "11"
+    
+#     try:
+#         params = {
+#             'q': '*',
+#             'filter_by': f'semantic_uuid:>={prefix}-{cluster}-0000 && semantic_uuid:<={prefix}-{cluster}-9999',
+#             'per_page': limit,
+#             'exclude_fields': 'embedding',
+#             'sort_by': 'semantic_uuid:asc'
+#         }
+        
+#         response = execute_search_multi(params)
+#         return [hit['document'] for hit in response.get('hits', [])]
+    
+#     except Exception as e:
+#         print(f"Error finding cluster documents: {e}")
+#         return []
+
+
+# # ============================================================================
+# # HELPER FUNCTIONS (Required by views.py)
+# # ============================================================================
+
+# def get_facets(query: str) -> dict:
+#     """Returns available filter options based on result set."""
+#     search_params = {
+#         'q': query,
+#         'query_by': ','.join(SEARCH_FIELDS),
+#         'facet_by': 'document_category,document_data_type,document_schema,document_brand,location_country,temporal_relevance',
+#         'max_facet_values': 20,
+#         'per_page': 0
+#     }
+    
+#     try:
+#         response = client.collections[COLLECTION_NAME].documents.search(search_params)
+#         facets = {}
+        
+#         for facet in response.get('facet_counts', []):
+#             field = facet['field_name']
+#             facets[field] = [
+#                 {'value': count['value'], 'count': count['count']}
+#                 for count in facet['counts']
+#             ]
+        
+#         return facets
+#     except:
+#         return {}
+
+
+# def get_tab_facets(query: str) -> dict:
+#     """
+#     Get facet counts specifically for dynamic tabs.
+    
+#     Returns facets for:
+#     - document_data_type (main tabs)
+#     - document_category (secondary filter)
+#     - document_schema (tertiary filter)
+    
+#     This is called WITHOUT any filters to get total counts.
+#     """
+#     search_params = {
+#         'q': query if query else '*',
+#         'query_by': ','.join(SEARCH_FIELDS),
+#         'facet_by': 'document_data_type,document_category,document_schema',
+#         'max_facet_values': 20,
+#         'per_page': 0  # Only need facets, not results
+#     }
+    
+#     try:
+#         response = client.collections[COLLECTION_NAME].documents.search(search_params)
+        
+#         facets = {
+#             'data_type': [],
+#             'category': [],
+#             'schema': []
+#         }
+        
+#         # Label mappings
+#         data_type_labels = {
+#                     'article': 'Articles',
+#                     'person': 'People',
+#                     'business': 'Businesses',
+#                     'place': 'Places',
+#                     'media': 'Media',
+#                     'event': 'Events',
+#                     'product': 'Products',
+#                 }
+        
+#         category_labels = {
+#             'healthcare_medical': 'Healthcare',
+#             'fashion': 'Fashion',
+#             'beauty': 'Beauty',
+#             'food_recipes': 'Food & Recipes',
+#             'travel_tourism': 'Travel',
+#             'entertainment': 'Entertainment',
+#             'business': 'Business',
+#             'education': 'Education',
+#             'technology': 'Technology',
+#             'sports': 'Sports',
+#             'finance': 'Finance',
+#             'real_estate': 'Real Estate',
+#             'lifestyle': 'Lifestyle',
+#             'news': 'News',
+#             'culture': 'Culture',
+#             'general': 'General',
+#         }
+        
+#         for facet in response.get('facet_counts', []):
+#             field = facet['field_name']
+#             counts = facet['counts']
+            
+#             if field == 'document_data_type':
+#                 facets['data_type'] = [
+#                     {
+#                         'value': c['value'],
+#                         'count': c['count'],
+#                         'label': data_type_labels.get(c['value'], c['value'].title())
+#                     }
+#                     for c in counts if c['count'] > 0
+#                 ]
+            
+#             elif field == 'document_category':
+#                 facets['category'] = [
+#                     {
+#                         'value': c['value'],
+#                         'count': c['count'],
+#                         'label': category_labels.get(c['value'], c['value'].replace('_', ' ').title())
+#                     }
+#                     for c in counts if c['count'] > 0
+#                 ]
+            
+#             elif field == 'document_schema':
+#                 facets['schema'] = [
+#                     {
+#                         'value': c['value'],
+#                         'count': c['count'],
+#                         'label': c['value']
+#                     }
+#                     for c in counts if c['count'] > 0
+#                 ]
+        
+#         return facets
+        
+#     except Exception as e:
+#         print(f"Error getting tab facets: {e}")
+#         return {'data_type': [], 'category': [], 'schema': []}
+
+
+# def get_related_searches(query: str, intent: str) -> list:
+#     """Returns 'People also search for' suggestions."""
+#     search_params = {
+#         'q': query,
+#         'query_by': 'primary_keywords,keywords,key_facts',
+#         'per_page': 10,
+#         'include_fields': 'primary_keywords,keywords,key_facts'
+#     }
+    
+#     try:
+#         response = client.collections[COLLECTION_NAME].documents.search(search_params)
+        
+#         all_keywords = set()
+#         query_words = set(query.lower().split())
+        
+#         for hit in response.get('hits', []):
+#             doc = hit.get('document', {})
+#             for kw in doc.get('primary_keywords', []):
+#                 if kw.lower() not in query_words:
+#                     all_keywords.add(kw)
+#             for kw in doc.get('keywords', [])[:5]:
+#                 if kw.lower() not in query_words:
+#                     all_keywords.add(kw)
+#             for fact in doc.get('key_facts', [])[:3]:
+#                 fact_words = [w for w in fact.split() if len(w) > 4 and w.lower() not in query_words]
+#                 all_keywords.update(fact_words[:2])
+        
+#         related = list(all_keywords)[:6]
+#         return [{'query': f"{query} {kw}", 'label': kw} for kw in related]
+    
+#     except:
+#         return []
+
+
+# def get_featured_result(query: str, intent: str, results: list) -> dict:
+#     """Returns featured content: knowledge panel or featured snippet."""
+#     if not results:
+#         return None
+    
+#     top_result = results[0]
+    
+#     if top_result.get('authority_score', 0) >= 85 and top_result.get('score', 0) >= 0.7:
+        
+#         if intent == 'person' and top_result.get('data_type') == 'person':
+#             return {
+#                 'type': 'person_card',
+#                 'data': top_result
+#             }
+        
+#         if intent == 'location':
+#             return {
+#                 'type': 'place_card',
+#                 'data': top_result
+#             }
+        
+#         return {
+#             'type': 'featured_snippet',
+#             'title': top_result.get('title'),
+#             'snippet': top_result.get('summary', ''),
+#             'key_facts': top_result.get('key_facts', [])[:3],
+#             'source': top_result.get('source'),
+#             'url': top_result.get('url'),
+#             'image': top_result.get('image')
+#         }
+    
+#     return None
+
+
+# def log_search_event(
+#     query: str,
+#     corrected_query: str,
+#     session_id: str,
+#     intent: str,
+#     total_results: int,
+#     filters: dict,
+#     page: int,
+#     semantic_enabled: bool = False,
+#     semantic_boost: float = 0.0,
+#     alt_mode: str = 'n'
+# ):
+#     """Logs search event for analytics."""
+#     event = {
+#         'timestamp': datetime.now().isoformat(),
+#         'session_id': session_id,
+#         'query': query,
+#         'corrected_query': corrected_query,
+#         'intent': intent,
+#         'total_results': total_results,
+#         'filters': filters,
+#         'page': page,
+#         'zero_results': total_results == 0,
+#         'semantic_enabled': semantic_enabled,
+#         'semantic_boost': semantic_boost,
+#         'alt_mode': alt_mode
+#     }
+    
+#     # Replace with your implementation
+#     # SearchLog.objects.create(**event)
+#     pass
+
+
 """
-typesense_calculations.py (OPTIMIZED v4.3)
+typesense_calculations.py (OPTIMIZED v5.0)
 
 OPTIMIZATIONS:
 1. Truncate long queries BEFORE embedding (biggest win for long sentences)
@@ -13665,21 +17241,21 @@ OPTIMIZATIONS:
 3. Connection pooling for FastAPI embedding calls
 4. Reuse Typesense client (already done)
 
-NEW IN v4:
-5. Score-based strategy selection (uses Redis rank field)
-6. Semantic UUID support for related content
-7. Enhanced debug output with term scores
+NEW IN v5.0:
+- GRAPH-BASED FILTERING: Uses word_discovery's extracted filters, locations, sort
+- Word discovery now provides:
+  - filters: [{field: 'primary_keywords', value: 'hbcu'}, ...]
+  - locations: [{field: 'location_state', values: ['Georgia', 'GA']}, ...]
+  - sort: {field: 'time_period_start', order: 'asc'}
+- Removed duplicate regex extraction (word_discovery handles it)
+- Simplified filter building (assembles from word_discovery output)
 
-NEW IN v4.1:
-8. skip_embedding parameter for dropdown/keyword selections
-
-NEW IN v4.2:
-9. DROPDOWN FAST PATH - skip word discovery entirely for dropdown selections
-   When user selects from dropdown, search the exact phrase directly
-
-NEW IN v4.3:
-10. Dynamic tab filter support (data_type, category, schema filters)
-11. Enhanced facet support for tabs
+PREVIOUS VERSIONS:
+v4.4: Location filtering handles case + abbreviations
+v4.3: Dynamic tab filter support
+v4.2: Dropdown fast path
+v4.1: skip_embedding parameter
+v4.0: Score-based strategy selection
 """
 
 import typesense
@@ -13727,6 +17303,29 @@ def _get_http_session():
 
 
 # ============================================================================
+# US STATE ABBREVIATION MAPPING (Fallback when word_discovery unavailable)
+# ============================================================================
+
+US_STATE_ABBREV = {
+    'alabama': 'AL', 'alaska': 'AK', 'arizona': 'AZ', 'arkansas': 'AR',
+    'california': 'CA', 'colorado': 'CO', 'connecticut': 'CT', 'delaware': 'DE',
+    'florida': 'FL', 'georgia': 'GA', 'hawaii': 'HI', 'idaho': 'ID',
+    'illinois': 'IL', 'indiana': 'IN', 'iowa': 'IA', 'kansas': 'KS',
+    'kentucky': 'KY', 'louisiana': 'LA', 'maine': 'ME', 'maryland': 'MD',
+    'massachusetts': 'MA', 'michigan': 'MI', 'minnesota': 'MN', 'mississippi': 'MS',
+    'missouri': 'MO', 'montana': 'MT', 'nebraska': 'NE', 'nevada': 'NV',
+    'new hampshire': 'NH', 'new jersey': 'NJ', 'new mexico': 'NM', 'new york': 'NY',
+    'north carolina': 'NC', 'north dakota': 'ND', 'ohio': 'OH', 'oklahoma': 'OK',
+    'oregon': 'OR', 'pennsylvania': 'PA', 'rhode island': 'RI', 'south carolina': 'SC',
+    'south dakota': 'SD', 'tennessee': 'TN', 'texas': 'TX', 'utah': 'UT',
+    'vermont': 'VT', 'virginia': 'VA', 'washington': 'WA', 'west virginia': 'WV',
+    'wisconsin': 'WI', 'wyoming': 'WY', 'district of columbia': 'DC',
+}
+
+US_STATE_FULL = {v: k.title() for k, v in US_STATE_ABBREV.items()}
+
+
+# ============================================================================
 # QUERY PREPROCESSING - THE BIGGEST WIN FOR LONG QUERIES
 # ============================================================================
 
@@ -13745,25 +17344,14 @@ FILLER_PATTERNS = [
 def truncate_for_embedding(query: str, max_words: int = 40) -> str:
     """
     Strip filler words and truncate for faster embedding.
-    
-    Example:
-    'I'm looking for a really good Italian restaurant in Buenos Aires 
-     that has outdoor seating and serves authentic pasta with wine'
-    
-    Becomes:
-    'Italian restaurant Buenos Aires outdoor seating authentic pasta wine'
-    
-    This reduces embedding time from ~200ms to ~30ms for long queries.
     """
     cleaned = query
     
     for pattern in FILLER_PATTERNS:
         cleaned = pattern.sub(' ', cleaned)
     
-    # Collapse whitespace
     cleaned = ' '.join(cleaned.split())
     
-    # Truncate to max words
     words = cleaned.split()
     if len(words) > max_words:
         cleaned = ' '.join(words[:max_words])
@@ -13784,7 +17372,6 @@ def get_query_embedding(query: str) -> Optional[List[float]]:
     1. Query truncation (faster inference)
     2. Connection pooling (faster HTTP)
     """
-    # Truncate BEFORE sending to model
     clean_query = truncate_for_embedding(query, max_words=40)
     
     try:
@@ -13792,7 +17379,7 @@ def get_query_embedding(query: str) -> Optional[List[float]]:
         response = session.post(
             EMBEDDING_SERVICE_URL,
             json={"text": clean_query},
-            timeout=2  # Reduced from 5 to fail faster
+            timeout=2
         )
         response.raise_for_status()
         return response.json().get("embedding")
@@ -13802,58 +17389,42 @@ def get_query_embedding(query: str) -> Optional[List[float]]:
 
 
 # ============================================================================
-# WORD DISCOVERY
+# WORD DISCOVERY (v5.0 - Simplified imports)
 # ============================================================================
 
 try:
-    from .word_discovery import (
-        process_query_optimized,
-        get_search_strategy,
-        get_filter_terms,
-        get_loose_terms,
-        get_all_search_terms,
-        get_term_scores,
-        get_high_score_terms
-    )
+    from .word_discovery import process_query_optimized
     WORD_DISCOVERY_AVAILABLE = True
 except ImportError:
     try:
-        from word_discovery import (
-            process_query_optimized,
-            get_search_strategy,
-            get_filter_terms,
-            get_loose_terms,
-            get_all_search_terms,
-            get_term_scores,
-            get_high_score_terms
-        )
+        from word_discovery import process_query_optimized
         WORD_DISCOVERY_AVAILABLE = True
     except ImportError:
         WORD_DISCOVERY_AVAILABLE = False
         print("⚠️ word_discovery not available, using basic search")
-        
-        # Fallback implementations
-        def get_term_scores(result):
-            return []
-        
-        def get_high_score_terms(result, min_score=500):
-            return []
 
 
 def _do_word_discovery(query: str) -> Dict:
     """Wrapper for thread pool."""
     if WORD_DISCOVERY_AVAILABLE:
         return process_query_optimized(query, verbose=False)
+    
+    # Fallback when word_discovery not available
     return {
+        'query': query,
+        'corrected_query': query,
         'valid_count': 0,
         'unknown_count': len(query.split()),
-        'search_strategy': 'semantic',
-        'corrected_query': query,
-        'corrected_terms': [],
+        'corrections': [],
+        'filters': [],
+        'locations': [],
+        'sort': None,
+        'ngrams': [],
+        'terms': [],
         'total_score': 0,
         'average_score': 0,
         'max_score': 0,
-        'terms': []
+        'processing_time_ms': 0
     }
 
 
@@ -13869,43 +17440,33 @@ def _do_embedding(query: str) -> Optional[List[float]]:
 def run_parallel_prep(query: str, skip_embedding: bool = False) -> Tuple[Dict, Optional[List[float]]]:
     """
     Run word discovery and embedding IN PARALLEL.
-    
-    Saves ~30ms by not waiting for word discovery before embedding.
-    
-    Args:
-        query: Search query string
-        skip_embedding: If True, skip embedding call entirely (for dropdown/keyword selections)
     """
     if skip_embedding:
-        # Dropdown/keyword selection - skip embedding entirely
         discovery = _do_word_discovery(query)
         return discovery, None
     
-    # Submit both tasks
     discovery_future = _executor.submit(_do_word_discovery, query)
     embedding_future = _executor.submit(_do_embedding, query)
     
-    # Wait for both
     discovery = discovery_future.result()
     embedding = embedding_future.result()
     
     # Check if we need to re-embed due to significant correction
     corrected_query = discovery.get('corrected_query', query)
     if corrected_query.lower() != query.lower():
-        corrections = discovery.get('corrected_terms', [])
+        corrections = discovery.get('corrections', [])
         significant = any(
             c.get('original', '').lower() != c.get('corrected', '').lower()
             for c in corrections
         )
         if significant and embedding is not None:
-            # Re-embed with corrected query
             embedding = get_query_embedding(corrected_query)
     
     return discovery, embedding
 
 
 # ============================================================================
-# PRE-COMPILED REGEX PATTERNS
+# PRE-COMPILED REGEX PATTERNS (Fallback when word_discovery unavailable)
 # ============================================================================
 
 LOCATION_PATTERNS = [
@@ -14054,8 +17615,15 @@ def detect_query_intent(query: str, pos_tags: List[Tuple] = None) -> str:
     return 'general'
 
 
-def extract_location_from_query(query: str) -> Optional[str]:
-    """Extracts location from query."""
+# ============================================================================
+# FALLBACK EXTRACTION (Used only when word_discovery unavailable)
+# ============================================================================
+
+def extract_location_from_query_fallback(query: str) -> Optional[str]:
+    """
+    FALLBACK: Extracts location from query using regex.
+    Only used when word_discovery is not available.
+    """
     stopwords = {'the', 'a', 'best', 'good', 'top'}
     
     for pattern in LOCATION_EXTRACT_PATTERNS:
@@ -14063,12 +17631,15 @@ def extract_location_from_query(query: str) -> Optional[str]:
         if match:
             location = match.group(1).strip()
             if location not in stopwords:
-                return location
+                return location.title()
     return None
 
 
-def extract_time_period_from_query(query: str) -> Tuple[Optional[int], Optional[int]]:
-    """Extracts time period from query."""
+def extract_time_period_from_query_fallback(query: str) -> Tuple[Optional[int], Optional[int]]:
+    """
+    FALLBACK: Extracts time period from query using regex.
+    Only used when word_discovery is not available.
+    """
     query_lower = query.lower()
     
     match = DECADE_PATTERN.search(query_lower)
@@ -14117,101 +17688,126 @@ def extract_content_type_from_query(query: str) -> Optional[str]:
 
 
 # ============================================================================
-# FILTER & SORT BUILDING (UPDATED FOR DYNAMIC TABS)
+# FILTER BUILDING (v5.0 - Uses word_discovery output)
 # ============================================================================
 
-def build_filter_string(
+def build_filter_string_from_discovery(
+    discovery: Dict,
     filters: Dict = None,
-    time_start: int = None,
-    time_end: int = None,
-    location: str = None,
-    content_type: str = None
+    fallback_time_start: int = None,
+    fallback_time_end: int = None,
+    fallback_location: str = None,
+    fallback_content_type: str = None
 ) -> str:
     """
-    Builds Typesense filter_by string.
+    Builds Typesense filter_by string from word_discovery output.
     
-    Supports dynamic tab filters:
-    - data_type: document_data_type (content, service, product, person, media, location)
-    - category: document_category (healthcare_medical, fashion, beauty, etc.)
-    - schema: document_schema (Article, BlogPosting, Product, Service, etc.)
-    - source: document_brand
-    
-    Also supports:
-    - time_start/time_end: time_period_start/time_period_end
-    - location: location_city, location_state, location_country, location_region
-    - content_type: document_data_type (from query extraction)
+    v5.0: Primary source is word_discovery's extracted filters/locations.
+    Fallback to regex extraction only if word_discovery doesn't provide values.
     """
     conditions = []
     
-    if filters:
-        # Dynamic tab filter: data_type → document_data_type
-        data_type = filters.get('data_type')
-        if data_type:
-            # Validate against allowed values
-            if data_type in VALID_DATA_TYPES:
-                conditions.append(f"document_data_type:={data_type}")
-            else:
-                print(f"⚠️ Invalid data_type filter: {data_type}")
+    # =========================================================================
+    # 1. GRAPH-BASED FILTERS (from word_discovery)
+    # =========================================================================
+    
+    # Keyword filters (primary_keywords, entity_names, etc.)
+    for filter_item in discovery.get('filters', []):
+        field = filter_item.get('field')
+        value = filter_item.get('value')
         
-        # Dynamic tab filter: category → document_category
+        if field and value:
+            safe_value = re.sub(r'[&|!=<>;\[\]{}()\'"\\]', '', str(value))
+            if safe_value:
+                conditions.append(f"{field}:={safe_value}")
+                print(f"   📌 Filter from vocabulary: {field}:={safe_value}")
+    
+    # Location filters (with variants like Georgia, GA)
+    for loc_item in discovery.get('locations', []):
+        field = loc_item.get('field', 'location_state')
+        values = loc_item.get('values', [])
+        
+        if values:
+            loc_parts = []
+            for val in values:
+                safe_val = re.sub(r'[&|!=<>;\[\]{}()\'"\\]', '', str(val))
+                if safe_val:
+                    loc_parts.append(f"{field}:={safe_val}")
+            
+            if loc_parts:
+                if len(loc_parts) == 1:
+                    conditions.append(loc_parts[0])
+                else:
+                    conditions.append('(' + ' || '.join(loc_parts) + ')')
+                print(f"   📍 Location from vocabulary: {values}")
+    
+    # =========================================================================
+    # 2. UI FILTERS (from filters dict - tabs, dropdowns, etc.)
+    # =========================================================================
+    
+    if filters:
+        data_type = filters.get('data_type')
+        if data_type and data_type in VALID_DATA_TYPES:
+            conditions.append(f"document_data_type:={data_type}")
+        
         category = filters.get('category')
         if category:
-            # Allow any category (might have custom ones)
-            # Sanitize to prevent injection
             safe_category = re.sub(r'[^a-zA-Z0-9_]', '', category)
             if safe_category:
                 conditions.append(f"document_category:={safe_category}")
         
-        # Dynamic tab filter: schema → document_schema
         schema = filters.get('schema')
-        if schema:
-            if schema in VALID_SCHEMAS:
-                conditions.append(f"document_schema:={schema}")
-            else:
-                print(f"⚠️ Invalid schema filter: {schema}")
+        if schema and schema in VALID_SCHEMAS:
+            conditions.append(f"document_schema:={schema}")
         
-        # Source filter → document_brand
         source = filters.get('source')
         if source:
-            # Sanitize
             safe_source = re.sub(r'[&|!=<>:;\[\]{}()\'"\\]', '', source)
             if safe_source:
                 conditions.append(f"document_brand:={safe_source}")
         
-        # Time range filter
         time_range = filters.get('time_range')
         if time_range:
             time_conditions = _parse_time_range_filter(time_range)
-            if time_conditions:
-                conditions.extend(time_conditions)
+            conditions.extend(time_conditions)
         
-        # Location filter from filters dict
-        loc_filter = filters.get('location')
-        if loc_filter:
-            safe_loc = re.sub(r'[&|!=<>:;\[\]{}()\'"\\]', '', loc_filter)
+        ui_location = filters.get('location')
+        if ui_location:
+            safe_loc = re.sub(r'[&|!=<>:;\[\]{}()\'"\\]', '', ui_location)
             if safe_loc:
-                conditions.append(
-                    f"(location_city:={safe_loc} || location_state:={safe_loc} || "
-                    f"location_country:={safe_loc} || location_region:={safe_loc})"
-                )
+                loc_title = safe_loc.title()
+                abbrev = US_STATE_ABBREV.get(safe_loc.lower(), '')
+                
+                loc_parts = [f"location_state:={loc_title}", f"location_city:={loc_title}"]
+                if abbrev:
+                    loc_parts.append(f"location_state:={abbrev}")
+                
+                conditions.append('(' + ' || '.join(loc_parts) + ')')
     
-    # Time period from query extraction
-    if time_start is not None:
-        conditions.append(f"time_period_start:>={time_start}")
-    if time_end is not None:
-        conditions.append(f"time_period_end:<={time_end}")
+    # =========================================================================
+    # 3. FALLBACK EXTRACTION (only if word_discovery didn't provide values)
+    # =========================================================================
     
-    # Location from query extraction (if not already set by filters)
-    if location and not (filters and filters.get('location')):
-        conditions.append(
-            f"(location_city:={location} || location_state:={location} || "
-            f"location_country:={location} || location_region:={location})"
-        )
+    if not discovery.get('locations') and fallback_location:
+        if not (filters and filters.get('location')):
+            loc_title = fallback_location.title()
+            abbrev = US_STATE_ABBREV.get(fallback_location.lower(), '')
+            
+            loc_parts = [f"location_state:={loc_title}", f"location_city:={loc_title}"]
+            if abbrev:
+                loc_parts.append(f"location_state:={abbrev}")
+            
+            conditions.append('(' + ' || '.join(loc_parts) + ')')
+            print(f"   📍 Location from fallback: {loc_title}")
     
-    # Content type from query extraction (if not already set by data_type filter)
-    if content_type and not (filters and filters.get('data_type')):
-        if content_type in VALID_DATA_TYPES:
-            conditions.append(f"document_data_type:={content_type}")
+    if fallback_time_start is not None:
+        conditions.append(f"time_period_start:>={fallback_time_start}")
+    if fallback_time_end is not None:
+        conditions.append(f"time_period_end:<={fallback_time_end}")
+    
+    if fallback_content_type and not (filters and filters.get('data_type')):
+        if fallback_content_type in VALID_DATA_TYPES:
+            conditions.append(f"document_data_type:={fallback_content_type}")
     
     return ' && '.join(conditions) if conditions else ''
 
@@ -14219,31 +17815,43 @@ def build_filter_string(
 def _parse_time_range_filter(time_range: str) -> List[str]:
     """Parse time_range filter value into Typesense conditions."""
     conditions = []
-    
     now = datetime.now()
     
     if time_range == 'day':
-        # Last 24 hours
         timestamp = int((now.timestamp() - 86400) * 1000)
         conditions.append(f"created_at:>={timestamp}")
     elif time_range == 'week':
-        # Last 7 days
         timestamp = int((now.timestamp() - 604800) * 1000)
         conditions.append(f"created_at:>={timestamp}")
     elif time_range == 'month':
-        # Last 30 days
         timestamp = int((now.timestamp() - 2592000) * 1000)
         conditions.append(f"created_at:>={timestamp}")
     elif time_range == 'year':
-        # Last 365 days
         timestamp = int((now.timestamp() - 31536000) * 1000)
         conditions.append(f"created_at:>={timestamp}")
     
     return conditions
 
 
-def build_sort_string(intent: str, user_location: Tuple[float, float] = None) -> str:
-    """Builds Typesense sort_by string."""
+def build_sort_string(
+    intent: str,
+    discovery: Dict = None,
+    user_location: Tuple[float, float] = None
+) -> str:
+    """
+    Builds Typesense sort_by string.
+    
+    v5.0: Uses word_discovery's sort instruction for temporal queries.
+    """
+    if discovery:
+        sort_instruction = discovery.get('sort')
+        if sort_instruction:
+            field = sort_instruction.get('field')
+            order = sort_instruction.get('order', 'asc')
+            if field:
+                print(f"   🔢 Sort from vocabulary: {field}:{order}")
+                return f"{field}:{order},authority_score:desc"
+    
     if intent == 'location' and user_location:
         lat, lng = user_location
         return f"location_geopoint({lat},{lng}):asc,authority_score:desc"
@@ -14262,20 +17870,80 @@ def build_vector_query(
 
 
 # ============================================================================
+# SEARCH STRATEGY SELECTION (v5.0)
+# ============================================================================
+
+def determine_search_strategy(discovery: Dict) -> str:
+    """
+    Determine search strategy based on word_discovery output.
+    """
+    filters = discovery.get('filters', [])
+    locations = discovery.get('locations', [])
+    valid_count = discovery.get('valid_count', 0)
+    unknown_count = discovery.get('unknown_count', 0)
+    total_score = discovery.get('total_score', 0)
+    
+    if filters or locations:
+        if total_score >= 200:
+            return 'two_stage_strict'
+        else:
+            return 'two_stage_mixed'
+    
+    if valid_count > 0 and unknown_count <= valid_count:
+        return 'mixed'
+    
+    return 'semantic'
+
+
+def get_filter_terms_from_discovery(discovery: Dict) -> List[str]:
+    """
+    Extract searchable terms from discovery result.
+    """
+    terms = []
+    
+    for f in discovery.get('filters', []):
+        term = f.get('term', f.get('value', ''))
+        if term:
+            terms.append(term)
+    
+    for loc in discovery.get('locations', []):
+        term = loc.get('term', '')
+        if term:
+            terms.append(term)
+    
+    for t in discovery.get('terms', []):
+        if t.get('status') in ('valid', 'corrected'):
+            if t.get('category') != 'stopword':
+                word = t.get('search_word', t.get('word', ''))
+                if word and word not in terms:
+                    terms.append(word)
+    
+    return terms
+
+
+# ============================================================================
 # SEARCH PARAMETER BUILDERS
 # ============================================================================
 
 def build_semantic_params(
     query_embedding: List[float],
+    discovery: Dict = None,
     filters: Dict = None,
     page: int = 1,
     per_page: int = 20,
     query: str = ''
 ) -> Dict:
-    """SEMANTIC MODE: Pure vector search, NO full-text matching."""
-    location = extract_location_from_query(query)
-    time_start, time_end = extract_time_period_from_query(query)
-    content_type = extract_content_type_from_query(query)
+    """SEMANTIC MODE: Pure vector search with graph filters."""
+    
+    fallback_location = None
+    fallback_time_start, fallback_time_end = None, None
+    fallback_content_type = None
+    
+    if not discovery or not discovery.get('locations'):
+        fallback_location = extract_location_from_query_fallback(query)
+    if not discovery:
+        fallback_time_start, fallback_time_end = extract_time_period_from_query_fallback(query)
+        fallback_content_type = extract_content_type_from_query(query)
     
     params = {
         'q': '*',
@@ -14289,15 +17957,21 @@ def build_semantic_params(
         'exclude_fields': 'embedding',
     }
     
-    filter_str = build_filter_string(
+    filter_str = build_filter_string_from_discovery(
+        discovery=discovery or {},
         filters=filters,
-        time_start=time_start,
-        time_end=time_end,
-        location=location,
-        content_type=content_type
+        fallback_time_start=fallback_time_start,
+        fallback_time_end=fallback_time_end,
+        fallback_location=fallback_location,
+        fallback_content_type=fallback_content_type
     )
     if filter_str:
         params['filter_by'] = filter_str
+    
+    if discovery:
+        sort_str = build_sort_string('general', discovery)
+        if sort_str:
+            params['sort_by'] = sort_str
     
     return params
 
@@ -14305,15 +17979,13 @@ def build_semantic_params(
 def build_mixed_params(
     query: str,
     query_embedding: List[float],
+    discovery: Dict = None,
     filters: Dict = None,
     page: int = 1,
     per_page: int = 20,
     intent: str = 'general'
 ) -> Dict:
-    """MIXED MODE: Light text matching + vector."""
-    location = extract_location_from_query(query)
-    time_start, time_end = extract_time_period_from_query(query)
-    content_type = extract_content_type_from_query(query)
+    """MIXED MODE: Light text matching + vector + graph filters."""
     
     params = {
         'q': query,
@@ -14332,15 +18004,17 @@ def build_mixed_params(
         'num_typos': 2,
     }
     
-    filter_str = build_filter_string(
-        filters=filters,
-        time_start=time_start,
-        time_end=time_end,
-        location=location,
-        content_type=content_type
+    filter_str = build_filter_string_from_discovery(
+        discovery=discovery or {},
+        filters=filters
     )
     if filter_str:
         params['filter_by'] = filter_str
+    
+    if discovery:
+        sort_str = build_sort_string(intent, discovery)
+        if sort_str:
+            params['sort_by'] = sort_str
     
     return params
 
@@ -14349,15 +18023,13 @@ def build_strict_params(
     query: str,
     valid_terms: List[str],
     query_embedding: Optional[List[float]] = None,
+    discovery: Dict = None,
     filters: Dict = None,
     page: int = 1,
     per_page: int = 20,
     intent: str = 'general'
 ) -> Dict:
     """STRICT MODE: Text search on valid terms + optional vector rerank."""
-    location = extract_location_from_query(query)
-    time_start, time_end = extract_time_period_from_query(query)
-    content_type = extract_content_type_from_query(query)
     
     search_query = ' '.join(valid_terms)
     weights = INTENT_WEIGHTS.get(intent, DEFAULT_WEIGHTS)
@@ -14381,30 +18053,30 @@ def build_strict_params(
             alpha=0.3
         )
     
-    filter_str = build_filter_string(
-        filters=filters,
-        time_start=time_start,
-        time_end=time_end,
-        location=location,
-        content_type=content_type
+    filter_str = build_filter_string_from_discovery(
+        discovery=discovery or {},
+        filters=filters
     )
     if filter_str:
         params['filter_by'] = filter_str
+    
+    if discovery:
+        sort_str = build_sort_string(intent, discovery)
+        if sort_str:
+            params['sort_by'] = sort_str
     
     return params
 
 
 def build_fallback_text_params(
     query: str,
+    discovery: Dict = None,
     filters: Dict = None,
     page: int = 1,
     per_page: int = 20,
     intent: str = 'general'
 ) -> Dict:
     """FALLBACK: Full text search when embedding fails."""
-    location = extract_location_from_query(query)
-    time_start, time_end = extract_time_period_from_query(query)
-    content_type = extract_content_type_from_query(query)
     
     weights = INTENT_WEIGHTS.get(intent, DEFAULT_WEIGHTS)
     
@@ -14419,12 +18091,9 @@ def build_fallback_text_params(
         'num_typos': 1,
     }
     
-    filter_str = build_filter_string(
-        filters=filters,
-        time_start=time_start,
-        time_end=time_end,
-        location=location,
-        content_type=content_type
+    filter_str = build_filter_string_from_discovery(
+        discovery=discovery or {},
+        filters=filters
     )
     if filter_str:
         params['filter_by'] = filter_str
@@ -14434,37 +18103,28 @@ def build_fallback_text_params(
 
 def build_exact_phrase_params(
     phrase: str,
+    discovery: Dict = None,
     filters: Dict = None,
     page: int = 1,
     per_page: int = 20,
     intent: str = 'general'
 ) -> Dict:
-    """
-    EXACT PHRASE MODE: For dropdown selections.
-    Searches for the exact phrase without splitting or processing.
-    """
-    location = extract_location_from_query(phrase)
-    time_start, time_end = extract_time_period_from_query(phrase)
-    content_type = extract_content_type_from_query(phrase)
-    
+    """EXACT PHRASE MODE: For dropdown selections."""
     weights = INTENT_WEIGHTS.get(intent, DEFAULT_WEIGHTS)
     
     params = {
-        'q': f'"{phrase}"',  # Quote for exact phrase matching
+        'q': f'"{phrase}"',
         'query_by': ','.join(SEARCH_FIELDS),
         'query_by_weights': ','.join(str(w) for w in weights),
         'page': page,
         'per_page': per_page,
         'exclude_fields': 'embedding',
-        'num_typos': 0,  # No typos for exact match
+        'num_typos': 0,
     }
     
-    filter_str = build_filter_string(
-        filters=filters,
-        time_start=time_start,
-        time_end=time_end,
-        location=location,
-        content_type=content_type
+    filter_str = build_filter_string_from_discovery(
+        discovery=discovery or {},
+        filters=filters
     )
     if filter_str:
         params['filter_by'] = filter_str
@@ -14520,7 +18180,7 @@ def format_result(hit: Dict, query: str = '') -> Dict:
         'image': (doc.get('image_url') or [None])[0],
         'category': doc.get('document_category', ''),
         'data_type': doc.get('document_data_type', ''),
-        'schema': doc.get('document_schema', ''),  # Include schema for filtering
+        'schema': doc.get('document_schema', ''),
         'date': doc.get('published_date_string', ''),
         'published_date': doc.get('published_date_string', ''),
         'authority_score': doc.get('authority_score', 0),
@@ -14592,19 +18252,16 @@ def execute_search_multi(search_params: Dict) -> Dict:
 
 
 # ============================================================================
-# TWO-STAGE SEARCH: Keyword Filter -> Vector Rerank
+# TWO-STAGE SEARCH: Graph Filter -> Vector Rerank
 # ============================================================================
 
 def stage1_keyword_filter(
     query: str,
+    discovery: Dict = None,
     filters: Dict = None,
     max_candidates: int = 50
 ) -> List[str]:
-    """STAGE 1: Text search to find candidate documents."""
-    location = extract_location_from_query(query)
-    time_start, time_end = extract_time_period_from_query(query)
-    content_type = extract_content_type_from_query(query)
-    
+    """STAGE 1: Use graph filters to find candidate documents."""
     params = {
         'q': query,
         'query_by': 'key_facts,document_title,primary_keywords,entity_names',
@@ -14616,12 +18273,9 @@ def stage1_keyword_filter(
         'num_typos': 1,
     }
     
-    filter_str = build_filter_string(
-        filters=filters,
-        time_start=time_start,
-        time_end=time_end,
-        location=location,
-        content_type=content_type
+    filter_str = build_filter_string_from_discovery(
+        discovery=discovery or {},
+        filters=filters
     )
     if filter_str:
         params['filter_by'] = filter_str
@@ -14632,7 +18286,9 @@ def stage1_keyword_filter(
         
         doc_ids = [hit['document']['document_uuid'] for hit in hits if hit.get('document', {}).get('document_uuid')]
         
-        print(f"📝 Stage 1 (keyword filter): Found {len(doc_ids)} candidates")
+        print(f"📝 Stage 1 (graph filter): Found {len(doc_ids)} candidates")
+        if filter_str:
+            print(f"   Filter: {filter_str}")
         for hit in hits[:5]:
             print(f"   - {hit['document'].get('document_title', 'NO TITLE')}")
         
@@ -14662,7 +18318,6 @@ def stage2_vector_rerank(
         return execute_search_multi(params)
     
     id_filter = ','.join([f'`{doc_id}`' for doc_id in document_ids])
-    
     embedding_str = ','.join(str(x) for x in query_embedding)
     
     params = {
@@ -14681,13 +18336,15 @@ def stage2_vector_rerank(
 def execute_two_stage_search(
     query: str,
     query_embedding: Optional[List[float]],
+    discovery: Dict = None,
     filters: Dict = None,
     page: int = 1,
     per_page: int = 20
 ) -> Dict:
-    """Two-stage search: Keyword filter THEN vector rerank."""
+    """Two-stage search: Graph filter THEN vector rerank."""
     candidate_ids = stage1_keyword_filter(
         query=query,
+        discovery=discovery,
         filters=filters,
         max_candidates=50
     )
@@ -14697,6 +18354,7 @@ def execute_two_stage_search(
         if query_embedding:
             params = build_semantic_params(
                 query_embedding=query_embedding,
+                discovery=discovery,
                 filters=filters,
                 page=page,
                 per_page=per_page,
@@ -14716,7 +18374,7 @@ def execute_two_stage_search(
 
 
 # ============================================================================
-# MAIN SEARCH FUNCTION (OPTIMIZED)
+# MAIN SEARCH FUNCTION (v5.0)
 # ============================================================================
 
 def execute_full_search(
@@ -14733,52 +18391,22 @@ def execute_full_search(
     search_source: str = None
 ) -> Dict:
     """
-    Main entry point for search - OPTIMIZED VERSION v4.3.
-    
-    OPTIMIZATIONS:
-    1. Query truncation before embedding (biggest win for long queries)
-    2. Parallel word discovery + embedding
-    3. Connection pooling for HTTP requests
-    4. Score-based strategy selection
-    5. skip_embedding for dropdown/keyword selections
-    6. DROPDOWN FAST PATH - skip word discovery entirely (v4.2)
-    7. Dynamic tab filter support (v4.3)
-    
-    Args:
-        query: Search query string
-        session_id: User session identifier
-        filters: Dict of filter conditions including:
-            - data_type: Filter by document_data_type (content, service, product, etc.)
-            - category: Filter by document_category
-            - schema: Filter by document_schema (Article, Product, etc.)
-            - source: Filter by document_brand
-            - time_range: Filter by time (day, week, month, year)
-            - location: Filter by location
-        page: Page number for pagination
-        per_page: Results per page
-        user_location: (lat, lng) tuple for location-based sorting
-        pos_tags: Pre-computed POS tags (optional)
-        safe_search: Enable safe search filtering
-        alt_mode: 'y' to force semantic search, 'n' for normal
-        skip_embedding: True to skip embedding (for dropdown/keyword selections)
-        search_source: Source of search ('dropdown', 'keyboard', 'home', etc.)
+    Main entry point for search - OPTIMIZED VERSION v5.0.
     """
     import time
     times = {}
     t0 = time.time()
     
-    # Log active filters for debugging
     if filters:
         active_filters = {k: v for k, v in filters.items() if v}
         if active_filters:
-            print(f"🎛️ Active filters: {active_filters}")
+            print(f"🎛️ Active UI filters: {active_filters}")
     
     # =========================================================================
-    # DROPDOWN FAST PATH - Skip everything, just search the exact phrase
+    # DROPDOWN FAST PATH
     # =========================================================================
     is_dropdown = search_source in ('dropdown', 'keyword', 'suggestion', 'autocomplete')
 
-    # alt_mode='y' forces full semantic processing, even for dropdowns
     if alt_mode == 'y':
         is_dropdown = False
 
@@ -14788,7 +18416,6 @@ def execute_full_search(
         t1 = time.time()
         intent = detect_query_intent(query, pos_tags)
         
-        # Build exact phrase search params
         search_params = build_exact_phrase_params(
             phrase=query,
             filters=filters,
@@ -14802,27 +18429,15 @@ def execute_full_search(
         times['typesense'] = round((time.time() - t2) * 1000, 2)
         times['total'] = round((time.time() - t0) * 1000, 2)
         
-        # Debug output
         print(f"⏱️ TIMING: {times}")
         print(f"🔍 Strategy: EXACT_PHRASE (dropdown) | Found: {raw_response.get('found', 0)}")
-        print(f"   Search phrase: \"{query}\"")
         
-        # Process results
         results = process_results(raw_response, query)
-        
-        raw_count = len(raw_response.get('hits', []))
-        filtered_count = len(results)
-        if raw_count > 0:
-            top_score = results[0]['score'] if results else 0
-            print(f"📊 Filtering: {raw_count} → {filtered_count} results")
-            print(f"   Top score: {top_score:.4f} | Cutoff: {max(MIN_SCORE_THRESHOLD, top_score * 0.7):.4f}")
-        
-        # Build response
         search_time = round(time.time() - t0, 3)
         
         return {
             'query': query,
-            'corrected_query': query,  # No correction for dropdown
+            'corrected_query': query,
             'intent': intent,
             'results': results,
             'total': len(results), 
@@ -14835,25 +18450,24 @@ def execute_full_search(
             'alt_mode': alt_mode,
             'skip_embedding': True,
             'search_source': search_source or 'dropdown',
-            'valid_terms': [query],  # Whole phrase is the term
+            'valid_terms': [query],
             'unknown_terms': [],
             'word_discovery': {
                 'valid_count': 1,
                 'unknown_count': 0,
                 'corrections': [],
+                'filters': [],
+                'locations': [],
+                'sort': None,
                 'total_score': 0,
                 'average_score': 0,
                 'max_score': 0,
-                'term_scores': []
             },
             'timings': times,
             'filters_applied': {
                 'data_type': filters.get('data_type') if filters else None,
                 'category': filters.get('category') if filters else None,
                 'schema': filters.get('schema') if filters else None,
-                'time_period': extract_time_period_from_query(query),
-                'location': extract_location_from_query(query),
-                'content_type': extract_content_type_from_query(query)
             }
         }
     
@@ -14861,51 +18475,45 @@ def execute_full_search(
     # NORMAL PATH - Full word discovery + embedding
     # =========================================================================
     
-    # STEP 1 + 2: Word Discovery + Embedding (parallel or skip)
     t1 = time.time()
-    
     discovery, query_embedding = run_parallel_prep(query, skip_embedding=skip_embedding)
-    
     times['parallel_prep'] = round((time.time() - t1) * 1000, 2)
     
-    # Extract discovery results
-    if WORD_DISCOVERY_AVAILABLE:
-        search_strategy = discovery.get('search_strategy', 'semantic')
-        valid_terms = get_filter_terms(discovery)
-        unknown_terms = get_loose_terms(discovery)
-    else:
-        search_strategy = 'semantic'
-        valid_terms = []
-        unknown_terms = query.split()
-    
     corrected_query = discovery.get('corrected_query', query)
+    valid_terms = get_filter_terms_from_discovery(discovery)
+    unknown_terms = [t['word'] for t in discovery.get('terms', []) if t.get('status') == 'unknown']
     
-    # Override to semantic if alt_mode='y'
+    # =========================================================================
+    # STRATEGY SELECTION (v5.0 - based on graph constraints)
+    # =========================================================================
+    
+    search_strategy = determine_search_strategy(discovery)
+    
     if alt_mode == 'y':
         search_strategy = 'semantic'
     
-    # If we skipped embedding and strategy wants semantic, force to strict/text
     if skip_embedding and search_strategy == 'semantic':
         if valid_terms:
-            search_strategy = 'strict'
+            search_strategy = 'two_stage_strict'
         else:
             search_strategy = 'text_fallback'
     
     semantic_enabled = query_embedding is not None
     
     # =========================================================================
-    # STEP 3: Detect intent
+    # DETECT INTENT
     # =========================================================================
     intent = detect_query_intent(query, pos_tags)
     
     # =========================================================================
-    # STEP 4: Execute search based on strategy
+    # EXECUTE SEARCH
     # =========================================================================
     
     if not semantic_enabled:
         actual_strategy = 'text_fallback'
         search_params = build_fallback_text_params(
             query=corrected_query,
+            discovery=discovery,
             filters=filters,
             page=page,
             per_page=per_page,
@@ -14915,22 +18523,39 @@ def execute_full_search(
         raw_response = execute_search_multi(search_params)
         times['typesense'] = round((time.time() - t3) * 1000, 2)
         
-    elif search_strategy in ('strict', 'mixed') and valid_terms:
-        actual_strategy = f'two_stage_{search_strategy}'
+    elif search_strategy.startswith('two_stage'):
+        actual_strategy = search_strategy
         t3 = time.time()
         raw_response = execute_two_stage_search(
             query=corrected_query,
             query_embedding=query_embedding,
+            discovery=discovery,
             filters=filters,
             page=page,
             per_page=per_page
         )
         times['typesense'] = round((time.time() - t3) * 1000, 2)
         
+    elif search_strategy == 'mixed':
+        actual_strategy = 'mixed'
+        search_params = build_mixed_params(
+            query=corrected_query,
+            query_embedding=query_embedding,
+            discovery=discovery,
+            filters=filters,
+            page=page,
+            per_page=per_page,
+            intent=intent
+        )
+        t3 = time.time()
+        raw_response = execute_search_multi(search_params)
+        times['typesense'] = round((time.time() - t3) * 1000, 2)
+        
     else:
         actual_strategy = 'semantic'
         search_params = build_semantic_params(
             query_embedding=query_embedding,
+            discovery=discovery,
             filters=filters,
             page=page,
             per_page=per_page,
@@ -14943,7 +18568,7 @@ def execute_full_search(
     times['total'] = round((time.time() - t0) * 1000, 2)
     
     # =========================================================================
-    # DEBUG OUTPUT (Enhanced with scores)
+    # DEBUG OUTPUT
     # =========================================================================
     print(f"⏱️ TIMING: {times}")
     print(f"🔍 Strategy: {actual_strategy.upper()} | Found: {raw_response.get('found', 0)}")
@@ -14952,18 +18577,18 @@ def execute_full_search(
     if skip_embedding:
         print(f"⚡ Embedding skipped (source: {search_source or 'skip_embedding=True'})")
     
-    if valid_terms:
-        print(f"   Valid terms: {valid_terms}")
-        # Show individual term scores
-        for term in discovery.get('terms', []):
-            if term.get('rank_score', 0) > 0:
-                print(f"      • {term['search_word']}: {term['rank_score']} pts")
+    if discovery.get('filters'):
+        print(f"   📌 Filters: {[f['term'] for f in discovery.get('filters', [])]}")
+    if discovery.get('locations'):
+        print(f"   📍 Locations: {[l['term'] for l in discovery.get('locations', [])]}")
+    if discovery.get('sort'):
+        print(f"   🔢 Sort: {discovery.get('sort')}")
     
-    if discovery.get('corrected_terms'):
-        print(f"   Corrections: {[(c.get('original'), c.get('corrected')) for c in discovery.get('corrected_terms', [])]}")
+    if discovery.get('corrections'):
+        print(f"   ✏️ Corrections: {[(c.get('original'), c.get('corrected')) for c in discovery.get('corrections', [])]}")
     
     # =========================================================================
-    # STEP 5: Process results
+    # PROCESS RESULTS
     # =========================================================================
     results = process_results(raw_response, query)
     
@@ -14975,7 +18600,7 @@ def execute_full_search(
         print(f"   Top score: {top_score:.4f} | Cutoff: {max(MIN_SCORE_THRESHOLD, top_score * 0.7):.4f}")
     
     # =========================================================================
-    # STEP 6: Build response
+    # BUILD RESPONSE
     # =========================================================================
     search_time = round(time.time() - t0, 3)
     
@@ -14999,25 +18624,22 @@ def execute_full_search(
         'word_discovery': {
             'valid_count': discovery.get('valid_count', 0),
             'unknown_count': discovery.get('unknown_count', 0),
-            'corrections': discovery.get('corrected_terms', []),
-            # Score metrics
+            'corrections': discovery.get('corrections', []),
+            'filters': discovery.get('filters', []),
+            'locations': discovery.get('locations', []),
+            'sort': discovery.get('sort'),
             'total_score': discovery.get('total_score', 0),
             'average_score': discovery.get('average_score', 0),
             'max_score': discovery.get('max_score', 0),
-            'term_scores': [
-                {'term': t['search_word'], 'score': t.get('rank_score', 0)}
-                for t in discovery.get('terms', [])
-                if t.get('rank_score', 0) > 0
-            ]
         },
         'timings': times,
         'filters_applied': {
             'data_type': filters.get('data_type') if filters else None,
             'category': filters.get('category') if filters else None,
             'schema': filters.get('schema') if filters else None,
-            'time_period': extract_time_period_from_query(query),
-            'location': extract_location_from_query(query),
-            'content_type': extract_content_type_from_query(query)
+            'graph_filters': discovery.get('filters', []),
+            'graph_locations': discovery.get('locations', []),
+            'graph_sort': discovery.get('sort'),
         }
     }
 
@@ -15056,31 +18678,21 @@ def quick_search(query: str, limit: int = 10) -> List[Dict]:
 
 
 def find_similar_documents(document_uuid: str, limit: int = 5) -> List[Dict]:
-    """
-    Find documents similar to a given document.
-    
-    Strategy:
-    1. If document has semantic_uuid, find others in same cluster first
-    2. Fall back to vector similarity if no semantic_uuid or need more results
-    """
+    """Find documents similar to a given document."""
     try:
         doc = client.collections[COLLECTION_NAME].documents[document_uuid].retrieve()
         
         results = []
         semantic_uuid = doc.get('semantic_uuid')
         
-        # Strategy 1: Use semantic_uuid cluster
         if semantic_uuid and '-' in semantic_uuid:
             parts = semantic_uuid.split('-')
             if len(parts) >= 2:
-                prefix = parts[0]  # e.g., "DOC"
-                cluster = parts[1]  # e.g., "11"
+                prefix = parts[0]
+                cluster = parts[1]
                 
-                # Find documents in same cluster (excluding self)
-                # Only use cluster-based search if cluster != 00 (00 = no semantic clustering)
                 if cluster != '00':
                     try:
-                        # Search for documents with same prefix-cluster pattern
                         params = {
                             'q': '*',
                             'filter_by': f'semantic_uuid:>={prefix}-{cluster}-0000 && semantic_uuid:<={prefix}-{cluster}-9999 && document_uuid:!={document_uuid}',
@@ -15097,16 +18709,13 @@ def find_similar_documents(document_uuid: str, limit: int = 5) -> List[Dict]:
                             return results[:limit]
                     except Exception as e:
                         print(f"⚠️ Cluster search failed: {e}")
-                        # Fall through to vector search
         
-        # Strategy 2: Vector similarity (for remaining slots or fallback)
         embedding = doc.get('embedding')
         
         if embedding and len(results) < limit:
             remaining = limit - len(results)
             existing_ids = [r.get('document_uuid') for r in results] + [document_uuid]
             
-            # Build exclusion filter
             exclude_parts = [f'document_uuid:!={uid}' for uid in existing_ids if uid]
             exclude_filter = ' && '.join(exclude_parts) if exclude_parts else ''
             
@@ -15134,16 +18743,7 @@ def find_similar_documents(document_uuid: str, limit: int = 5) -> List[Dict]:
 
 
 def find_documents_in_cluster(semantic_uuid: str, limit: int = 10) -> List[Dict]:
-    """
-    Find all documents in the same semantic cluster.
-    
-    Args:
-        semantic_uuid: e.g., "DOC-11-0042"
-        limit: Maximum documents to return
-        
-    Returns:
-        List of documents in the same cluster
-    """
+    """Find all documents in the same semantic cluster."""
     if not semantic_uuid or '-' not in semantic_uuid:
         return []
     
@@ -15151,8 +18751,8 @@ def find_documents_in_cluster(semantic_uuid: str, limit: int = 10) -> List[Dict]
     if len(parts) < 2:
         return []
     
-    prefix = parts[0]  # e.g., "DOC"
-    cluster = parts[1]  # e.g., "11"
+    prefix = parts[0]
+    cluster = parts[1]
     
     try:
         params = {
@@ -15202,22 +18802,13 @@ def get_facets(query: str) -> dict:
 
 
 def get_tab_facets(query: str) -> dict:
-    """
-    Get facet counts specifically for dynamic tabs.
-    
-    Returns facets for:
-    - document_data_type (main tabs)
-    - document_category (secondary filter)
-    - document_schema (tertiary filter)
-    
-    This is called WITHOUT any filters to get total counts.
-    """
+    """Get facet counts specifically for dynamic tabs."""
     search_params = {
         'q': query if query else '*',
         'query_by': ','.join(SEARCH_FIELDS),
         'facet_by': 'document_data_type,document_category,document_schema',
         'max_facet_values': 20,
-        'per_page': 0  # Only need facets, not results
+        'per_page': 0
     }
     
     try:
@@ -15229,16 +18820,15 @@ def get_tab_facets(query: str) -> dict:
             'schema': []
         }
         
-        # Label mappings
         data_type_labels = {
-                    'article': 'Articles',
-                    'person': 'People',
-                    'business': 'Businesses',
-                    'place': 'Places',
-                    'media': 'Media',
-                    'event': 'Events',
-                    'product': 'Products',
-                }
+            'article': 'Articles',
+            'person': 'People',
+            'business': 'Businesses',
+            'place': 'Places',
+            'media': 'Media',
+            'event': 'Events',
+            'product': 'Products',
+        }
         
         category_labels = {
             'healthcare_medical': 'Healthcare',
@@ -15395,7 +18985,4 @@ def log_search_event(
         'semantic_boost': semantic_boost,
         'alt_mode': alt_mode
     }
-    
-    # Replace with your implementation
-    # SearchLog.objects.create(**event)
     pass
