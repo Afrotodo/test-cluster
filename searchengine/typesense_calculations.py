@@ -18924,6 +18924,48 @@ def get_related_searches(query: str, intent: str) -> list:
         return []
 
 
+# ============================================================================
+# SIMPLE TYPESENSE SEARCH (Used by views for basic queries)
+# ============================================================================
+
+def typesense_search(
+    query: str = '*',
+    filter_by: str = None,
+    sort_by: str = 'authority_score:desc',
+    per_page: int = 20,
+    page: int = 1,
+    facet_by: str = None,
+    query_by: str = 'document_title,document_summary,keywords,primary_keywords',
+    max_facet_values: int = 20,
+) -> Dict:
+    """
+    Simple Typesense search wrapper for views.
+    Returns raw Typesense response.
+    """
+    params = {
+        'q': query,
+        'query_by': query_by,
+        'per_page': per_page,
+        'page': page,
+    }
+    
+    if filter_by:
+        params['filter_by'] = filter_by
+    
+    if sort_by:
+        params['sort_by'] = sort_by
+    
+    if facet_by:
+        params['facet_by'] = facet_by
+        params['max_facet_values'] = max_facet_values
+    
+    try:
+        response = client.collections[COLLECTION_NAME].documents.search(params)
+        return response
+    except Exception as e:
+        print(f"❌ typesense_search error: {e}")
+        return {'hits': [], 'found': 0, 'error': str(e)}
+
 def get_featured_result(query: str, intent: str, results: list) -> dict:
     """Returns featured content: knowledge panel or featured snippet."""
     if not results:
