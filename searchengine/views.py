@@ -8572,6 +8572,7 @@ def search(request):
                 filters=filters,
                 page=page,
                 per_page=per_page,
+                alt_mode=params.alt_mode, 
                 user_location=user_location,
                 pos_tags=tuple_array if params.is_semantic_search else [],
                 safe_search=safe_search

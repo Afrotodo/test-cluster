@@ -18377,6 +18377,275 @@ def execute_two_stage_search(
 # MAIN SEARCH FUNCTION (v5.0)
 # ============================================================================
 
+# def execute_full_search(
+#     query: str,
+#     session_id: str = None,
+#     filters: Dict = None,
+#     page: int = 1,
+#     per_page: int = 20,
+#     user_location: Tuple[float, float] = None,
+#     pos_tags: List[Tuple] = None,
+#     safe_search: bool = True,
+#     alt_mode: str = 'n',
+#     skip_embedding: bool = False,
+#     search_source: str = None
+# ) -> Dict:
+#     """
+#     Main entry point for search - OPTIMIZED VERSION v5.0.
+#     """
+#     import time
+#     times = {}
+#     t0 = time.time()
+    
+#     if filters:
+#         active_filters = {k: v for k, v in filters.items() if v}
+#         if active_filters:
+#             print(f"🎛️ Active UI filters: {active_filters}")
+    
+#     # =========================================================================
+#     # DROPDOWN FAST PATH
+#     # =========================================================================
+#     is_dropdown = search_source in ('dropdown', 'keyword', 'suggestion', 'autocomplete')
+
+#     if alt_mode == 'y':
+#         is_dropdown = False
+
+#     if is_dropdown:
+#         print(f"⚡ DROPDOWN FAST PATH: '{query}'")
+        
+#         t1 = time.time()
+#         intent = detect_query_intent(query, pos_tags)
+        
+#         search_params = build_exact_phrase_params(
+#             phrase=query,
+#             filters=filters,
+#             page=page,
+#             per_page=per_page,
+#             intent=intent
+#         )
+        
+#         t2 = time.time()
+#         raw_response = execute_search_multi(search_params)
+#         times['typesense'] = round((time.time() - t2) * 1000, 2)
+#         times['total'] = round((time.time() - t0) * 1000, 2)
+        
+#         print(f"⏱️ TIMING: {times}")
+#         print(f"🔍 Strategy: EXACT_PHRASE (dropdown) | Found: {raw_response.get('found', 0)}")
+        
+#         results = process_results(raw_response, query)
+#         search_time = round(time.time() - t0, 3)
+        
+#         return {
+#             'query': query,
+#             'corrected_query': query,
+#             'intent': intent,
+#             'results': results,
+#             'total': len(results), 
+#             'page': page,
+#             'per_page': per_page,
+#             'search_time': search_time,
+#             'session_id': session_id,
+#             'semantic_enabled': False,
+#             'search_strategy': 'exact_phrase',
+#             'alt_mode': alt_mode,
+#             'skip_embedding': True,
+#             'search_source': search_source or 'dropdown',
+#             'valid_terms': [query],
+#             'unknown_terms': [],
+#             'word_discovery': {
+#                 'valid_count': 1,
+#                 'unknown_count': 0,
+#                 'corrections': [],
+#                 'filters': [],
+#                 'locations': [],
+#                 'sort': None,
+#                 'total_score': 0,
+#                 'average_score': 0,
+#                 'max_score': 0,
+#             },
+#             'timings': times,
+#             'filters_applied': {
+#                 'data_type': filters.get('data_type') if filters else None,
+#                 'category': filters.get('category') if filters else None,
+#                 'schema': filters.get('schema') if filters else None,
+#             }
+#         }
+    
+#     # =========================================================================
+#     # NORMAL PATH - Full word discovery + embedding
+#     # =========================================================================
+    
+#     t1 = time.time()
+#     discovery, query_embedding = run_parallel_prep(query, skip_embedding=skip_embedding)
+#     times['parallel_prep'] = round((time.time() - t1) * 1000, 2)
+    
+#     corrected_query = discovery.get('corrected_query', query)
+#     valid_terms = get_filter_terms_from_discovery(discovery)
+#     unknown_terms = [t['word'] for t in discovery.get('terms', []) if t.get('status') == 'unknown']
+    
+#     # =========================================================================
+#     # STRATEGY SELECTION (v5.0 - based on graph constraints)
+#     # =========================================================================
+    
+#     search_strategy = determine_search_strategy(discovery)
+    
+#     if alt_mode == 'y':
+#         search_strategy = 'semantic'
+    
+#     if skip_embedding and search_strategy == 'semantic':
+#         if valid_terms:
+#             search_strategy = 'two_stage_strict'
+#         else:
+#             search_strategy = 'text_fallback'
+    
+#     semantic_enabled = query_embedding is not None
+    
+#     # =========================================================================
+#     # DETECT INTENT
+#     # =========================================================================
+#     intent = detect_query_intent(query, pos_tags)
+    
+#     # =========================================================================
+#     # EXECUTE SEARCH
+#     # =========================================================================
+    
+#     if not semantic_enabled:
+#         actual_strategy = 'text_fallback'
+#         search_params = build_fallback_text_params(
+#             query=corrected_query,
+#             discovery=discovery,
+#             filters=filters,
+#             page=page,
+#             per_page=per_page,
+#             intent=intent
+#         )
+#         t3 = time.time()
+#         raw_response = execute_search_multi(search_params)
+#         times['typesense'] = round((time.time() - t3) * 1000, 2)
+        
+#     elif search_strategy.startswith('two_stage'):
+#         actual_strategy = search_strategy
+#         t3 = time.time()
+#         raw_response = execute_two_stage_search(
+#             query=corrected_query,
+#             query_embedding=query_embedding,
+#             discovery=discovery,
+#             filters=filters,
+#             page=page,
+#             per_page=per_page
+#         )
+#         times['typesense'] = round((time.time() - t3) * 1000, 2)
+        
+#     elif search_strategy == 'mixed':
+#         actual_strategy = 'mixed'
+#         search_params = build_mixed_params(
+#             query=corrected_query,
+#             query_embedding=query_embedding,
+#             discovery=discovery,
+#             filters=filters,
+#             page=page,
+#             per_page=per_page,
+#             intent=intent
+#         )
+#         t3 = time.time()
+#         raw_response = execute_search_multi(search_params)
+#         times['typesense'] = round((time.time() - t3) * 1000, 2)
+        
+#     else:
+#         actual_strategy = 'semantic'
+#         search_params = build_semantic_params(
+#             query_embedding=query_embedding,
+#             discovery=discovery,
+#             filters=filters,
+#             page=page,
+#             per_page=per_page,
+#             query=query
+#         )
+#         t3 = time.time()
+#         raw_response = execute_search_multi(search_params)
+#         times['typesense'] = round((time.time() - t3) * 1000, 2)
+    
+#     times['total'] = round((time.time() - t0) * 1000, 2)
+    
+#     # =========================================================================
+#     # DEBUG OUTPUT
+#     # =========================================================================
+#     print(f"⏱️ TIMING: {times}")
+#     print(f"🔍 Strategy: {actual_strategy.upper()} | Found: {raw_response.get('found', 0)}")
+#     print(f"📊 Scores: avg={discovery.get('average_score', 0)}, total={discovery.get('total_score', 0)}, max={discovery.get('max_score', 0)}")
+    
+#     if skip_embedding:
+#         print(f"⚡ Embedding skipped (source: {search_source or 'skip_embedding=True'})")
+    
+#     if discovery.get('filters'):
+#         print(f"   📌 Filters: {[f['term'] for f in discovery.get('filters', [])]}")
+#     if discovery.get('locations'):
+#         print(f"   📍 Locations: {[l['term'] for l in discovery.get('locations', [])]}")
+#     if discovery.get('sort'):
+#         print(f"   🔢 Sort: {discovery.get('sort')}")
+    
+#     if discovery.get('corrections'):
+#         print(f"   ✏️ Corrections: {[(c.get('original'), c.get('corrected')) for c in discovery.get('corrections', [])]}")
+    
+#     # =========================================================================
+#     # PROCESS RESULTS
+#     # =========================================================================
+#     results = process_results(raw_response, query)
+    
+#     raw_count = len(raw_response.get('hits', []))
+#     filtered_count = len(results)
+#     if raw_count > 0:
+#         top_score = results[0]['score'] if results else 0
+#         print(f"📊 Filtering: {raw_count} → {filtered_count} results")
+#         print(f"   Top score: {top_score:.4f} | Cutoff: {max(MIN_SCORE_THRESHOLD, top_score * 0.7):.4f}")
+    
+#     # =========================================================================
+#     # BUILD RESPONSE
+#     # =========================================================================
+#     search_time = round(time.time() - t0, 3)
+    
+#     return {
+#         'query': query,
+#         'corrected_query': corrected_query,
+#         'intent': intent,
+#         'results': results,
+#         'total': len(results), 
+#         'page': page,
+#         'per_page': per_page,
+#         'search_time': search_time,
+#         'session_id': session_id,
+#         'semantic_enabled': semantic_enabled,
+#         'search_strategy': actual_strategy,
+#         'alt_mode': alt_mode,
+#         'skip_embedding': skip_embedding,
+#         'search_source': search_source,
+#         'valid_terms': valid_terms,
+#         'unknown_terms': unknown_terms,
+#         'word_discovery': {
+#             'valid_count': discovery.get('valid_count', 0),
+#             'unknown_count': discovery.get('unknown_count', 0),
+#             'corrections': discovery.get('corrections', []),
+#             'filters': discovery.get('filters', []),
+#             'locations': discovery.get('locations', []),
+#             'sort': discovery.get('sort'),
+#             'total_score': discovery.get('total_score', 0),
+#             'average_score': discovery.get('average_score', 0),
+#             'max_score': discovery.get('max_score', 0),
+#         },
+#         'timings': times,
+#         'filters_applied': {
+#             'data_type': filters.get('data_type') if filters else None,
+#             'category': filters.get('category') if filters else None,
+#             'schema': filters.get('schema') if filters else None,
+#             'graph_filters': discovery.get('filters', []),
+#             'graph_locations': discovery.get('locations', []),
+#             'graph_sort': discovery.get('sort'),
+#         }
+#     }
+# ============================================================================
+# MAIN SEARCH FUNCTION (v5.1 - Fixed alt_mode handling)
+# ============================================================================
+
 def execute_full_search(
     query: str,
     session_id: str = None,
@@ -18386,12 +18655,16 @@ def execute_full_search(
     user_location: Tuple[float, float] = None,
     pos_tags: List[Tuple] = None,
     safe_search: bool = True,
-    alt_mode: str = 'n',
+    alt_mode: str = 'y',
     skip_embedding: bool = False,
     search_source: str = None
 ) -> Dict:
     """
-    Main entry point for search - OPTIMIZED VERSION v5.0.
+    Main entry point for search - OPTIMIZED VERSION v5.2.
+    
+    alt_mode:
+        'n' = User clicked dropdown item (skip word discovery, direct search)
+        'y' = User typed freely (run word discovery + semantic search)
     """
     import time
     times = {}
@@ -18403,26 +18676,49 @@ def execute_full_search(
             print(f"🎛️ Active UI filters: {active_filters}")
     
     # =========================================================================
-    # DROPDOWN FAST PATH
+    # DROPDOWN FAST PATH (alt_mode='n' means user clicked a dropdown item)
+    # Word is from the hash - already spelled correctly, skip word discovery
     # =========================================================================
-    is_dropdown = search_source in ('dropdown', 'keyword', 'suggestion', 'autocomplete')
-
-    if alt_mode == 'y':
-        is_dropdown = False
-
+    
+    is_dropdown = (alt_mode == 'n') or search_source in ('dropdown', 'keyword', 'suggestion', 'autocomplete')
+    
     if is_dropdown:
-        print(f"⚡ DROPDOWN FAST PATH: '{query}'")
+        print(f"⚡ DROPDOWN FAST PATH: '{query}' (alt_mode={alt_mode})")
         
         t1 = time.time()
         intent = detect_query_intent(query, pos_tags)
         
-        search_params = build_exact_phrase_params(
-            phrase=query,
-            filters=filters,
-            page=page,
-            per_page=per_page,
-            intent=intent
-        )
+        # Build filter string from UI filters only (no word discovery)
+        filter_conditions = []
+        if filters:
+            if filters.get('data_type') and filters.get('data_type') in VALID_DATA_TYPES:
+                filter_conditions.append(f"document_data_type:={filters['data_type']}")
+            if filters.get('category'):
+                safe_cat = re.sub(r'[^a-zA-Z0-9_]', '', filters['category'])
+                if safe_cat:
+                    filter_conditions.append(f"document_category:={safe_cat}")
+            if filters.get('schema') and filters.get('schema') in VALID_SCHEMAS:
+                filter_conditions.append(f"document_schema:={filters['schema']}")
+        
+        filter_by = ' && '.join(filter_conditions) if filter_conditions else ''
+        
+        # Use flexible text search (NOT exact phrase)
+        # The dropdown term is correct, but we want to find documents ABOUT it
+        search_params = {
+            'q': query,
+            'query_by': 'key_facts,document_title,primary_keywords,entity_names,document_summary',
+            'query_by_weights': '10,8,5,4,2',
+            'page': page,
+            'per_page': per_page,
+            'exclude_fields': 'embedding',
+            'num_typos': 1,
+            'drop_tokens_threshold': 2,
+        }
+        
+        if filter_by:
+            search_params['filter_by'] = filter_by
+        
+        print(f"   Search params: q='{query}', filter_by='{filter_by}'")
         
         t2 = time.time()
         raw_response = execute_search_multi(search_params)
@@ -18430,7 +18726,7 @@ def execute_full_search(
         times['total'] = round((time.time() - t0) * 1000, 2)
         
         print(f"⏱️ TIMING: {times}")
-        print(f"🔍 Strategy: EXACT_PHRASE (dropdown) | Found: {raw_response.get('found', 0)}")
+        print(f"🔍 Strategy: DROPDOWN_DIRECT | Found: {raw_response.get('found', 0)}")
         
         results = process_results(raw_response, query)
         search_time = round(time.time() - t0, 3)
@@ -18446,14 +18742,14 @@ def execute_full_search(
             'search_time': search_time,
             'session_id': session_id,
             'semantic_enabled': False,
-            'search_strategy': 'exact_phrase',
+            'search_strategy': 'dropdown_direct',
             'alt_mode': alt_mode,
             'skip_embedding': True,
             'search_source': search_source or 'dropdown',
-            'valid_terms': [query],
+            'valid_terms': query.split(),
             'unknown_terms': [],
             'word_discovery': {
-                'valid_count': 1,
+                'valid_count': len(query.split()),
                 'unknown_count': 0,
                 'corrections': [],
                 'filters': [],
@@ -18472,8 +18768,11 @@ def execute_full_search(
         }
     
     # =========================================================================
-    # NORMAL PATH - Full word discovery + embedding
+    # SEMANTIC PATH (alt_mode='y' means user typed freely)
+    # Run full word discovery + embedding
     # =========================================================================
+    
+    print(f"🔬 SEMANTIC PATH: '{query}' (alt_mode={alt_mode})")
     
     t1 = time.time()
     discovery, query_embedding = run_parallel_prep(query, skip_embedding=skip_embedding)
@@ -18484,13 +18783,10 @@ def execute_full_search(
     unknown_terms = [t['word'] for t in discovery.get('terms', []) if t.get('status') == 'unknown']
     
     # =========================================================================
-    # STRATEGY SELECTION (v5.0 - based on graph constraints)
+    # STRATEGY SELECTION (based on word discovery results)
     # =========================================================================
     
     search_strategy = determine_search_strategy(discovery)
-    
-    if alt_mode == 'y':
-        search_strategy = 'semantic'
     
     if skip_embedding and search_strategy == 'semantic':
         if valid_terms:
@@ -18642,7 +18938,6 @@ def execute_full_search(
             'graph_sort': discovery.get('sort'),
         }
     }
-
 
 # ============================================================================
 # CONVENIENCE FUNCTIONS
