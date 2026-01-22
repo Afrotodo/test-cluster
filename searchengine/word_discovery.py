@@ -12088,6 +12088,16 @@ from typing import Dict, Any, List, Tuple, Optional, Set
 # IMPORTS - Cache first, Redis as fallback
 # =============================================================================
 
+
+# from correction_helpers import (
+#     score_candidate,
+#     get_context_words,
+#     check_compound_candidates,
+#     find_adjacent_unknown_pairs,
+#     correct_pair_as_bigram,
+#     CORRECTION_WEIGHTS,
+# )
+
 # Try to import vocabulary cache (fast path)
 try:
     from .vocabulary_cache import vocab_cache, ensure_loaded
@@ -12520,6 +12530,128 @@ def predict_pos_for_unknowns(
 # PASS 3: SPELLING CORRECTION (REDIS)
 # =============================================================================
 
+# def correct_unknown_words(
+#     results: List[Dict[str, Any]],
+#     max_distance: int = 2,
+#     verbose: bool = False
+# ) -> List[Dict[str, Any]]:
+#     """
+#     Pass 3: Correct unknown words using Redis fuzzy search.
+    
+#     - Only processes words marked as 'unknown'
+#     - Uses predicted POS to filter candidates
+#     - Ranks by: distance ASC, then score DESC
+#     """
+#     if verbose:
+#         print("\n" + "=" * 60)
+#         print("PASS 3: SPELLING CORRECTION (REDIS)")
+#         print("=" * 60)
+    
+#     start_time = time.perf_counter()
+    
+#     unknowns = [r for r in results if r['status'] == 'unknown']
+    
+#     if not unknowns:
+#         if verbose:
+#             print("  No unknown words to correct")
+#         return results
+    
+#     if not REDIS_AVAILABLE:
+#         if verbose:
+#             print("  Redis not available, skipping correction")
+#         return results
+    
+#     for unknown in unknowns:
+#         word = unknown['word']
+#         predicted_pos = unknown.get('predicted_pos', 'noun')
+        
+#         if verbose:
+#             print(f"\n  Correcting '{word}' (expected POS: {predicted_pos})...")
+        
+#         # Get fuzzy matches from Redis
+#         suggestion_result = get_suggestions(word, limit=20, max_distance=max_distance)
+#         candidates = suggestion_result.get('suggestions', [])
+        
+#         if not candidates:
+#             if verbose:
+#                 print(f"    No candidates found")
+#             continue
+        
+#         # Filter by POS and calculate ranking score
+#         scored_candidates = []
+#         for candidate in candidates:
+#             candidate_pos = normalize_pos(candidate.get('pos', 'unknown'))
+#             candidate_term = candidate.get('term', '')
+#             candidate_score = get_rank_score(candidate)
+            
+#             # Calculate edit distance
+#             distance = damerau_levenshtein_distance(word, candidate_term.lower())
+            
+#             if distance > max_distance:
+#                 continue
+            
+#             # Check POS match (with flexibility)
+#             pos_match = False
+#             if candidate_pos == predicted_pos:
+#                 pos_match = True
+#             elif predicted_pos == 'noun' and candidate_pos in ('noun', 'proper_noun'):
+#                 pos_match = True
+#             elif predicted_pos == 'proper_noun' and candidate_pos in ('noun', 'proper_noun'):
+#                 pos_match = True
+            
+#             scored_candidates.append({
+#                 'term': candidate_term,
+#                 'pos': candidate_pos,
+#                 'score': candidate_score,
+#                 'distance': distance,
+#                 'pos_match': pos_match,
+#                 'metadata': candidate
+#             })
+        
+#         if not scored_candidates:
+#             if verbose:
+#                 print(f"    No candidates within distance {max_distance}")
+#             continue
+        
+#         # Sort: POS match first, then distance ASC, then score DESC
+#         scored_candidates.sort(key=lambda x: (
+#             0 if x['pos_match'] else 1,  # POS matches first
+#             x['distance'],                # Then lowest distance
+#             -x['score']                   # Then highest score
+#         ))
+        
+#         # Select best candidate
+#         best = scored_candidates[0]
+        
+#         if verbose:
+#             print(f"    Candidates ({len(scored_candidates)}):")
+#             for i, c in enumerate(scored_candidates[:5]):
+#                 marker = "✓" if i == 0 else " "
+#                 pos_marker = "(POS match)" if c['pos_match'] else ""
+#                 print(f"      {marker} '{c['term']}' → dist={c['distance']}, score={c['score']} {pos_marker}")
+        
+#         # Update the result
+#         unknown['status'] = 'corrected'
+#         unknown['corrected'] = best['term']
+#         unknown['corrected_pos'] = best['pos']
+#         unknown['corrected_score'] = best['score']
+#         unknown['distance'] = best['distance']
+#         unknown['pos_match'] = best['pos_match']
+#         unknown['metadata'] = best['metadata']
+        
+#         if verbose:
+#             print(f"    Selected: '{word}' → '{best['term']}'")
+    
+#     elapsed = (time.perf_counter() - start_time) * 1000
+    
+#     if verbose:
+#         corrected_count = sum(1 for r in results if r['status'] == 'corrected')
+#         print(f"\n  Completed in {elapsed:.2f}ms | Corrected: {corrected_count}/{len(unknowns)}")
+    
+#     return results
+
+
+
 def correct_unknown_words(
     results: List[Dict[str, Any]],
     max_distance: int = 2,
@@ -12528,9 +12660,13 @@ def correct_unknown_words(
     """
     Pass 3: Correct unknown words using Redis fuzzy search.
     
-    - Only processes words marked as 'unknown'
-    - Uses predicted POS to filter candidates
-    - Ranks by: distance ASC, then score DESC
+    Enhanced with:
+    - Keyboard-aware distance scoring
+    - POS-based candidate scoring
+    - Bigram/trigram context bonuses
+    - Weighted combined scoring
+    
+    Only processes words marked as 'unknown'.
     """
     if verbose:
         print("\n" + "=" * 60)
@@ -12551,12 +12687,59 @@ def correct_unknown_words(
             print("  Redis not available, skipping correction")
         return results
     
+    # --- NEW: Handle adjacent unknown pairs first ---
+    adjacent_pairs = find_adjacent_unknown_pairs(results)
+    corrected_positions = set()
+    
+    for pos1, pos2, word1, word2 in adjacent_pairs:
+        if pos1 in corrected_positions or pos2 in corrected_positions:
+            continue
+        
+        # Try to correct as a known bigram
+        pair_result = correct_pair_as_bigram(word1, word2, vocab_cache, max_combined_distance=4)
+        
+        if pair_result:
+            corrected1, corrected2, bigram_meta, combined_dist = pair_result
+            
+            if verbose:
+                print(f"\n  PAIR CORRECTION: '{word1} {word2}' → '{corrected1} {corrected2}' (dist={combined_dist})")
+            
+            # Update both results
+            for r in results:
+                if r['position'] == pos1:
+                    r['status'] = 'corrected'
+                    r['corrected'] = corrected1
+                    r['corrected_pos'] = bigram_meta.get('pos1', 'unknown')
+                    r['distance'] = combined_dist
+                    r['pair_corrected'] = True
+                    corrected_positions.add(pos1)
+                
+                elif r['position'] == pos2:
+                    r['status'] = 'corrected'
+                    r['corrected'] = corrected2
+                    r['corrected_pos'] = bigram_meta.get('pos2', 'unknown')
+                    r['distance'] = combined_dist
+                    r['pair_corrected'] = True
+                    corrected_positions.add(pos2)
+    
+    # --- Process remaining unknowns individually ---
     for unknown in unknowns:
+        # Skip if already corrected as part of a pair
+        if unknown['position'] in corrected_positions:
+            continue
+        
         word = unknown['word']
         predicted_pos = unknown.get('predicted_pos', 'noun')
+        pos_confidence = unknown.get('pos_confidence', 0.5)
         
         if verbose:
-            print(f"\n  Correcting '{word}' (expected POS: {predicted_pos})...")
+            print(f"\n  Correcting '{word}' (expected POS: {predicted_pos}, conf: {pos_confidence:.0%})...")
+        
+        # --- NEW: Get context words for bigram scoring ---
+        left_word, right_word = get_context_words(results, unknown['position'])
+        
+        if verbose and (left_word or right_word):
+            print(f"    Context: [{left_word or '???'}] _{word}_ [{right_word or '???'}]")
         
         # Get fuzzy matches from Redis
         suggestion_result = get_suggestions(word, limit=20, max_distance=max_distance)
@@ -12567,48 +12750,37 @@ def correct_unknown_words(
                 print(f"    No candidates found")
             continue
         
-        # Filter by POS and calculate ranking score
+        # --- NEW: Score each candidate using combined scoring ---
         scored_candidates = []
+        
         for candidate in candidates:
-            candidate_pos = normalize_pos(candidate.get('pos', 'unknown'))
             candidate_term = candidate.get('term', '')
-            candidate_score = get_rank_score(candidate)
             
-            # Calculate edit distance
-            distance = damerau_levenshtein_distance(word, candidate_term.lower())
-            
-            if distance > max_distance:
+            # Basic distance check
+            edit_dist = damerau_levenshtein_distance(word, candidate_term.lower())
+            if edit_dist > max_distance:
                 continue
             
-            # Check POS match (with flexibility)
-            pos_match = False
-            if candidate_pos == predicted_pos:
-                pos_match = True
-            elif predicted_pos == 'noun' and candidate_pos in ('noun', 'proper_noun'):
-                pos_match = True
-            elif predicted_pos == 'proper_noun' and candidate_pos in ('noun', 'proper_noun'):
-                pos_match = True
+            # Score the candidate with all signals
+            scored = score_candidate(
+                candidate=candidate,
+                unknown_word=word,
+                predicted_pos=predicted_pos,
+                pos_confidence=pos_confidence,
+                left_word=left_word,
+                right_word=right_word,
+                vocab_cache=vocab_cache
+            )
             
-            scored_candidates.append({
-                'term': candidate_term,
-                'pos': candidate_pos,
-                'score': candidate_score,
-                'distance': distance,
-                'pos_match': pos_match,
-                'metadata': candidate
-            })
+            scored_candidates.append(scored)
         
         if not scored_candidates:
             if verbose:
                 print(f"    No candidates within distance {max_distance}")
             continue
         
-        # Sort: POS match first, then distance ASC, then score DESC
-        scored_candidates.sort(key=lambda x: (
-            0 if x['pos_match'] else 1,  # POS matches first
-            x['distance'],                # Then lowest distance
-            -x['score']                   # Then highest score
-        ))
+        # --- NEW: Sort by final_score descending (higher = better) ---
+        scored_candidates.sort(key=lambda x: -x.get('final_score', 0))
         
         # Select best candidate
         best = scored_candidates[0]
@@ -12617,20 +12789,39 @@ def correct_unknown_words(
             print(f"    Candidates ({len(scored_candidates)}):")
             for i, c in enumerate(scored_candidates[:5]):
                 marker = "✓" if i == 0 else " "
-                pos_marker = "(POS match)" if c['pos_match'] else ""
-                print(f"      {marker} '{c['term']}' → dist={c['distance']}, score={c['score']} {pos_marker}")
+                term = c.get('term', '')
+                dist = c.get('edit_distance', 0)
+                kb_dist = c.get('keyboard_distance', 0)
+                pos_sc = c.get('pos_score', 0)
+                bg_bonus = c.get('bigram_bonus', 0)
+                final = c.get('final_score', 0)
+                print(f"      {marker} '{term}' → edit={dist}, kb={kb_dist:.1f}, pos={pos_sc:.0f}, bigram={bg_bonus:.0f}, FINAL={final:.1f}")
+        
+        # Normalize POS from candidate
+        best_pos = best.get('pos', 'unknown')
+        if isinstance(best_pos, list):
+            best_pos = best_pos[0] if best_pos else 'unknown'
+        best_pos = str(best_pos).lower()
+        
+        # Get word score
+        best_score = best.get('rank', 0)
+        if isinstance(best_score, str):
+            best_score = int(float(best_score)) if best_score else 0
         
         # Update the result
         unknown['status'] = 'corrected'
-        unknown['corrected'] = best['term']
-        unknown['corrected_pos'] = best['pos']
-        unknown['corrected_score'] = best['score']
-        unknown['distance'] = best['distance']
-        unknown['pos_match'] = best['pos_match']
-        unknown['metadata'] = best['metadata']
+        unknown['corrected'] = best.get('term', '')
+        unknown['corrected_pos'] = best_pos
+        unknown['corrected_score'] = best_score
+        unknown['distance'] = best.get('edit_distance', 0)
+        unknown['keyboard_distance'] = best.get('keyboard_distance', 0)
+        unknown['pos_score'] = best.get('pos_score', 0)
+        unknown['bigram_bonus'] = best.get('bigram_bonus', 0)
+        unknown['final_score'] = best.get('final_score', 0)
+        unknown['metadata'] = best
         
         if verbose:
-            print(f"    Selected: '{word}' → '{best['term']}'")
+            print(f"    Selected: '{word}' → '{best.get('term', '')}' (score={best.get('final_score', 0):.1f})")
     
     elapsed = (time.perf_counter() - start_time) * 1000
     
@@ -12639,6 +12830,7 @@ def correct_unknown_words(
         print(f"\n  Completed in {elapsed:.2f}ms | Corrected: {corrected_count}/{len(unknowns)}")
     
     return results
+
 
 
 # =============================================================================
@@ -13203,3 +13395,849 @@ def get_cache_status() -> Dict[str, Any]:
         'cache_loaded': False,
         'redis_available': REDIS_AVAILABLE
     }
+
+
+
+
+# =============================================================================
+# CONSTANTS
+# =============================================================================
+
+# QWERTY keyboard layout - each key maps to its row and column position
+KEYBOARD_LAYOUT = {
+    # Row 0 (number row)
+    '1': (0, 0), '2': (0, 1), '3': (0, 2), '4': (0, 3), '5': (0, 4),
+    '6': (0, 5), '7': (0, 6), '8': (0, 7), '9': (0, 8), '0': (0, 9),
+    # Row 1
+    'q': (1, 0), 'w': (1, 1), 'e': (1, 2), 'r': (1, 3), 't': (1, 4),
+    'y': (1, 5), 'u': (1, 6), 'i': (1, 7), 'o': (1, 8), 'p': (1, 9),
+    # Row 2
+    'a': (2, 0), 's': (2, 1), 'd': (2, 2), 'f': (2, 3), 'g': (2, 4),
+    'h': (2, 5), 'j': (2, 6), 'k': (2, 7), 'l': (2, 8),
+    # Row 3
+    'z': (3, 0), 'x': (3, 1), 'c': (3, 2), 'v': (3, 3), 'b': (3, 4),
+    'n': (3, 5), 'm': (3, 6),
+}
+
+# Pre-computed keyboard neighbors for fast lookup
+# Each key maps to a set of adjacent keys (including diagonals)
+KEYBOARD_NEIGHBORS = {
+    'q': {'w', 'a', 's'},
+    'w': {'q', 'e', 'a', 's', 'd'},
+    'e': {'w', 'r', 's', 'd', 'f'},
+    'r': {'e', 't', 'd', 'f', 'g'},
+    't': {'r', 'y', 'f', 'g', 'h'},
+    'y': {'t', 'u', 'g', 'h', 'j'},
+    'u': {'y', 'i', 'h', 'j', 'k'},
+    'i': {'u', 'o', 'j', 'k', 'l'},
+    'o': {'i', 'p', 'k', 'l'},
+    'p': {'o', 'l'},
+    'a': {'q', 'w', 's', 'z', 'x'},
+    's': {'q', 'w', 'e', 'a', 'd', 'z', 'x', 'c'},
+    'd': {'w', 'e', 'r', 's', 'f', 'x', 'c', 'v'},
+    'f': {'e', 'r', 't', 'd', 'g', 'c', 'v', 'b'},
+    'g': {'r', 't', 'y', 'f', 'h', 'v', 'b', 'n'},
+    'h': {'t', 'y', 'u', 'g', 'j', 'b', 'n', 'm'},
+    'j': {'y', 'u', 'i', 'h', 'k', 'n', 'm'},
+    'k': {'u', 'i', 'o', 'j', 'l', 'm'},
+    'l': {'i', 'o', 'p', 'k'},
+    'z': {'a', 's', 'x'},
+    'x': {'a', 's', 'd', 'z', 'c'},
+    'c': {'s', 'd', 'f', 'x', 'v'},
+    'v': {'d', 'f', 'g', 'c', 'b'},
+    'b': {'f', 'g', 'h', 'v', 'n'},
+    'n': {'g', 'h', 'j', 'b', 'm'},
+    'm': {'h', 'j', 'k', 'n'},
+}
+
+# POS compatibility groups - which POS tags are considered "close enough"
+POS_COMPATIBILITY_GROUPS = {
+    'noun': {'noun', 'proper_noun'},
+    'proper_noun': {'proper_noun', 'noun'},
+    'verb': {'verb', 'participle', 'gerund'},
+    'participle': {'participle', 'verb', 'adjective'},
+    'gerund': {'gerund', 'verb', 'noun'},
+    'adjective': {'adjective', 'participle'},
+    'adverb': {'adverb'},
+    'pronoun': {'pronoun', 'relative_pronoun', 'wh_pronoun'},
+    'relative_pronoun': {'relative_pronoun', 'pronoun'},
+    'wh_pronoun': {'wh_pronoun', 'pronoun'},
+    'determiner': {'determiner', 'article'},
+    'article': {'article', 'determiner'},
+    'preposition': {'preposition'},
+    'conjunction': {'conjunction'},
+    'interjection': {'interjection'},
+    'be': {'be', 'verb', 'auxiliary'},
+    'auxiliary': {'auxiliary', 'verb', 'modal'},
+    'modal': {'modal', 'auxiliary', 'verb'},
+}
+
+# Tunable weights for correction scoring
+# Adjust these based on testing with your data
+CORRECTION_WEIGHTS = {
+    'distance': 100,        # Penalty per edit distance unit
+    'keyboard': 30,         # Penalty per keyboard distance unit (less than edit)
+    'pos_match': 80,        # Bonus for exact POS match
+    'pos_compatible': 50,   # Bonus for compatible POS
+    'bigram': 120,          # Bonus for forming known bigram
+    'trigram': 150,         # Bonus for forming known trigram
+    'frequency': 0.01,      # Multiplier for word frequency score
+}
+
+
+# =============================================================================
+# KEYBOARD DISTANCE FUNCTIONS
+# =============================================================================
+
+def keyboard_distance(char1: str, char2: str) -> int:
+    """
+    Calculate keyboard distance between two characters.
+    
+    Returns:
+        0 if same character
+        1 if adjacent on keyboard
+        2 if not adjacent
+    """
+    char1 = char1.lower()
+    char2 = char2.lower()
+    
+    if char1 == char2:
+        return 0
+    
+    # Check if char1 has neighbors defined and char2 is one of them
+    if char1 in KEYBOARD_NEIGHBORS and char2 in KEYBOARD_NEIGHBORS[char1]:
+        return 1
+    
+    return 2
+
+
+def keyboard_aware_distance(word1: str, word2: str) -> float:
+    """
+    Calculate edit distance with reduced penalty for adjacent-key typos.
+    
+    This is a modified Damerau-Levenshtein that gives partial credit
+    when a substitution involves adjacent keys on the keyboard.
+    
+    Args:
+        word1: First word (typically the unknown/misspelled word)
+        word2: Second word (typically the candidate correction)
+    
+    Returns:
+        Float distance where keyboard-adjacent substitutions cost 0.5 instead of 1.0
+    """
+    s1 = word1.lower()
+    s2 = word2.lower()
+    
+    len1, len2 = len(s1), len(s2)
+    
+    # Use float for partial penalties
+    d = [[0.0] * (len2 + 1) for _ in range(len1 + 1)]
+    
+    # Base cases
+    for i in range(len1 + 1):
+        d[i][0] = float(i)
+    for j in range(len2 + 1):
+        d[0][j] = float(j)
+    
+    for i in range(1, len1 + 1):
+        for j in range(1, len2 + 1):
+            if s1[i-1] == s2[j-1]:
+                cost = 0.0
+            else:
+                # Reduced cost for keyboard-adjacent substitutions
+                kb_dist = keyboard_distance(s1[i-1], s2[j-1])
+                if kb_dist == 1:
+                    cost = 0.5  # Adjacent key typo
+                else:
+                    cost = 1.0  # Non-adjacent substitution
+            
+            d[i][j] = min(
+                d[i-1][j] + 1.0,      # Deletion
+                d[i][j-1] + 1.0,      # Insertion
+                d[i-1][j-1] + cost    # Substitution (with keyboard awareness)
+            )
+            
+            # Transposition (Damerau extension)
+            if i > 1 and j > 1 and s1[i-1] == s2[j-2] and s1[i-2] == s2[j-1]:
+                d[i][j] = min(d[i][j], d[i-2][j-2] + cost)
+    
+    return d[len1][len2]
+
+
+# =============================================================================
+# POS SCORING FUNCTIONS
+# =============================================================================
+
+def get_pos_compatibility_score(candidate_pos: str, predicted_pos: str) -> float:
+    """
+    Check how compatible a candidate POS is with the predicted POS.
+    
+    Args:
+        candidate_pos: POS of the candidate word from the hash
+        predicted_pos: POS predicted by grammar rules in Pass 2
+    
+    Returns:
+        1.0 for exact match
+        0.8 for compatible match (e.g., noun/proper_noun)
+        0.0 for mismatch
+    """
+    candidate_pos = candidate_pos.lower()
+    predicted_pos = predicted_pos.lower()
+    
+    # Exact match
+    if candidate_pos == predicted_pos:
+        return 1.0
+    
+    # Check compatibility groups
+    compatible_set = POS_COMPATIBILITY_GROUPS.get(predicted_pos, {predicted_pos})
+    if candidate_pos in compatible_set:
+        return 0.8
+    
+    # Check reverse (candidate's compatibility group contains predicted)
+    candidate_compatible = POS_COMPATIBILITY_GROUPS.get(candidate_pos, {candidate_pos})
+    if predicted_pos in candidate_compatible:
+        return 0.7
+    
+    return 0.0
+
+
+def calculate_pos_score(
+    candidate_pos: str,
+    predicted_pos: str,
+    confidence: float
+) -> float:
+    """
+    Calculate weighted POS match score.
+    
+    Args:
+        candidate_pos: POS of the candidate word
+        predicted_pos: POS predicted by grammar rules
+        confidence: Confidence of the POS prediction (0.0 to 1.0)
+    
+    Returns:
+        Weighted score (0 to CORRECTION_WEIGHTS['pos_match'])
+    """
+    compatibility = get_pos_compatibility_score(candidate_pos, predicted_pos)
+    
+    if compatibility == 1.0:
+        # Exact match
+        return confidence * CORRECTION_WEIGHTS['pos_match']
+    elif compatibility > 0:
+        # Compatible match
+        return confidence * compatibility * CORRECTION_WEIGHTS['pos_compatible']
+    else:
+        # No match - small penalty
+        return -10
+
+
+# =============================================================================
+# BIGRAM-AWARE SCORING FUNCTIONS
+# =============================================================================
+
+def get_context_words(
+    results: List[Dict[str, Any]],
+    position: int
+) -> Tuple[Optional[str], Optional[str]]:
+    """
+    Extract left and right neighbor words for a given position.
+    
+    Uses corrected word if the neighbor was already corrected.
+    
+    Args:
+        results: List of word results from Pass 1/2/3
+        position: 1-indexed position of the current word
+    
+    Returns:
+        Tuple of (left_word, right_word) - either can be None
+    """
+    left_word = None
+    right_word = None
+    
+    for r in results:
+        if r['position'] == position - 1:
+            # Left neighbor - use corrected if available
+            if r['status'] == 'corrected':
+                left_word = r.get('corrected', r['word']).lower()
+            else:
+                left_word = r['word'].lower()
+        
+        elif r['position'] == position + 1:
+            # Right neighbor - use corrected if available
+            if r['status'] == 'corrected':
+                right_word = r.get('corrected', r['word']).lower()
+            else:
+                right_word = r['word'].lower()
+    
+    return left_word, right_word
+
+
+def get_bigram_bonus(
+    candidate_term: str,
+    left_word: Optional[str],
+    right_word: Optional[str],
+    vocab_cache
+) -> float:
+    """
+    Calculate bonus if candidate forms a known bigram with neighbors.
+    
+    Args:
+        candidate_term: The candidate correction word
+        left_word: Word to the left (or None)
+        right_word: Word to the right (or None)
+        vocab_cache: The vocabulary cache object with get_bigram method
+    
+    Returns:
+        Bonus score (0 if no bigram, CORRECTION_WEIGHTS['bigram'] if found)
+    """
+    bonus = 0.0
+    candidate_lower = candidate_term.lower()
+    
+    # Check left bigram: left_word + candidate
+    if left_word:
+        bigram_meta = vocab_cache.get_bigram(left_word, candidate_lower)
+        if bigram_meta:
+            bonus += CORRECTION_WEIGHTS['bigram']
+    
+    # Check right bigram: candidate + right_word
+    if right_word:
+        bigram_meta = vocab_cache.get_bigram(candidate_lower, right_word)
+        if bigram_meta:
+            bonus += CORRECTION_WEIGHTS['bigram']
+    
+    return bonus
+
+
+def get_trigram_bonus(
+    candidate_term: str,
+    left_word: Optional[str],
+    right_word: Optional[str],
+    vocab_cache
+) -> float:
+    """
+    Calculate bonus if candidate forms a known trigram with neighbors.
+    
+    Requires both left and right neighbors to check for trigram.
+    
+    Args:
+        candidate_term: The candidate correction word
+        left_word: Word to the left (or None)
+        right_word: Word to the right (or None)
+        vocab_cache: The vocabulary cache object with get_trigram method
+    
+    Returns:
+        Bonus score (0 if no trigram, CORRECTION_WEIGHTS['trigram'] if found)
+    """
+    if not left_word or not right_word:
+        return 0.0
+    
+    candidate_lower = candidate_term.lower()
+    
+    trigram_meta = vocab_cache.get_trigram(left_word, candidate_lower, right_word)
+    if trigram_meta:
+        return CORRECTION_WEIGHTS['trigram']
+    
+    return 0.0
+
+
+# =============================================================================
+# COMBINED SCORING FUNCTION
+# =============================================================================
+
+def calculate_correction_score(
+    edit_distance: int,
+    keyboard_dist: float,
+    pos_score: float,
+    bigram_bonus: float,
+    trigram_bonus: float,
+    word_score: int
+) -> float:
+    """
+    Calculate combined correction score for ranking candidates.
+    
+    Higher score = better candidate.
+    
+    Args:
+        edit_distance: Damerau-Levenshtein distance (0-3 typically)
+        keyboard_dist: Keyboard-aware distance (0-3 typically, can be fractional)
+        pos_score: Score from calculate_pos_score()
+        bigram_bonus: Score from get_bigram_bonus()
+        trigram_bonus: Score from get_trigram_bonus()
+        word_score: Frequency/rank score from the hash
+    
+    Returns:
+        Combined score (higher is better)
+    """
+    score = 0.0
+    
+    # Penalties (lower distance = less penalty)
+    score -= edit_distance * CORRECTION_WEIGHTS['distance']
+    score -= keyboard_dist * CORRECTION_WEIGHTS['keyboard']
+    
+    # Bonuses
+    score += pos_score
+    score += bigram_bonus
+    score += trigram_bonus
+    score += word_score * CORRECTION_WEIGHTS['frequency']
+    
+    return score
+
+
+# =============================================================================
+# COMPOUND WORD FUNCTIONS
+# =============================================================================
+
+def try_split_word(
+    unknown_word: str,
+    vocab_cache,
+    min_part_length: int = 2
+) -> List[Tuple[str, str, float]]:
+    """
+    Attempt to split a compound word into two valid words.
+    
+    Example: "newyork" -> [("new", "york", score)]
+    
+    Args:
+        unknown_word: The unknown word to try splitting
+        vocab_cache: Vocabulary cache with get_term method
+        min_part_length: Minimum length for each part (default 2)
+    
+    Returns:
+        List of (word1, word2, combined_score) tuples, sorted by score descending
+    """
+    word = unknown_word.lower()
+    valid_splits = []
+    
+    # Try all possible split points
+    for i in range(min_part_length, len(word) - min_part_length + 1):
+        part1 = word[:i]
+        part2 = word[i:]
+        
+        # Check if both parts are valid words
+        meta1 = vocab_cache.get_term(part1)
+        meta2 = vocab_cache.get_term(part2)
+        
+        if meta1 and meta2:
+            # Both parts are valid - calculate combined score
+            score1 = meta1.get('rank', 0)
+            score2 = meta2.get('rank', 0)
+            if isinstance(score1, str):
+                score1 = int(float(score1)) if score1 else 0
+            if isinstance(score2, str):
+                score2 = int(float(score2)) if score2 else 0
+            
+            combined_score = score1 + score2
+            valid_splits.append((part1, part2, combined_score))
+    
+    # Sort by combined score descending
+    valid_splits.sort(key=lambda x: -x[2])
+    
+    return valid_splits
+
+
+def try_merge_words(
+    word1: str,
+    word2: str,
+    vocab_cache
+) -> Optional[Tuple[str, Dict[str, Any]]]:
+    """
+    Attempt to merge two words into a valid compound word.
+    
+    Example: "base" + "ball" -> ("baseball", metadata)
+    
+    Args:
+        word1: First word
+        word2: Second word
+        vocab_cache: Vocabulary cache with get_term method
+    
+    Returns:
+        Tuple of (merged_word, metadata) if valid, None otherwise
+    """
+    merged = (word1 + word2).lower()
+    
+    metadata = vocab_cache.get_term(merged)
+    if metadata:
+        return (merged, metadata)
+    
+    return None
+
+
+def check_compound_candidates(
+    results: List[Dict[str, Any]],
+    vocab_cache,
+    verbose: bool = False
+) -> List[Dict[str, Any]]:
+    """
+    Scan results for split/merge opportunities and update accordingly.
+    
+    This should be called between Pass 2 and Pass 3.
+    
+    Split: Single unknown word that can be split into two valid words
+    Merge: Two adjacent words (at least one unknown) that form a valid compound
+    
+    Args:
+        results: List of word results from Pass 1/2
+        vocab_cache: Vocabulary cache
+        verbose: Whether to print debug output
+    
+    Returns:
+        Updated results list (may have different length if splits/merges occurred)
+    """
+    if verbose:
+        print("\n  Checking compound candidates...")
+    
+    updated_results = []
+    skip_next = False
+    
+    for i, result in enumerate(results):
+        if skip_next:
+            skip_next = False
+            continue
+        
+        # Try MERGE: Check if this word + next word form a compound
+        if i < len(results) - 1:
+            next_result = results[i + 1]
+            
+            # Only try merge if at least one is unknown
+            if result['status'] == 'unknown' or next_result['status'] == 'unknown':
+                word1 = result['word']
+                word2 = next_result['word']
+                
+                merge_result = try_merge_words(word1, word2, vocab_cache)
+                
+                if merge_result:
+                    merged_word, metadata = merge_result
+                    
+                    if verbose:
+                        print(f"    MERGE: '{word1}' + '{word2}' → '{merged_word}'")
+                    
+                    # Create merged entry
+                    updated_results.append({
+                        'position': result['position'],
+                        'word': f"{word1} {word2}",
+                        'original_words': [word1, word2],
+                        'status': 'merged',
+                        'corrected': merged_word,
+                        'pos': metadata.get('pos', 'unknown'),
+                        'score': metadata.get('rank', 0),
+                        'category': metadata.get('category', ''),
+                        'metadata': metadata
+                    })
+                    
+                    skip_next = True
+                    continue
+        
+        # Try SPLIT: Check if this unknown word can be split
+        if result['status'] == 'unknown':
+            splits = try_split_word(result['word'], vocab_cache)
+            
+            if splits:
+                best_split = splits[0]
+                word1, word2, score = best_split
+                
+                if verbose:
+                    print(f"    SPLIT: '{result['word']}' → '{word1}' + '{word2}'")
+                
+                # Get metadata for each part
+                meta1 = vocab_cache.get_term(word1)
+                meta2 = vocab_cache.get_term(word2)
+                
+                # Add first part
+                updated_results.append({
+                    'position': result['position'],
+                    'word': result['word'],
+                    'original_word': result['word'],
+                    'status': 'split',
+                    'corrected': word1,
+                    'pos': meta1.get('pos', 'unknown') if meta1 else 'unknown',
+                    'score': meta1.get('rank', 0) if meta1 else 0,
+                    'category': meta1.get('category', '') if meta1 else '',
+                    'metadata': meta1 or {}
+                })
+                
+                # Add second part (with adjusted position marker)
+                updated_results.append({
+                    'position': result['position'] + 0.5,  # Between positions
+                    'word': '',  # Part of split
+                    'original_word': result['word'],
+                    'status': 'split',
+                    'corrected': word2,
+                    'pos': meta2.get('pos', 'unknown') if meta2 else 'unknown',
+                    'score': meta2.get('rank', 0) if meta2 else 0,
+                    'category': meta2.get('category', '') if meta2 else '',
+                    'metadata': meta2 or {}
+                })
+                
+                continue
+        
+        # No compound operation - keep original
+        updated_results.append(result)
+    
+    # Re-normalize positions if splits occurred
+    for i, r in enumerate(updated_results):
+        r['position'] = i + 1
+    
+    return updated_results
+
+
+# =============================================================================
+# ADJACENT UNKNOWN PAIR FUNCTIONS
+# =============================================================================
+
+def find_adjacent_unknown_pairs(
+    results: List[Dict[str, Any]]
+) -> List[Tuple[int, int, str, str]]:
+    """
+    Find pairs of adjacent unknown words.
+    
+    Args:
+        results: List of word results
+    
+    Returns:
+        List of (position1, position2, word1, word2) tuples
+    """
+    pairs = []
+    
+    for i in range(len(results) - 1):
+        current = results[i]
+        next_result = results[i + 1]
+        
+        if current['status'] == 'unknown' and next_result['status'] == 'unknown':
+            pairs.append((
+                current['position'],
+                next_result['position'],
+                current['word'],
+                next_result['word']
+            ))
+    
+    return pairs
+
+
+def correct_pair_as_bigram(
+    word1: str,
+    word2: str,
+    vocab_cache,
+    max_combined_distance: int = 4
+) -> Optional[Tuple[str, str, Dict[str, Any], float]]:
+    """
+    Attempt to jointly correct two unknown words as a known bigram.
+    
+    Example: "nw" + "yrok" -> ("new", "york", bigram_metadata, distance)
+    
+    This searches for bigrams where:
+    - First word is close to word1
+    - Second word is close to word2
+    - Combined edit distance is within threshold
+    
+    Args:
+        word1: First unknown word
+        word2: Second unknown word
+        vocab_cache: Vocabulary cache with bigram lookup
+        max_combined_distance: Maximum total edit distance allowed
+    
+    Returns:
+        Tuple of (corrected1, corrected2, bigram_metadata, combined_distance)
+        or None if no good bigram match found
+    """
+    word1 = word1.lower()
+    word2 = word2.lower()
+    
+    # Get all bigrams from cache
+    # Note: This assumes vocab_cache has a method to iterate bigrams
+    # If not available, this function needs the bigram data passed in
+    
+    if not hasattr(vocab_cache, 'get_all_bigrams') and not hasattr(vocab_cache, 'bigrams'):
+        # Fallback: try common corrections and check if they form bigrams
+        return _correct_pair_fallback(word1, word2, vocab_cache, max_combined_distance)
+    
+    best_match = None
+    best_distance = float('inf')
+    
+    # Get bigrams dict
+    bigrams = getattr(vocab_cache, 'bigrams', {})
+    
+    for bigram_key, bigram_meta in bigrams.items():
+        # Parse bigram key (assumes format "word1|word2" or similar)
+        if '|' in bigram_key:
+            bg_word1, bg_word2 = bigram_key.split('|', 1)
+        elif ' ' in bigram_key:
+            parts = bigram_key.split(' ', 1)
+            if len(parts) == 2:
+                bg_word1, bg_word2 = parts
+            else:
+                continue
+        else:
+            continue
+        
+        # Calculate distances
+        dist1 = damerau_levenshtein_distance(word1, bg_word1.lower())
+        dist2 = damerau_levenshtein_distance(word2, bg_word2.lower())
+        combined_dist = dist1 + dist2
+        
+        if combined_dist <= max_combined_distance and combined_dist < best_distance:
+            best_match = (bg_word1, bg_word2, bigram_meta, combined_dist)
+            best_distance = combined_dist
+    
+    return best_match
+
+
+def _correct_pair_fallback(
+    word1: str,
+    word2: str,
+    vocab_cache,
+    max_combined_distance: int
+) -> Optional[Tuple[str, str, Dict[str, Any], float]]:
+    """
+    Fallback method when we can't iterate all bigrams.
+    
+    Tries to correct each word individually, then checks if corrections form a bigram.
+    """
+    # This is a simpler fallback - in production you'd want the full bigram iteration
+    # For now, return None and let individual word correction handle it
+    return None
+
+
+def damerau_levenshtein_distance(s1: str, s2: str) -> int:
+    """
+    Standard Damerau-Levenshtein distance.
+    
+    Included here for completeness - use the one from your existing code if available.
+    """
+    len1, len2 = len(s1), len(s2)
+    d = [[0] * (len2 + 1) for _ in range(len1 + 1)]
+    
+    for i in range(len1 + 1):
+        d[i][0] = i
+    for j in range(len2 + 1):
+        d[0][j] = j
+    
+    for i in range(1, len1 + 1):
+        for j in range(1, len2 + 1):
+            cost = 0 if s1[i-1] == s2[j-1] else 1
+            d[i][j] = min(
+                d[i-1][j] + 1,      # Deletion
+                d[i][j-1] + 1,      # Insertion
+                d[i-1][j-1] + cost  # Substitution
+            )
+            # Transposition
+            if i > 1 and j > 1 and s1[i-1] == s2[j-2] and s1[i-2] == s2[j-1]:
+                d[i][j] = min(d[i][j], d[i-2][j-2] + cost)
+    
+    return d[len1][len2]
+
+
+# =============================================================================
+# INTEGRATION HELPER
+# =============================================================================
+
+def score_candidate(
+    candidate: Dict[str, Any],
+    unknown_word: str,
+    predicted_pos: str,
+    pos_confidence: float,
+    left_word: Optional[str],
+    right_word: Optional[str],
+    vocab_cache
+) -> Dict[str, Any]:
+    """
+    Score a single candidate - convenience function that combines all scoring.
+    
+    This is the main function to call from correct_unknown_words() for each candidate.
+    
+    Args:
+        candidate: Candidate dict with 'term', 'pos', 'rank' etc from your search
+        unknown_word: The misspelled word being corrected
+        predicted_pos: POS predicted by grammar rules
+        pos_confidence: Confidence of POS prediction
+        left_word: Left neighbor word (or None)
+        right_word: Right neighbor word (or None)
+        vocab_cache: Vocabulary cache for bigram lookups
+    
+    Returns:
+        Candidate dict with added scoring fields
+    """
+    candidate_term = candidate.get('term', '')
+    candidate_pos = candidate.get('pos', 'unknown')
+    if isinstance(candidate_pos, list):
+        candidate_pos = candidate_pos[0] if candidate_pos else 'unknown'
+    candidate_pos = str(candidate_pos).lower()
+    
+    word_score = candidate.get('rank', 0)
+    if isinstance(word_score, str):
+        word_score = int(float(word_score)) if word_score else 0
+    
+    # Calculate all component scores
+    edit_dist = damerau_levenshtein_distance(unknown_word.lower(), candidate_term.lower())
+    kb_dist = keyboard_aware_distance(unknown_word.lower(), candidate_term.lower())
+    pos_score = calculate_pos_score(candidate_pos, predicted_pos, pos_confidence)
+    bigram_bonus = get_bigram_bonus(candidate_term, left_word, right_word, vocab_cache)
+    trigram_bonus = get_trigram_bonus(candidate_term, left_word, right_word, vocab_cache)
+    
+    # Calculate final combined score
+    final_score = calculate_correction_score(
+        edit_dist,
+        kb_dist,
+        pos_score,
+        bigram_bonus,
+        trigram_bonus,
+        word_score
+    )
+    
+    # Add scoring details to candidate
+    candidate['edit_distance'] = edit_dist
+    candidate['keyboard_distance'] = kb_dist
+    candidate['pos_score'] = pos_score
+    candidate['bigram_bonus'] = bigram_bonus
+    candidate['trigram_bonus'] = trigram_bonus
+    candidate['final_score'] = final_score
+    
+    return candidate
+
+
+# =============================================================================
+# TESTING
+# =============================================================================
+
+if __name__ == "__main__":
+    # Basic tests without vocab_cache
+    print("Testing keyboard distance...")
+    print(f"  'e' to 'r': {keyboard_distance('e', 'r')} (expected: 1)")
+    print(f"  'e' to 'e': {keyboard_distance('e', 'e')} (expected: 0)")
+    print(f"  'e' to 'p': {keyboard_distance('e', 'p')} (expected: 2)")
+    
+    print("\nTesting keyboard-aware distance...")
+    print(f"  'bleu' to 'blue': {keyboard_aware_distance('bleu', 'blue')}")
+    print(f"  'bleu' to 'blew': {keyboard_aware_distance('bleu', 'blew')}")
+    print(f"  'teh' to 'the': {keyboard_aware_distance('teh', 'the')}")
+    
+    print("\nTesting POS compatibility...")
+    print(f"  noun/noun: {get_pos_compatibility_score('noun', 'noun')} (expected: 1.0)")
+    print(f"  noun/proper_noun: {get_pos_compatibility_score('noun', 'proper_noun')} (expected: 0.8)")
+    print(f"  noun/verb: {get_pos_compatibility_score('noun', 'verb')} (expected: 0.0)")
+    
+    print("\nTesting POS score calculation...")
+    print(f"  Exact match (conf=0.95): {calculate_pos_score('adjective', 'adjective', 0.95)}")
+    print(f"  Compatible (conf=0.95): {calculate_pos_score('noun', 'proper_noun', 0.95)}")
+    print(f"  No match (conf=0.95): {calculate_pos_score('verb', 'adjective', 0.95)}")
+    
+    print("\nTesting combined score calculation...")
+    score1 = calculate_correction_score(
+        edit_distance=1,
+        keyboard_dist=0.5,
+        pos_score=76,  # exact match
+        bigram_bonus=0,
+        trigram_bonus=0,
+        word_score=8500
+    )
+    score2 = calculate_correction_score(
+        edit_distance=1,
+        keyboard_dist=0.5,
+        pos_score=-10,  # no match
+        bigram_bonus=0,
+        trigram_bonus=0,
+        word_score=6200
+    )
+    print(f"  'blue' (POS match, score=8500): {score1}")
+    print(f"  'blew' (POS mismatch, score=6200): {score2}")
+    print(f"  Winner: {'blue' if score1 > score2 else 'blew'}")
+    
+    print("\n✓ All basic tests completed")

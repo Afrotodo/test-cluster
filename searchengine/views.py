@@ -8323,6 +8323,1322 @@ def search_suggestions(request):
 # VIEW: MAIN SEARCH (WITH DYNAMIC TABS)
 # =============================================================================
 
+# def search(request):
+#     """
+#     Main search endpoint with dynamic tab filtering.
+    
+#     Supports filtering by:
+#     - data_type: content, service, product, person, media, location (tabs)
+#     - category: document_category values (secondary filter)
+#     - schema: document_schema values (tertiary filter)
+#     """
+    
+#     # === 1. EXTRACT & VALIDATE PARAMETERS ===
+#     params = SearchParams(request)
+#     page = validate_page(request.GET.get('page', 1))
+#     # per_page = validate_per_page(request.GET.get('per_page', 20))
+#     per_page = validate_per_page(request.GET.get('per_page', 10))
+    
+#     request_id = params.request_id or f"{params.session_id}:{time.time()}"
+    
+#     user_id = None
+#     if hasattr(request, 'user') and request.user.is_authenticated:
+#         user_id = str(request.user.id)
+    
+#     client_info = get_full_client_info(request)
+#     client_ip = client_info.get('ip', '')
+#     location = client_info.get('location') or {}
+#     device = client_info.get('device') or {}
+#     user_agent = client_info.get('user_agent', '')
+    
+#     device_type = device.get('device_type', params.device_type or 'unknown')
+#     browser = device.get('browser', 'Unknown')
+#     browser_version = device.get('browser_version', '')
+#     os_name = device.get('os', 'Unknown')
+#     os_version = device.get('os_version', '')
+#     is_mobile = device.get('is_mobile', False)
+#     is_bot = device.get('is_bot', False)
+    
+#     # === 2. START/UPDATE SESSION (Analytics) ===
+#     analytics = get_analytics()
+#     if analytics:
+#         try:
+#             analytics.start_session(
+#                 session_id=params.session_id,
+#                 user_id=user_id,
+#                 device_type=device_type,
+#                 user_agent=user_agent,
+#                 ip_address=client_ip,
+#                 location=location,
+#                 referrer=request.META.get('HTTP_REFERER'),
+#                 browser=browser,
+#                 browser_version=browser_version,
+#                 os_name=os_name,
+#                 os_version=os_version,
+#                 is_mobile=is_mobile,
+#                 is_bot=is_bot
+#             )
+#         except Exception as e:
+#             logger.warning(f"Analytics start_session error: {e}")
+    
+#     # === 3. EXTRACT FILTERS (INCLUDING DYNAMIC TAB FILTERS) ===
+#     source_filter = request.GET.get('source')
+#     if source_filter in ('home', 'results_page', 'header', None, ''):
+#         source_filter = None
+    
+#     # Dynamic tab filters
+#     active_data_type = validate_data_type(request.GET.get('data_type', ''))
+#     active_category = sanitize_filter_value(request.GET.get('category', ''))
+#     active_schema = validate_schema(request.GET.get('schema', ''))
+    
+#     # Build filters dict
+#     filters = {
+#         'data_type': active_data_type,
+#         'category': active_category,
+#         'schema': active_schema,
+#         'source': sanitize_filter_value(source_filter) if source_filter else None,
+#         'time_range': sanitize_filter_value(request.GET.get('time', '')),
+#         'location': sanitize_filter_value(request.GET.get('location', '')),
+#         'sort': validate_sort(request.GET.get('sort', ''), ['relevance', 'recent', 'authority'], 'relevance'),
+#     }
+#     # Remove empty filters
+#     filters = {k: v for k, v in filters.items() if v}
+    
+#     safe_search = request.GET.get('safe', 'on') == 'on'
+    
+#     # User location coordinates
+#     user_location = None
+#     try:
+#         user_lat = request.GET.get('lat')
+#         user_lng = request.GET.get('lng')
+#         if user_lat and user_lng:
+#             lat = float(user_lat)
+#             lng = float(user_lng)
+#             if -90 <= lat <= 90 and -180 <= lng <= 180:
+#                 user_location = (lat, lng)
+#     except (TypeError, ValueError):
+#         pass
+    
+#     if not user_location and location:
+#         loc_lat = location.get('lat')
+#         loc_lng = location.get('lng')
+#         if loc_lat and loc_lng:
+#             try:
+#                 lat = float(loc_lat)
+#                 lng = float(loc_lng)
+#                 if lat != 0.0 and lng != 0.0 and -90 <= lat <= 90 and -180 <= lng <= 180:
+#                     user_location = (lat, lng)
+#             except (TypeError, ValueError):
+#                 pass
+    
+#     # === 4. SECURITY VALIDATION ===
+#     validator = SearchSecurityValidator()
+#     is_suspicious = False
+    
+#     is_valid, error = validator.validate_timestamp(params.timestamp)
+#     if not is_valid:
+#         logger.warning(f"Timestamp validation failed: {error}")
+    
+#     is_allowed, error = validator.check_rate_limit(params.session_id, params.client_fp)
+#     if not is_allowed:
+#         logger.warning(f"Rate limit exceeded: {params.session_id}")
+#         return render(request, 'results2.html', {
+#             'query': params.query,
+#             'results': [],
+#             'has_results': False,
+#             'error': 'Too many requests. Please wait a moment and try again.',
+#             'session_id': params.session_id,
+#         })
+    
+#     is_suspicious, reason = validator.detect_bot(params.typing_time_ms, params.request_sequence)
+#     if is_suspicious:
+#         logger.info(f"Suspicious request detected: {reason}")
+    
+#     if is_bot:
+#         is_suspicious = True
+#         logger.info(f"Bot detected via User-Agent: {user_agent[:100]}")
+    
+#     # === 5. EMPTY QUERY ===
+#     if not params.query:
+#         return render(request, 'results2.html', {
+#             'query': '',
+#             'results': [],
+#             'has_results': False,
+#             'session_id': params.session_id,
+#             'show_trending': True,
+#             'data_type_facets': [],
+#             'category_facets': [],
+#             'schema_facets': [],
+#             'active_data_type': '',
+#             'active_category': '',
+#             'active_schema': '',
+#         })
+    
+#     # === 6. CHECK CACHE ===
+#     cache_key = get_cache_key(
+#         'search', params.query, page, params.alt_mode,
+#         active_data_type, active_category, active_schema,
+#         json.dumps(filters, sort_keys=True)
+#     )
+#     cached_result = safe_cache_get(cache_key)
+    
+#     if cached_result and not filters:
+#         cached_result['from_cache'] = True
+        
+#         if analytics:
+#             try:
+#                 cached_intent = cached_result.get('intent')
+#                 intent_type = None
+#                 if isinstance(cached_intent, dict):
+#                     intent_type = cached_intent.get('type')
+#                 elif isinstance(cached_intent, str):
+#                     intent_type = cached_intent
+                
+#                 analytics.track_search(
+#                     session_id=params.session_id,
+#                     query=params.query,
+#                     results_count=cached_result.get('total_results', 0),
+#                     alt_mode=params.alt_mode,
+#                     user_id=user_id,
+#                     location=location,
+#                     device_type=device_type,
+#                     search_time_ms=0,
+#                     search_strategy='cached',
+#                     corrected_query=cached_result.get('corrected_query'),
+#                     filters_applied=filters,
+#                     page=page,
+#                     intent=intent_type,
+#                     request_id=request_id,
+#                     browser=browser,
+#                     os_name=os_name,
+#                     is_mobile=is_mobile,
+#                     is_bot=is_bot
+#                 )
+#             except Exception as e:
+#                 logger.warning(f"Analytics track_search error (cached): {e}")
+        
+#         return render(request, 'results2.html', cached_result)
+    
+#     # === 7. ROUTE BASED ON ALT_MODE ===
+#     search_start_time = time.time()
+    
+#     if params.is_keyword_search:
+#         search_type = 'keyword'
+#         corrected_query = params.query
+#         was_corrected = False
+#         word_corrections = []
+#         corrections = {}
+#         tuple_array = []
+#         intent = {}
+        
+#         if detect_query_intent:
+#             intent = detect_query_intent(corrected_query, tuple_array)
+#     else:
+#         search_type = 'semantic'
+        
+#         if word_discovery_multi:
+#             try:
+#                 corrections, tuple_array, corrected_query = word_discovery_multi(params.query)
+#                 was_corrected = params.query.lower() != corrected_query.lower()
+#                 word_corrections = build_word_corrections(params.query, corrected_query)
+#             except Exception as e:
+#                 logger.error(f"Word discovery error: {e}")
+#                 corrected_query = params.query
+#                 was_corrected = False
+#                 word_corrections = []
+#                 corrections = {}
+#                 tuple_array = []
+#         else:
+#             corrected_query = params.query
+#             was_corrected = False
+#             word_corrections = []
+#             corrections = {}
+#             tuple_array = []
+        
+#         intent = {}
+#         if detect_query_intent:
+#             intent = detect_query_intent(corrected_query, tuple_array)
+    
+#     # === 8. EXECUTE SEARCH ===
+#     results = []
+#     total_results = 0
+#     search_time = 0
+#     search_strategy = search_type
+    
+#     if execute_full_search:
+#         try:
+#             result = execute_full_search(
+#                 query=corrected_query,
+#                 session_id=params.session_id,
+#                 filters=filters,
+#                 page=page,
+#                 per_page=per_page,
+#                 alt_mode=params.alt_mode, 
+#                 user_location=user_location,
+#                 pos_tags=tuple_array if params.is_semantic_search else [],
+#                 safe_search=safe_search
+#             )
+            
+#             results = result.get('results', [])
+#             total_results = result.get('total', 0)
+#             search_time = result.get('search_time', 0)
+#             search_strategy = result.get('search_strategy', search_type)
+#         except Exception as e:
+#             logger.error(f"Search execution error: {e}")
+    
+#     search_time_ms = (time.time() - search_start_time) * 1000
+    
+#     # === 9. TRACK SEARCH (Analytics) ===
+#     if analytics:
+#         try:
+#             intent_type = None
+#             if isinstance(intent, dict):
+#                 intent_type = intent.get('type')
+#             elif isinstance(intent, str):
+#                 intent_type = intent
+            
+#             analytics.track_search(
+#                 session_id=params.session_id,
+#                 query=params.query,
+#                 results_count=total_results,
+#                 alt_mode=params.alt_mode,
+#                 user_id=user_id,
+#                 location=location,
+#                 device_type=device_type,
+#                 search_time_ms=search_time_ms,
+#                 search_strategy=search_strategy,
+#                 corrected_query=corrected_query if was_corrected else None,
+#                 filters_applied=filters if filters else None,
+#                 page=page,
+#                 intent=intent_type,
+#                 request_id=request_id,
+#                 browser=browser,
+#                 os_name=os_name,
+#                 is_mobile=is_mobile,
+#                 is_bot=is_bot
+#             )
+#         except Exception as e:
+#             logger.warning(f"Analytics track_search error: {e}")
+    
+#     # === 10. ZERO RESULTS HANDLING ===
+#     suggestions = []
+#     if not results:
+#         suggestions = handle_zero_results(params.query, corrected_query, filters)
+    
+#     # === 11. GET DYNAMIC TAB FACETS (ALWAYS - even with zero results) ===
+#     # This gets facet counts WITHOUT any filters applied
+#     # So tabs show total counts across all data types
+#     tab_facets = get_dynamic_tab_facets(corrected_query)
+#     data_type_facets = tab_facets.get('data_type', [])
+#     category_facets = tab_facets.get('category', [])
+#     schema_facets = tab_facets.get('schema', [])
+    
+#     # === 12. GET SUPPLEMENTARY DATA ===
+#     facet_total = sum(f.get('count', 0) for f in data_type_facets)
+#     facets = {}
+#     related_searches = []
+#     featured = None
+    
+#     if results:
+#         if get_facets:
+#             try:
+#                 facets = get_facets(corrected_query)
+#             except Exception:
+#                 pass
+        
+#         if get_related_searches:
+#             try:
+#                 related_searches = get_related_searches(corrected_query, intent)
+#             except Exception:
+#                 pass
+        
+#         if page == 1 and get_featured_result:
+#             try:
+#                 featured = get_featured_result(corrected_query, intent, results)
+#             except Exception:
+#                 pass
+    
+#     # === 13. CATEGORIZE & PAGINATE ===
+#     categorized_results = categorize_results(results)
+#     pagination = build_pagination(page, per_page, total_results)
+    
+#     # === 14. LOG EVENTS ===
+#     if log_search_event:
+#         try:
+#             log_search_event(
+#                 query=params.query,
+#                 corrected_query=corrected_query,
+#                 session_id=params.session_id,
+#                 intent=intent,
+#                 total_results=total_results,
+#                 filters=filters,
+#                 page=page
+#             )
+#         except Exception as e:
+#             logger.warning(f"Search event logging error: {e}")
+    
+#     log_search_analytics(params, search_type, total_results, is_suspicious)
+    
+#     # === 15. BUILD CONTEXT ===
+#     context = {
+#         # Core search
+#         'query': params.query,
+#         'corrected_query': corrected_query,
+#         'was_corrected': was_corrected,
+#         'word_corrections': word_corrections,
+#         'corrections': corrections,
+#         'intent': intent,
+#         'search_type': search_type,
+#         'alt_mode': params.alt_mode,
+#         'facet_total': facet_total,
+
+#         # Results
+#         'results': results,
+#         'categorized_results': categorized_results,
+#         'total_results': total_results,
+#         'has_results': len(results) > 0,
+#         'featured': featured,
+#         'related_searches': related_searches,
+        
+#         # Filters
+#         'filters': filters,
+#         'facets': facets,
+#         'safe_search': safe_search,
+        
+#         # Dynamic tab facets (for generating tabs)
+#         'data_type_facets': data_type_facets,
+#         'category_facets': category_facets,
+#         'schema_facets': schema_facets,
+        
+#         # Active filters (for highlighting active tab/filter)
+#         'active_data_type': active_data_type,
+#         'active_category': active_category,
+#         'active_schema': active_schema,
+        
+#         # Pagination
+#         'pagination': pagination,
+#         'page': page,
+#         'per_page': per_page,
+        
+#         # Suggestions (zero results)
+#         'suggestions': suggestions,
+        
+#         # Session & tracking
+#         'session_id': params.session_id,
+#         'request_id': request_id,
+#         'search_time': search_time,
+#         'search_time_ms': search_time_ms,
+#         'from_cache': False,
+        
+#         # Device & location
+#         'device_type': device_type,
+#         'source': params.source,
+#         'user_city': location.get('city', '') if location else '',
+#         'user_country': location.get('country', '') if location else '',
+        
+#         # Label mappings for template use
+#         'data_type_labels': DATA_TYPE_LABELS,
+#         'category_labels': CATEGORY_LABELS,
+#     }
+    
+#     # === 16. CACHE RESULTS ===
+#     if not filters and total_results > 0:
+#         safe_cache_set(cache_key, context, SEARCH_CONFIG['cache_timeout'])
+    
+#     return render(request, 'results2.html', context)
+
+# def search(request):
+#     """
+#     Main search endpoint with dynamic tab filtering.
+    
+#     Supports filtering by:
+#     - data_type: content, service, product, person, media, location (tabs)
+#     - category: document_category values (secondary filter)
+#     - schema: document_schema values (tertiary filter)
+#     """
+    
+#     # === 1. EXTRACT & VALIDATE PARAMETERS ===
+#     params = SearchParams(request)
+#     page = validate_page(request.GET.get('page', 1))
+#     per_page = validate_per_page(request.GET.get('per_page', 10))
+    
+#     request_id = params.request_id or f"{params.session_id}:{time.time()}"
+    
+#     user_id = None
+#     if hasattr(request, 'user') and request.user.is_authenticated:
+#         user_id = str(request.user.id)
+    
+#     client_info = get_full_client_info(request)
+#     client_ip = client_info.get('ip', '')
+#     location = client_info.get('location') or {}
+#     device = client_info.get('device') or {}
+#     user_agent = client_info.get('user_agent', '')
+    
+#     device_type = device.get('device_type', params.device_type or 'unknown')
+#     browser = device.get('browser', 'Unknown')
+#     browser_version = device.get('browser_version', '')
+#     os_name = device.get('os', 'Unknown')
+#     os_version = device.get('os_version', '')
+#     is_mobile = device.get('is_mobile', False)
+#     is_bot = device.get('is_bot', False)
+    
+#     # === 2. START/UPDATE SESSION (Analytics) ===
+#     analytics = get_analytics()
+#     if analytics:
+#         try:
+#             analytics.start_session(
+#                 session_id=params.session_id,
+#                 user_id=user_id,
+#                 device_type=device_type,
+#                 user_agent=user_agent,
+#                 ip_address=client_ip,
+#                 location=location,
+#                 referrer=request.META.get('HTTP_REFERER'),
+#                 browser=browser,
+#                 browser_version=browser_version,
+#                 os_name=os_name,
+#                 os_version=os_version,
+#                 is_mobile=is_mobile,
+#                 is_bot=is_bot
+#             )
+#         except Exception as e:
+#             logger.warning(f"Analytics start_session error: {e}")
+    
+#     # === 3. EXTRACT FILTERS (INCLUDING DYNAMIC TAB FILTERS) ===
+#     source_filter = request.GET.get('source')
+#     if source_filter in ('home', 'results_page', 'header', None, ''):
+#         source_filter = None
+    
+#     # Dynamic tab filters
+#     active_data_type = validate_data_type(request.GET.get('data_type', ''))
+#     active_category = sanitize_filter_value(request.GET.get('category', ''))
+#     active_schema = validate_schema(request.GET.get('schema', ''))
+    
+#     # Build filters dict
+#     filters = {
+#         'data_type': active_data_type,
+#         'category': active_category,
+#         'schema': active_schema,
+#         'source': sanitize_filter_value(source_filter) if source_filter else None,
+#         'time_range': sanitize_filter_value(request.GET.get('time', '')),
+#         'location': sanitize_filter_value(request.GET.get('location', '')),
+#         'sort': validate_sort(request.GET.get('sort', ''), ['relevance', 'recent', 'authority'], 'relevance'),
+#     }
+#     # Remove empty filters
+#     filters = {k: v for k, v in filters.items() if v}
+    
+#     safe_search = request.GET.get('safe', 'on') == 'on'
+    
+#     # User location coordinates
+#     user_location = None
+#     try:
+#         user_lat = request.GET.get('lat')
+#         user_lng = request.GET.get('lng')
+#         if user_lat and user_lng:
+#             lat = float(user_lat)
+#             lng = float(user_lng)
+#             if -90 <= lat <= 90 and -180 <= lng <= 180:
+#                 user_location = (lat, lng)
+#     except (TypeError, ValueError):
+#         pass
+    
+#     if not user_location and location:
+#         loc_lat = location.get('lat')
+#         loc_lng = location.get('lng')
+#         if loc_lat and loc_lng:
+#             try:
+#                 lat = float(loc_lat)
+#                 lng = float(loc_lng)
+#                 if lat != 0.0 and lng != 0.0 and -90 <= lat <= 90 and -180 <= lng <= 180:
+#                     user_location = (lat, lng)
+#             except (TypeError, ValueError):
+#                 pass
+    
+#     # === 4. SECURITY VALIDATION ===
+#     validator = SearchSecurityValidator()
+#     is_suspicious = False
+    
+#     is_valid, error = validator.validate_timestamp(params.timestamp)
+#     if not is_valid:
+#         logger.warning(f"Timestamp validation failed: {error}")
+    
+#     is_allowed, error = validator.check_rate_limit(params.session_id, params.client_fp)
+#     if not is_allowed:
+#         logger.warning(f"Rate limit exceeded: {params.session_id}")
+#         return render(request, 'results2.html', {
+#             'query': params.query,
+#             'results': [],
+#             'has_results': False,
+#             'error': 'Too many requests. Please wait a moment and try again.',
+#             'session_id': params.session_id,
+#         })
+    
+#     is_suspicious, reason = validator.detect_bot(params.typing_time_ms, params.request_sequence)
+#     if is_suspicious:
+#         logger.info(f"Suspicious request detected: {reason}")
+    
+#     if is_bot:
+#         is_suspicious = True
+#         logger.info(f"Bot detected via User-Agent: {user_agent[:100]}")
+    
+#     # === 5. EMPTY QUERY ===
+#     if not params.query:
+#         return render(request, 'results2.html', {
+#             'query': '',
+#             'results': [],
+#             'has_results': False,
+#             'session_id': params.session_id,
+#             'show_trending': True,
+#             'data_type_facets': [],
+#             'category_facets': [],
+#             'schema_facets': [],
+#             'active_data_type': '',
+#             'active_category': '',
+#             'active_schema': '',
+#         })
+    
+#     # === 6. CHECK CACHE ===
+#     cache_key = get_cache_key(
+#         'search', params.query, page, params.alt_mode,
+#         active_data_type, active_category, active_schema,
+#         json.dumps(filters, sort_keys=True)
+#     )
+#     cached_result = safe_cache_get(cache_key)
+    
+#     if cached_result and not filters:
+#         cached_result['from_cache'] = True
+        
+#         if analytics:
+#             try:
+#                 cached_intent = cached_result.get('intent')
+#                 intent_type = None
+#                 if isinstance(cached_intent, dict):
+#                     intent_type = cached_intent.get('type')
+#                 elif isinstance(cached_intent, str):
+#                     intent_type = cached_intent
+                
+#                 analytics.track_search(
+#                     session_id=params.session_id,
+#                     query=params.query,
+#                     results_count=cached_result.get('total_results', 0),
+#                     alt_mode=params.alt_mode,
+#                     user_id=user_id,
+#                     location=location,
+#                     device_type=device_type,
+#                     search_time_ms=0,
+#                     search_strategy='cached',
+#                     corrected_query=cached_result.get('corrected_query'),
+#                     filters_applied=filters,
+#                     page=page,
+#                     intent=intent_type,
+#                     request_id=request_id,
+#                     browser=browser,
+#                     os_name=os_name,
+#                     is_mobile=is_mobile,
+#                     is_bot=is_bot
+#                 )
+#             except Exception as e:
+#                 logger.warning(f"Analytics track_search error (cached): {e}")
+        
+#         return render(request, 'results2.html', cached_result)
+    
+#     # === 7. ROUTE BASED ON ALT_MODE ===
+#     search_start_time = time.time()
+    
+#     if params.is_keyword_search:
+#         search_type = 'keyword'
+#         corrected_query = params.query
+#         was_corrected = False
+#         word_corrections = []
+#         corrections = {}
+#         tuple_array = []
+#         intent = {}
+        
+#         if detect_query_intent:
+#             intent = detect_query_intent(corrected_query, tuple_array)
+#     else:
+#         search_type = 'semantic'
+        
+#         if word_discovery_multi:
+#             try:
+#                 corrections, tuple_array, corrected_query = word_discovery_multi(params.query)
+#                 was_corrected = params.query.lower() != corrected_query.lower()
+#                 word_corrections = build_word_corrections(params.query, corrected_query)
+#             except Exception as e:
+#                 logger.error(f"Word discovery error: {e}")
+#                 corrected_query = params.query
+#                 was_corrected = False
+#                 word_corrections = []
+#                 corrections = {}
+#                 tuple_array = []
+#         else:
+#             corrected_query = params.query
+#             was_corrected = False
+#             word_corrections = []
+#             corrections = {}
+#             tuple_array = []
+        
+#         intent = {}
+#         if detect_query_intent:
+#             intent = detect_query_intent(corrected_query, tuple_array)
+    
+#     # === 8. EXECUTE SEARCH ===
+#     results = []
+#     total_results = 0
+#     search_time = 0
+#     search_strategy = search_type
+    
+#     if execute_full_search:
+#         try:
+#             result = execute_full_search(
+#                 query=corrected_query,
+#                 session_id=params.session_id,
+#                 filters=filters,
+#                 page=page,
+#                 per_page=per_page,
+#                 alt_mode=params.alt_mode, 
+#                 user_location=user_location,
+#                 pos_tags=tuple_array if params.is_semantic_search else [],
+#                 safe_search=safe_search
+#             )
+            
+#             results = result.get('results', [])
+#             total_results = result.get('total', 0)
+#             search_time = result.get('search_time', 0)
+#             search_strategy = result.get('search_strategy', search_type)
+#         except Exception as e:
+#             logger.error(f"Search execution error: {e}")
+    
+#     search_time_ms = (time.time() - search_start_time) * 1000
+    
+#     # === 9. TRACK SEARCH (Analytics) ===
+#     if analytics:
+#         try:
+#             intent_type = None
+#             if isinstance(intent, dict):
+#                 intent_type = intent.get('type')
+#             elif isinstance(intent, str):
+#                 intent_type = intent
+            
+#             analytics.track_search(
+#                 session_id=params.session_id,
+#                 query=params.query,
+#                 results_count=total_results,
+#                 alt_mode=params.alt_mode,
+#                 user_id=user_id,
+#                 location=location,
+#                 device_type=device_type,
+#                 search_time_ms=search_time_ms,
+#                 search_strategy=search_strategy,
+#                 corrected_query=corrected_query if was_corrected else None,
+#                 filters_applied=filters if filters else None,
+#                 page=page,
+#                 intent=intent_type,
+#                 request_id=request_id,
+#                 browser=browser,
+#                 os_name=os_name,
+#                 is_mobile=is_mobile,
+#                 is_bot=is_bot
+#             )
+#         except Exception as e:
+#             logger.warning(f"Analytics track_search error: {e}")
+    
+#     # === 10. ZERO RESULTS HANDLING ===
+#     suggestions = []
+#     if not results:
+#         suggestions = handle_zero_results(params.query, corrected_query, filters)
+    
+#     # === 11. GET DYNAMIC TAB FACETS (ALWAYS - even with zero results) ===
+#     # This gets facet counts WITHOUT any filters applied
+#     # So tabs show total counts across all data types
+#     tab_facets = get_dynamic_tab_facets(corrected_query)
+#     data_type_facets = tab_facets.get('data_type', [])
+#     category_facets = tab_facets.get('category', [])
+#     schema_facets = tab_facets.get('schema', [])
+    
+#     # === 11b. CALCULATE DISPLAY TOTALS ===
+#     facet_total = sum(f.get('count', 0) for f in data_type_facets)
+    
+#     # Get the facet count for the active filter (if any)
+#     active_filter_count = None
+#     if active_data_type:
+#         for f in data_type_facets:
+#             if f.get('value') == active_data_type:
+#                 active_filter_count = f.get('count', 0)
+#                 break
+    
+#     # Determine what total to display and use for pagination
+#     if active_filter_count is not None:
+#         display_total = active_filter_count
+#         pagination_total = active_filter_count
+#     else:
+#         display_total = facet_total
+#         pagination_total = total_results
+    
+#     # === 12. GET SUPPLEMENTARY DATA ===
+#     facets = {}
+#     related_searches = []
+#     featured = None
+    
+#     if results:
+#         if get_facets:
+#             try:
+#                 facets = get_facets(corrected_query)
+#             except Exception:
+#                 pass
+        
+#         if get_related_searches:
+#             try:
+#                 related_searches = get_related_searches(corrected_query, intent)
+#             except Exception:
+#                 pass
+        
+#         if page == 1 and get_featured_result:
+#             try:
+#                 featured = get_featured_result(corrected_query, intent, results)
+#             except Exception:
+#                 pass
+    
+#     # === 13. CATEGORIZE & PAGINATE ===
+#     categorized_results = categorize_results(results)
+#     pagination = build_pagination(page, per_page, pagination_total)
+    
+#     # === 14. LOG EVENTS ===
+#     if log_search_event:
+#         try:
+#             log_search_event(
+#                 query=params.query,
+#                 corrected_query=corrected_query,
+#                 session_id=params.session_id,
+#                 intent=intent,
+#                 total_results=total_results,
+#                 filters=filters,
+#                 page=page
+#             )
+#         except Exception as e:
+#             logger.warning(f"Search event logging error: {e}")
+    
+#     log_search_analytics(params, search_type, total_results, is_suspicious)
+    
+#     # === 15. BUILD CONTEXT ===
+#     context = {
+#         # Core search
+#         'query': params.query,
+#         'corrected_query': corrected_query,
+#         'was_corrected': was_corrected,
+#         'word_corrections': word_corrections,
+#         'corrections': corrections,
+#         'intent': intent,
+#         'search_type': search_type,
+#         'alt_mode': params.alt_mode,
+#         'facet_total': facet_total,
+#         'display_total': display_total,
+        
+#         # Results
+#         'results': results,
+#         'categorized_results': categorized_results,
+#         'total_results': total_results,
+#         'has_results': len(results) > 0,
+#         'featured': featured,
+#         'related_searches': related_searches,
+        
+#         # Filters
+#         'filters': filters,
+#         'facets': facets,
+#         'safe_search': safe_search,
+        
+#         # Dynamic tab facets (for generating tabs)
+#         'data_type_facets': data_type_facets,
+#         'category_facets': category_facets,
+#         'schema_facets': schema_facets,
+        
+#         # Active filters (for highlighting active tab/filter)
+#         'active_data_type': active_data_type,
+#         'active_category': active_category,
+#         'active_schema': active_schema,
+        
+#         # Pagination
+#         'pagination': pagination,
+#         'page': page,
+#         'per_page': per_page,
+        
+#         # Suggestions (zero results)
+#         'suggestions': suggestions,
+        
+#         # Session & tracking
+#         'session_id': params.session_id,
+#         'request_id': request_id,
+#         'search_time': search_time,
+#         'search_time_ms': search_time_ms,
+#         'from_cache': False,
+        
+#         # Device & location
+#         'device_type': device_type,
+#         'source': params.source,
+#         'user_city': location.get('city', '') if location else '',
+#         'user_country': location.get('country', '') if location else '',
+        
+#         # Label mappings for template use
+#         'data_type_labels': DATA_TYPE_LABELS,
+#         'category_labels': CATEGORY_LABELS,
+#     }
+    
+#     # === 16. CACHE RESULTS ===
+#     if not filters and total_results > 0:
+#         safe_cache_set(cache_key, context, SEARCH_CONFIG['cache_timeout'])
+    
+#     return render(request, 'results2.html', context)
+
+# """
+# views.py - search function (UPDATED v6.0)
+
+# KEY CHANGES:
+# 1. Uses facets returned by execute_full_search instead of separate get_dynamic_tab_facets call
+# 2. Facets are now consistent with results (same query, same filtering)
+# 3. Pagination total comes from search result, not facets
+# 4. Removed section 11b logic that caused mismatch
+# """
+
+# def search(request):
+#     """
+#     Main search endpoint with dynamic tab filtering.
+    
+#     Supports filtering by:
+#     - data_type: content, service, product, person, media, location (tabs)
+#     - category: document_category values (secondary filter)
+#     - schema: document_schema values (tertiary filter)
+#     """
+    
+#     # === 1. EXTRACT & VALIDATE PARAMETERS ===
+#     params = SearchParams(request)
+#     page = validate_page(request.GET.get('page', 1))
+#     per_page = validate_per_page(request.GET.get('per_page', 10))
+    
+#     request_id = params.request_id or f"{params.session_id}:{time.time()}"
+    
+#     user_id = None
+#     if hasattr(request, 'user') and request.user.is_authenticated:
+#         user_id = str(request.user.id)
+    
+#     client_info = get_full_client_info(request)
+#     client_ip = client_info.get('ip', '')
+#     location = client_info.get('location') or {}
+#     device = client_info.get('device') or {}
+#     user_agent = client_info.get('user_agent', '')
+    
+#     device_type = device.get('device_type', params.device_type or 'unknown')
+#     browser = device.get('browser', 'Unknown')
+#     browser_version = device.get('browser_version', '')
+#     os_name = device.get('os', 'Unknown')
+#     os_version = device.get('os_version', '')
+#     is_mobile = device.get('is_mobile', False)
+#     is_bot = device.get('is_bot', False)
+    
+#     # === 2. START/UPDATE SESSION (Analytics) ===
+#     analytics = get_analytics()
+#     if analytics:
+#         try:
+#             analytics.start_session(
+#                 session_id=params.session_id,
+#                 user_id=user_id,
+#                 device_type=device_type,
+#                 user_agent=user_agent,
+#                 ip_address=client_ip,
+#                 location=location,
+#                 referrer=request.META.get('HTTP_REFERER'),
+#                 browser=browser,
+#                 browser_version=browser_version,
+#                 os_name=os_name,
+#                 os_version=os_version,
+#                 is_mobile=is_mobile,
+#                 is_bot=is_bot
+#             )
+#         except Exception as e:
+#             logger.warning(f"Analytics start_session error: {e}")
+    
+#     # === 3. EXTRACT FILTERS (INCLUDING DYNAMIC TAB FILTERS) ===
+#     source_filter = request.GET.get('source')
+#     if source_filter in ('home', 'results_page', 'header', None, ''):
+#         source_filter = None
+    
+#     # Dynamic tab filters
+#     active_data_type = validate_data_type(request.GET.get('data_type', ''))
+#     active_category = sanitize_filter_value(request.GET.get('category', ''))
+#     active_schema = validate_schema(request.GET.get('schema', ''))
+    
+#     # Build filters dict
+#     filters = {
+#         'data_type': active_data_type,
+#         'category': active_category,
+#         'schema': active_schema,
+#         'source': sanitize_filter_value(source_filter) if source_filter else None,
+#         'time_range': sanitize_filter_value(request.GET.get('time', '')),
+#         'location': sanitize_filter_value(request.GET.get('location', '')),
+#         'sort': validate_sort(request.GET.get('sort', ''), ['relevance', 'recent', 'authority'], 'relevance'),
+#     }
+#     # Remove empty filters
+#     filters = {k: v for k, v in filters.items() if v}
+    
+#     safe_search = request.GET.get('safe', 'on') == 'on'
+    
+#     # User location coordinates
+#     user_location = None
+#     try:
+#         user_lat = request.GET.get('lat')
+#         user_lng = request.GET.get('lng')
+#         if user_lat and user_lng:
+#             lat = float(user_lat)
+#             lng = float(user_lng)
+#             if -90 <= lat <= 90 and -180 <= lng <= 180:
+#                 user_location = (lat, lng)
+#     except (TypeError, ValueError):
+#         pass
+    
+#     if not user_location and location:
+#         loc_lat = location.get('lat')
+#         loc_lng = location.get('lng')
+#         if loc_lat and loc_lng:
+#             try:
+#                 lat = float(loc_lat)
+#                 lng = float(loc_lng)
+#                 if lat != 0.0 and lng != 0.0 and -90 <= lat <= 90 and -180 <= lng <= 180:
+#                     user_location = (lat, lng)
+#             except (TypeError, ValueError):
+#                 pass
+    
+#     # === 4. SECURITY VALIDATION ===
+#     validator = SearchSecurityValidator()
+#     is_suspicious = False
+    
+#     is_valid, error = validator.validate_timestamp(params.timestamp)
+#     if not is_valid:
+#         logger.warning(f"Timestamp validation failed: {error}")
+    
+#     is_allowed, error = validator.check_rate_limit(params.session_id, params.client_fp)
+#     if not is_allowed:
+#         logger.warning(f"Rate limit exceeded: {params.session_id}")
+#         return render(request, 'results2.html', {
+#             'query': params.query,
+#             'results': [],
+#             'has_results': False,
+#             'error': 'Too many requests. Please wait a moment and try again.',
+#             'session_id': params.session_id,
+#         })
+    
+#     is_suspicious, reason = validator.detect_bot(params.typing_time_ms, params.request_sequence)
+#     if is_suspicious:
+#         logger.info(f"Suspicious request detected: {reason}")
+    
+#     if is_bot:
+#         is_suspicious = True
+#         logger.info(f"Bot detected via User-Agent: {user_agent[:100]}")
+    
+#     # === 5. EMPTY QUERY ===
+#     if not params.query:
+#         return render(request, 'results2.html', {
+#             'query': '',
+#             'results': [],
+#             'has_results': False,
+#             'session_id': params.session_id,
+#             'show_trending': True,
+#             'data_type_facets': [],
+#             'category_facets': [],
+#             'schema_facets': [],
+#             'active_data_type': '',
+#             'active_category': '',
+#             'active_schema': '',
+#         })
+    
+#     # === 6. CHECK CACHE ===
+#     cache_key = get_cache_key(
+#         'search', params.query, page, params.alt_mode,
+#         active_data_type, active_category, active_schema,
+#         json.dumps(filters, sort_keys=True)
+#     )
+#     cached_result = safe_cache_get(cache_key)
+    
+#     if cached_result and not filters:
+#         cached_result['from_cache'] = True
+        
+#         if analytics:
+#             try:
+#                 cached_intent = cached_result.get('intent')
+#                 intent_type = None
+#                 if isinstance(cached_intent, dict):
+#                     intent_type = cached_intent.get('type')
+#                 elif isinstance(cached_intent, str):
+#                     intent_type = cached_intent
+                
+#                 analytics.track_search(
+#                     session_id=params.session_id,
+#                     query=params.query,
+#                     results_count=cached_result.get('total_results', 0),
+#                     alt_mode=params.alt_mode,
+#                     user_id=user_id,
+#                     location=location,
+#                     device_type=device_type,
+#                     search_time_ms=0,
+#                     search_strategy='cached',
+#                     corrected_query=cached_result.get('corrected_query'),
+#                     filters_applied=filters,
+#                     page=page,
+#                     intent=intent_type,
+#                     request_id=request_id,
+#                     browser=browser,
+#                     os_name=os_name,
+#                     is_mobile=is_mobile,
+#                     is_bot=is_bot
+#                 )
+#             except Exception as e:
+#                 logger.warning(f"Analytics track_search error (cached): {e}")
+        
+#         return render(request, 'results2.html', cached_result)
+    
+#     # === 7. ROUTE BASED ON ALT_MODE ===
+#     search_start_time = time.time()
+    
+#     if params.is_keyword_search:
+#         search_type = 'keyword'
+#         corrected_query = params.query
+#         was_corrected = False
+#         word_corrections = []
+#         corrections = {}
+#         tuple_array = []
+#         intent = {}
+        
+#         if detect_query_intent:
+#             intent = detect_query_intent(corrected_query, tuple_array)
+#     else:
+#         search_type = 'semantic'
+        
+#         if word_discovery_multi:
+#             try:
+#                 corrections, tuple_array, corrected_query = word_discovery_multi(params.query)
+#                 was_corrected = params.query.lower() != corrected_query.lower()
+#                 word_corrections = build_word_corrections(params.query, corrected_query)
+#             except Exception as e:
+#                 logger.error(f"Word discovery error: {e}")
+#                 corrected_query = params.query
+#                 was_corrected = False
+#                 word_corrections = []
+#                 corrections = {}
+#                 tuple_array = []
+#         else:
+#             corrected_query = params.query
+#             was_corrected = False
+#             word_corrections = []
+#             corrections = {}
+#             tuple_array = []
+        
+#         intent = {}
+#         if detect_query_intent:
+#             intent = detect_query_intent(corrected_query, tuple_array)
+    
+#     # === 8. EXECUTE SEARCH ===
+#     results = []
+#     total_results = 0
+#     search_time = 0
+#     search_strategy = search_type
+    
+#     # NEW: Initialize facets (will be populated from search result)
+#     data_type_facets = []
+#     category_facets = []
+#     schema_facets = []
+    
+#     if execute_full_search:
+#         try:
+#             result = execute_full_search(
+#                 query=corrected_query,
+#                 session_id=params.session_id,
+#                 filters=filters,
+#                 page=page,
+#                 per_page=per_page,
+#                 alt_mode=params.alt_mode, 
+#                 user_location=user_location,
+#                 pos_tags=tuple_array if params.is_semantic_search else [],
+#                 safe_search=safe_search
+#             )
+            
+#             results = result.get('results', [])
+#             total_results = result.get('total', 0)
+#             search_time = result.get('search_time', 0)
+#             search_strategy = result.get('search_strategy', search_type)
+            
+#             # NEW: Get facets from the search result (same query, consistent counts)
+#             data_type_facets = result.get('data_type_facets', [])
+#             category_facets = result.get('category_facets', [])
+#             schema_facets = result.get('schema_facets', [])
+            
+#         except Exception as e:
+#             logger.error(f"Search execution error: {e}")
+    
+#     search_time_ms = (time.time() - search_start_time) * 1000
+    
+#     # === 9. TRACK SEARCH (Analytics) ===
+#     if analytics:
+#         try:
+#             intent_type = None
+#             if isinstance(intent, dict):
+#                 intent_type = intent.get('type')
+#             elif isinstance(intent, str):
+#                 intent_type = intent
+            
+#             analytics.track_search(
+#                 session_id=params.session_id,
+#                 query=params.query,
+#                 results_count=total_results,
+#                 alt_mode=params.alt_mode,
+#                 user_id=user_id,
+#                 location=location,
+#                 device_type=device_type,
+#                 search_time_ms=search_time_ms,
+#                 search_strategy=search_strategy,
+#                 corrected_query=corrected_query if was_corrected else None,
+#                 filters_applied=filters if filters else None,
+#                 page=page,
+#                 intent=intent_type,
+#                 request_id=request_id,
+#                 browser=browser,
+#                 os_name=os_name,
+#                 is_mobile=is_mobile,
+#                 is_bot=is_bot
+#             )
+#         except Exception as e:
+#             logger.warning(f"Analytics track_search error: {e}")
+    
+#     # === 10. ZERO RESULTS HANDLING ===
+#     suggestions = []
+#     if not results:
+#         suggestions = handle_zero_results(params.query, corrected_query, filters)
+    
+#     # === 11. CALCULATE DISPLAY TOTALS (SIMPLIFIED) ===
+#     # NEW: Facets now come from the search result, so they're consistent
+#     # No need for separate facet query or complex total calculation
+    
+#     facet_total = sum(f.get('count', 0) for f in data_type_facets)
+    
+#     # Display total is simply the facet total (sum of all types)
+#     # If no facets, fall back to total_results
+#     display_total = facet_total if facet_total > 0 else total_results
+    
+#     # Pagination total is the actual result count from search
+#     # This is now accurate because execute_full_search returns the correct total
+#     pagination_total = total_results
+    
+#     # === 12. GET SUPPLEMENTARY DATA ===
+#     facets = {}
+#     related_searches = []
+#     featured = None
+    
+#     if results:
+#         if get_facets:
+#             try:
+#                 facets = get_facets(corrected_query)
+#             except Exception:
+#                 pass
+        
+#         if get_related_searches:
+#             try:
+#                 related_searches = get_related_searches(corrected_query, intent)
+#             except Exception:
+#                 pass
+        
+#         if page == 1 and get_featured_result:
+#             try:
+#                 featured = get_featured_result(corrected_query, intent, results)
+#             except Exception:
+#                 pass
+    
+#     # === 13. CATEGORIZE & PAGINATE ===
+#     categorized_results = categorize_results(results)
+#     pagination = build_pagination(page, per_page, pagination_total)
+    
+#     # === 14. LOG EVENTS ===
+#     if log_search_event:
+#         try:
+#             log_search_event(
+#                 query=params.query,
+#                 corrected_query=corrected_query,
+#                 session_id=params.session_id,
+#                 intent=intent,
+#                 total_results=total_results,
+#                 filters=filters,
+#                 page=page
+#             )
+#         except Exception as e:
+#             logger.warning(f"Search event logging error: {e}")
+    
+#     log_search_analytics(params, search_type, total_results, is_suspicious)
+    
+#     # === 15. BUILD CONTEXT ===
+#     context = {
+#         # Core search
+#         'query': params.query,
+#         'corrected_query': corrected_query,
+#         'was_corrected': was_corrected,
+#         'word_corrections': word_corrections,
+#         'corrections': corrections,
+#         'intent': intent,
+#         'search_type': search_type,
+#         'alt_mode': params.alt_mode,
+#         'facet_total': facet_total,
+#         'display_total': display_total,
+        
+#         # Results
+#         'results': results,
+#         'categorized_results': categorized_results,
+#         'total_results': total_results,
+#         'has_results': len(results) > 0,
+#         'featured': featured,
+#         'related_searches': related_searches,
+        
+#         # Filters
+#         'filters': filters,
+#         'facets': facets,
+#         'safe_search': safe_search,
+        
+#         # Dynamic tab facets (NOW from search result, not separate query)
+#         'data_type_facets': data_type_facets,
+#         'category_facets': category_facets,
+#         'schema_facets': schema_facets,
+        
+#         # Active filters (for highlighting active tab/filter)
+#         'active_data_type': active_data_type,
+#         'active_category': active_category,
+#         'active_schema': active_schema,
+        
+#         # Pagination
+#         'pagination': pagination,
+#         'page': page,
+#         'per_page': per_page,
+        
+#         # Suggestions (zero results)
+#         'suggestions': suggestions,
+        
+#         # Session & tracking
+#         'session_id': params.session_id,
+#         'request_id': request_id,
+#         'search_time': search_time,
+#         'search_time_ms': search_time_ms,
+#         'from_cache': False,
+        
+#         # Device & location
+#         'device_type': device_type,
+#         'source': params.source,
+#         'user_city': location.get('city', '') if location else '',
+#         'user_country': location.get('country', '') if location else '',
+        
+#         # Label mappings for template use
+#         'data_type_labels': DATA_TYPE_LABELS,
+#         'category_labels': CATEGORY_LABELS,
+#     }
+    
+#     # === 16. CACHE RESULTS ===
+#     if not filters and total_results > 0:
+#         safe_cache_set(cache_key, context, SEARCH_CONFIG['cache_timeout'])
+    
+#     return render(request, 'results2.html', context)
+
 def search(request):
     """
     Main search endpoint with dynamic tab filtering.
@@ -8336,7 +9652,7 @@ def search(request):
     # === 1. EXTRACT & VALIDATE PARAMETERS ===
     params = SearchParams(request)
     page = validate_page(request.GET.get('page', 1))
-    per_page = validate_per_page(request.GET.get('per_page', 20))
+    per_page = validate_per_page(request.GET.get('per_page', 10))
     
     request_id = params.request_id or f"{params.session_id}:{time.time()}"
     
@@ -8564,6 +9880,12 @@ def search(request):
     search_time = 0
     search_strategy = search_type
     
+    # Initialize facets (will be populated from search result)
+    data_type_facets = []
+    category_facets = []
+    schema_facets = []
+    facet_total = 0
+    
     if execute_full_search:
         try:
             result = execute_full_search(
@@ -8582,6 +9904,15 @@ def search(request):
             total_results = result.get('total', 0)
             search_time = result.get('search_time', 0)
             search_strategy = result.get('search_strategy', search_type)
+            
+            # Get facets from the search result
+            # data_type_facets are calculated WITHOUT data_type filter (consistent)
+            # category/schema_facets are calculated WITH current filters (scoped)
+            data_type_facets = result.get('data_type_facets', [])
+            category_facets = result.get('category_facets', [])
+            schema_facets = result.get('schema_facets', [])
+            facet_total = result.get('facet_total', 0)
+            
         except Exception as e:
             logger.error(f"Search execution error: {e}")
     
@@ -8624,13 +9955,22 @@ def search(request):
     if not results:
         suggestions = handle_zero_results(params.query, corrected_query, filters)
     
-    # === 11. GET DYNAMIC TAB FACETS (ALWAYS - even with zero results) ===
-    # This gets facet counts WITHOUT any filters applied
-    # So tabs show total counts across all data types
-    tab_facets = get_dynamic_tab_facets(corrected_query)
-    data_type_facets = tab_facets.get('data_type', [])
-    category_facets = tab_facets.get('category', [])
-    schema_facets = tab_facets.get('schema', [])
+    # === 11. USE FACETS FROM SEARCH RESULT ===
+    # Facets now come from execute_full_search:
+    # - data_type_facets: Always calculated WITHOUT data_type filter (consistent tab counts)
+    # - category_facets/schema_facets: Calculated WITH current filters (scoped sidebar)
+    # - facet_total: Sum of all data_type counts (consistent regardless of filter)
+    
+    # facet_total is already extracted from result in section 8
+    # If it's 0, calculate from facets as fallback
+    if facet_total == 0:
+        facet_total = sum(f.get('count', 0) for f in data_type_facets)
+    
+    # Display total is the facet total (consistent across all tabs)
+    display_total = facet_total if facet_total > 0 else total_results
+    
+    # Pagination total is the actual result count for current filter
+    pagination_total = total_results
     
     # === 12. GET SUPPLEMENTARY DATA ===
     facets = {}
@@ -8658,7 +9998,7 @@ def search(request):
     
     # === 13. CATEGORIZE & PAGINATE ===
     categorized_results = categorize_results(results)
-    pagination = build_pagination(page, per_page, total_results)
+    pagination = build_pagination(page, per_page, pagination_total)
     
     # === 14. LOG EVENTS ===
     if log_search_event:
@@ -8688,6 +10028,8 @@ def search(request):
         'intent': intent,
         'search_type': search_type,
         'alt_mode': params.alt_mode,
+        'facet_total': facet_total,
+        'display_total': display_total,
         
         # Results
         'results': results,
@@ -8702,7 +10044,7 @@ def search(request):
         'facets': facets,
         'safe_search': safe_search,
         
-        # Dynamic tab facets (for generating tabs)
+        # Dynamic tab facets (NOW from search result, not separate query)
         'data_type_facets': data_type_facets,
         'category_facets': category_facets,
         'schema_facets': schema_facets,

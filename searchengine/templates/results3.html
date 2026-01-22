@@ -3378,3 +3378,457 @@
     </script>
 </body>
 </html>
+
+
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ query }} - AfroTodo Search</title>
+    <meta name="description" content="Search results for {{ query }} on AfroTodo - Discover Black business, culture & community.">
+    <meta name="csrf-token" content="{{ csrf_token }}">
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700;800&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --black: #1a1a1a;
+            --green: #2d6a4f;
+            --green-light: #40916c;
+            --green-soft: rgba(45, 106, 79, 0.08);
+            --gold: #d4a03a;
+            --gold-light: #e9c46a;
+            --gold-soft: rgba(212, 160, 58, 0.1);
+            --red: #bc4749;
+            --red-deep: #9b2226;
+            --cream: #faf8f5;
+            --warm-white: #fffef9;
+            --gray-50: #fafaf9;
+            --gray-100: #f5f3f0;
+            --gray-200: #e8e4df;
+            --gray-300: #d4cfc8;
+            --gray-400: #a8a29e;
+            --gray-500: #8a8279;
+            --gray-600: #6b645b;
+            --gray-700: #4a4640;
+            --font-display: 'Playfair Display', Georgia, serif;
+            --font-body: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+            --space-xs: 4px;
+            --space-sm: 8px;
+            --space-md: 16px;
+            --space-lg: 24px;
+            --space-xl: 32px;
+            --space-2xl: 48px;
+            --transition-fast: 150ms ease;
+            --transition-base: 250ms ease;
+        }
+
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: var(--font-body); font-size: 15px; color: var(--black); background: var(--cream); line-height: 1.6; min-height: 100vh; }
+        a { text-decoration: none; color: inherit; }
+
+        .header { position: sticky; top: 0; background: rgba(250, 248, 245, 0.95); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); z-index: 100; border-bottom: 1px solid var(--gray-200); }
+        .header-top { display: flex; align-items: center; padding: var(--space-md) var(--space-lg); max-width: 1200px; margin: 0 auto; gap: var(--space-lg); }
+        .logo { flex-shrink: 0; }
+        .logo a { font-family: var(--font-display); font-size: 26px; font-weight: 700; display: flex; align-items: baseline; }
+        .logo .letter-a { color: var(--black); }
+        .logo .letter-f { color: var(--green); }
+        .logo .letter-r { color: var(--gold); }
+        .logo .letter-o { color: var(--red); }
+        .logo .letter-text { color: var(--black); }
+
+        .search-wrapper { flex: 1; max-width: 640px; }
+        .search-box { display: flex; align-items: center; background: var(--warm-white); border: 2px solid var(--gray-200); border-radius: 12px; padding: var(--space-xs) var(--space-sm) var(--space-xs) var(--space-md); transition: all var(--transition-base); }
+        .search-box:hover { border-color: var(--gray-300); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06); }
+        .search-box:focus-within { border-color: var(--green); box-shadow: 0 0 0 3px var(--green-soft); }
+        .search-icon { width: 20px; height: 20px; color: var(--gray-500); flex-shrink: 0; margin-right: var(--space-sm); }
+        .search-input { flex: 1; border: none; outline: none; font-family: var(--font-body); font-size: 16px; color: var(--black); background: transparent; padding: var(--space-sm) 0; min-width: 0; }
+        .search-input::placeholder { color: var(--gray-400); }
+        .search-actions { display: flex; align-items: center; gap: var(--space-xs); }
+        .search-action-btn { width: 36px; height: 36px; background: none; border: none; cursor: pointer; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: var(--gray-500); transition: all var(--transition-fast); }
+        .search-action-btn:hover { background: var(--gray-100); color: var(--gray-700); }
+        .search-divider { width: 1px; height: 24px; background: var(--gray-300); margin: 0 var(--space-xs); }
+        .search-submit { width: 40px; height: 40px; background: var(--black); border: none; cursor: pointer; border-radius: 10px; display: flex; align-items: center; justify-content: center; color: var(--warm-white); transition: all var(--transition-fast); }
+        .search-submit:hover { background: var(--gray-700); transform: scale(1.02); }
+        .search-submit svg { width: 18px; height: 18px; }
+
+        .header-auth { display: flex; align-items: center; gap: var(--space-sm); flex-shrink: 0; }
+        .auth-link { padding: var(--space-sm) var(--space-md); font-size: 14px; font-weight: 500; border-radius: 8px; transition: all var(--transition-fast); }
+        .auth-link.login { color: var(--gray-700); }
+        .auth-link.login:hover { background: var(--gray-100); }
+        .auth-link.signup { background: var(--black); color: var(--warm-white); }
+        .auth-link.signup:hover { background: var(--gray-700); }
+        .user-greeting { font-size: 14px; color: var(--gray-600); padding: var(--space-sm) var(--space-md); background: var(--gray-100); border-radius: 20px; }
+
+        /* TABS - JITTER FIX using ::after */
+        .nav-tabs { display: flex; align-items: center; padding: 0 var(--space-lg); max-width: 1200px; margin: 0 auto; gap: var(--space-xs); overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; height: 44px; }
+        .nav-tabs::-webkit-scrollbar { display: none; }
+        .nav-tab { position: relative; display: flex; align-items: center; gap: var(--space-sm); padding: var(--space-sm) var(--space-md); font-size: 14px; font-weight: 500; color: var(--gray-600); border-radius: 8px; white-space: nowrap; transition: color var(--transition-fast), background var(--transition-fast); flex-shrink: 0; }
+        .nav-tab:hover { color: var(--black); background: var(--gray-100); }
+        .nav-tab.active { color: var(--green); background: transparent; }
+        .nav-tab::after { content: ''; position: absolute; bottom: -1px; left: var(--space-sm); right: var(--space-sm); height: 2px; background: transparent; border-radius: 2px 2px 0 0; transition: background var(--transition-fast); }
+        .nav-tab.active::after { background: var(--green); }
+        .nav-tab svg { width: 16px; height: 16px; flex-shrink: 0; }
+        .nav-tab .tab-count { font-size: 11px; font-weight: 600; background: var(--gray-200); color: var(--gray-600); padding: 2px 6px; border-radius: 10px; margin-left: 4px; }
+        .nav-tab.active .tab-count { background: var(--green-soft); color: var(--green); }
+
+        .main-content { display: flex; max-width: 1200px; margin: 0 auto; padding: var(--space-lg); gap: var(--space-2xl); }
+        .results-area { flex: 1; max-width: 700px; }
+
+        .results-stats { display: flex; align-items: center; gap: var(--space-sm); color: var(--gray-500); font-size: 14px; padding-bottom: var(--space-md); border-bottom: 1px solid var(--gray-200); margin-bottom: var(--space-lg); flex-wrap: wrap; }
+        .results-count { font-weight: 600; color: var(--gray-700); }
+        .active-filter-badge { display: inline-flex; align-items: center; gap: 4px; background: var(--green-soft); color: var(--green); padding: 4px 10px; border-radius: 20px; font-size: 13px; font-weight: 500; }
+        .active-filter-badge.schema-badge { background: rgba(99, 102, 241, 0.1); color: #6366f1; }
+        .active-filter-badge .remove-filter { width: 14px; height: 14px; display: flex; align-items: center; justify-content: center; background: var(--green); color: white; border-radius: 50%; cursor: pointer; margin-left: 4px; }
+        .active-filter-badge.schema-badge .remove-filter { background: #6366f1; }
+        .active-filter-badge .remove-filter:hover { background: var(--green-light); }
+        .active-filter-badge.schema-badge .remove-filter:hover { background: #818cf8; }
+
+        .spelling-correction { background: var(--gold-soft); border-left: 3px solid var(--gold); padding: var(--space-md); border-radius: 0 8px 8px 0; margin-bottom: var(--space-lg); }
+        .including-results { font-size: 15px; color: var(--black); margin-bottom: var(--space-xs); }
+        .including-results .label { color: var(--gray-600); }
+        .corrected-link { color: var(--green); font-weight: 600; }
+        .corrected-link:hover { text-decoration: underline; }
+        .search-instead { font-size: 14px; color: var(--gray-500); }
+        .search-instead a { color: var(--green); font-weight: 500; }
+        .search-instead a:hover { text-decoration: underline; }
+
+        .result-item { background: var(--warm-white); border: 1px solid var(--gray-200); border-radius: 12px; padding: var(--space-lg); margin-bottom: var(--space-md); transition: all var(--transition-fast); }
+        .result-item:hover { border-color: var(--gray-300); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06); transform: translateY(-1px); }
+        .result-header { display: flex; align-items: center; margin-bottom: var(--space-sm); }
+        .result-favicon { width: 32px; height: 32px; border-radius: 8px; background: var(--gray-100); display: flex; align-items: center; justify-content: center; margin-right: var(--space-sm); font-size: 13px; font-weight: 600; color: var(--gray-600); overflow: hidden; flex-shrink: 0; }
+        .result-favicon img { width: 20px; height: 20px; object-fit: contain; }
+        .result-site-info { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+        .result-site-name { font-size: 13px; font-weight: 600; color: var(--gray-700); line-height: 1.3; }
+        .result-url { font-size: 12px; color: var(--gray-500); display: flex; align-items: center; flex-wrap: wrap; gap: 2px; }
+        .result-url-part { display: flex; align-items: center; }
+        .result-url-part::after { content: '›'; margin: 0 4px; color: var(--gray-400); }
+        .result-url-part:last-child::after { display: none; }
+
+        /* 6 CATEGORY BADGE COLORS */
+        .result-type-badge { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; padding: 3px 8px; border-radius: 4px; margin-left: auto; cursor: pointer; transition: all var(--transition-fast); }
+        .result-type-badge:hover { transform: scale(1.05); }
+        .result-type-badge.article { background: #e0f2fe; color: #0369a1; }
+        .result-type-badge.person { background: #ede9fe; color: #6d28d9; }
+        .result-type-badge.business { background: var(--green-soft); color: var(--green); }
+        .result-type-badge.place { background: rgba(188, 71, 73, 0.1); color: var(--red); }
+        .result-type-badge.media { background: rgba(236, 72, 153, 0.1); color: #ec4899; }
+        .result-type-badge.event { background: var(--gold-soft); color: var(--gold); }
+
+        .result-title { font-family: var(--font-display); font-size: 20px; font-weight: 600; line-height: 1.3; margin-bottom: var(--space-sm); }
+        .result-title a { color: var(--black); transition: color var(--transition-fast); }
+        .result-title a:hover { color: var(--green); }
+        .result-title a:visited { color: var(--gray-600); }
+
+        .result-snippet { font-size: 14px; line-height: 1.6; color: var(--gray-600); }
+        .result-snippet em, .result-snippet b, .result-snippet strong { color: var(--black); font-weight: 600; font-style: normal; background: var(--gold-soft); padding: 1px 3px; border-radius: 3px; }
+        .result-date { color: var(--gray-500); font-size: 13px; }
+
+        .result-meta { display: flex; align-items: center; gap: var(--space-md); margin-top: var(--space-sm); padding-top: var(--space-sm); border-top: 1px solid var(--gray-100); flex-wrap: wrap; }
+        .result-tag { font-size: 12px; font-weight: 500; padding: 4px 10px; border-radius: 20px; background: var(--gray-100); color: var(--gray-600); }
+        .result-tag.clickable { cursor: pointer; transition: all var(--transition-fast); }
+        .result-tag.clickable:hover { background: var(--gray-200); }
+        .result-tag.article { background: #e0f2fe; color: #0369a1; }
+        .result-tag.blogposting { background: #fce7f3; color: #be185d; }
+        .result-tag.newsarticle { background: #dbeafe; color: #1d4ed8; }
+        .result-tag.howto { background: #d1fae5; color: #047857; }
+        .result-tag.recipe { background: #fef3c7; color: #b45309; }
+        .result-tag.product { background: var(--gold-soft); color: var(--gold); }
+        .result-tag.service { background: var(--green-soft); color: var(--green); }
+        .result-tag.localbusiness { background: rgba(188, 71, 73, 0.1); color: var(--red); }
+        .result-tag.person { background: #ede9fe; color: #6d28d9; }
+        .result-tag.organization { background: #e0e7ff; color: #4338ca; }
+        .result-tag.event { background: #fce7f3; color: #be185d; }
+        .result-tag.videoobject { background: #fee2e2; color: #b91c1c; }
+        .result-tag.audioobject { background: #fef3c7; color: #92400e; }
+        .result-tag.imagegallery { background: #f3e8ff; color: #7c3aed; }
+        .result-tag.faqpage { background: #ccfbf1; color: #0d9488; }
+        .result-tag.webpage { background: var(--gray-100); color: var(--gray-600); }
+
+        .pagination { display: flex; flex-direction: column; align-items: center; gap: var(--space-md); margin-top: var(--space-xl); padding-top: var(--space-lg); border-top: 1px solid var(--gray-200); }
+        .pagination-info { font-size: 14px; color: var(--gray-500); }
+        .pagination-controls { display: flex; align-items: center; gap: var(--space-sm); }
+        .pagination-btn { display: flex; align-items: center; gap: 4px; padding: var(--space-sm) var(--space-md); font-size: 14px; font-weight: 500; color: var(--gray-700); background: var(--warm-white); border: 1px solid var(--gray-200); border-radius: 8px; transition: all var(--transition-fast); }
+        .pagination-btn:hover { background: var(--gray-100); border-color: var(--gray-300); }
+        .pagination-btn.disabled { opacity: 0.5; pointer-events: none; }
+        .pagination-pages { display: flex; align-items: center; gap: 4px; }
+        .pagination-page { min-width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 500; color: var(--gray-700); background: var(--warm-white); border: 1px solid var(--gray-200); border-radius: 8px; transition: all var(--transition-fast); }
+        .pagination-page:hover:not(.active) { background: var(--gray-100); border-color: var(--gray-300); }
+        .pagination-page.active { background: var(--black); color: var(--warm-white); border-color: var(--black); }
+        .pagination-ellipsis { color: var(--gray-400); padding: 0 var(--space-xs); }
+
+        .no-results { text-align: center; padding: var(--space-2xl) var(--space-lg); }
+        .no-results-icon { width: 64px; height: 64px; background: var(--gray-100); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto var(--space-lg); color: var(--gray-400); }
+        .no-results h2 { font-family: var(--font-display); font-size: 22px; font-weight: 600; color: var(--black); margin-bottom: var(--space-md); }
+        .no-results h2 b { color: var(--green); }
+        .no-results p { color: var(--gray-600); margin-bottom: var(--space-md); }
+        .no-results-suggestions { text-align: left; max-width: 400px; margin: 0 auto; background: var(--warm-white); border: 1px solid var(--gray-200); border-radius: 12px; padding: var(--space-lg); }
+        .no-results-suggestions h3 { font-size: 14px; font-weight: 600; color: var(--gray-700); margin-bottom: var(--space-sm); }
+        .no-results-suggestions ul { list-style: none; }
+        .no-results-suggestions li { position: relative; padding-left: var(--space-lg); margin-bottom: var(--space-sm); color: var(--gray-600); font-size: 14px; }
+        .no-results-suggestions li::before { content: '→'; position: absolute; left: 0; color: var(--green); }
+
+        .sidebar { width: 320px; flex-shrink: 0; }
+        .sidebar-section { background: var(--warm-white); border: 1px solid var(--gray-200); border-radius: 12px; padding: var(--space-lg); margin-bottom: var(--space-md); }
+        .sidebar-title { font-family: var(--font-display); font-size: 16px; font-weight: 600; color: var(--black); margin-bottom: var(--space-md); display: flex; align-items: center; gap: var(--space-sm); }
+        .sidebar-title svg { width: 18px; height: 18px; color: var(--gold); }
+        .filter-options { display: flex; flex-direction: column; gap: 4px; }
+        .filter-option { display: flex; align-items: center; justify-content: space-between; padding: var(--space-sm) var(--space-md); font-size: 14px; color: var(--gray-700); background: var(--gray-50); border-radius: 8px; transition: all var(--transition-fast); cursor: pointer; }
+        .filter-option:hover { background: var(--gray-100); }
+        .filter-option.active { background: var(--green-soft); color: var(--green); }
+        .filter-option .count { font-size: 12px; font-weight: 600; color: var(--gray-400); }
+        .filter-option.active .count { color: var(--green); }
+
+        .related-searches { display: flex; flex-direction: column; gap: var(--space-sm); }
+        .related-search { display: flex; align-items: center; gap: var(--space-sm); padding: var(--space-sm) var(--space-md); background: var(--gray-50); border-radius: 8px; font-size: 14px; color: var(--gray-700); transition: all var(--transition-fast); }
+        .related-search:hover { background: var(--gray-100); color: var(--black); }
+        .related-search svg { width: 14px; height: 14px; color: var(--gray-400); flex-shrink: 0; }
+
+        .trending-item { display: flex; align-items: flex-start; gap: var(--space-sm); padding: var(--space-sm) 0; border-bottom: 1px solid var(--gray-100); }
+        .trending-item:last-child { border-bottom: none; padding-bottom: 0; }
+        .trending-number { font-size: 12px; font-weight: 600; color: var(--gray-400); width: 20px; flex-shrink: 0; }
+        .trending-content { flex: 1; }
+        .trending-query { font-size: 14px; font-weight: 500; color: var(--black); margin-bottom: 2px; }
+        .trending-query:hover { color: var(--green); }
+        .trending-meta { font-size: 12px; color: var(--gray-500); }
+
+        .footer { background: var(--warm-white); border-top: 1px solid var(--gray-200); margin-top: var(--space-2xl); }
+        .footer-content { max-width: 1200px; margin: 0 auto; padding: var(--space-lg); }
+        .footer-top { display: flex; justify-content: space-between; align-items: center; padding-bottom: var(--space-md); border-bottom: 1px solid var(--gray-100); margin-bottom: var(--space-md); }
+        .footer-brand { font-family: var(--font-display); font-size: 18px; font-weight: 700; color: var(--black); }
+        .footer-links { display: flex; gap: var(--space-lg); flex-wrap: wrap; }
+        .footer-link { font-size: 14px; color: var(--gray-500); transition: color var(--transition-fast); }
+        .footer-link:hover { color: var(--black); }
+        .footer-tagline { font-size: 13px; color: var(--gray-500); text-align: center; }
+
+        @media (max-width: 1024px) { .sidebar { display: none; } .results-area { max-width: none; } }
+        @media (max-width: 768px) {
+            .header-top { flex-wrap: wrap; padding: var(--space-sm) var(--space-md); gap: var(--space-sm); }
+            .logo a { font-size: 22px; }
+            .search-wrapper { order: 3; width: 100%; max-width: none; }
+            .header-auth { margin-left: auto; }
+            .nav-tabs { padding: 0 var(--space-md); gap: 2px; height: 40px; }
+            .nav-tab { padding: var(--space-sm); font-size: 13px; }
+            .nav-tab svg { width: 14px; height: 14px; }
+            .main-content { padding: var(--space-md); }
+            .result-item { padding: var(--space-md); }
+            .result-title { font-size: 18px; }
+            .result-header { flex-wrap: wrap; gap: var(--space-sm); }
+            .result-type-badge { order: -1; margin-left: 0; margin-bottom: var(--space-xs); }
+            .result-site-info { flex: 1 1 calc(100% - 44px); }
+            .result-url { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
+            .results-stats { flex-wrap: nowrap; overflow-x: auto; padding-bottom: var(--space-sm); -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+            .results-stats::-webkit-scrollbar { display: none; }
+            .footer-top { flex-direction: column; gap: var(--space-md); text-align: center; }
+            .footer-links { justify-content: center; }
+        }
+        @media (max-width: 480px) {
+            body { font-size: 14px; }
+            .logo a { font-size: 20px; }
+            .search-input { font-size: 16px !important; }
+            .nav-tabs { padding: 0 var(--space-sm); height: 36px; }
+            .nav-tab { padding: var(--space-xs) var(--space-sm); font-size: 12px; }
+            .nav-tab svg { width: 12px; height: 12px; }
+            .nav-tab .tab-count { display: none; }
+            .main-content { padding: var(--space-sm); }
+            .result-item { padding: var(--space-sm) var(--space-md); margin-bottom: var(--space-sm); }
+            .result-favicon { width: 28px; height: 28px; }
+            .result-title { font-size: 16px; }
+            .result-snippet { font-size: 13px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+            .pagination-first, .pagination-last { display: none; }
+        }
+        @media (max-width: 360px) {
+            .logo a { font-size: 18px; }
+            .nav-tab { padding: 6px 8px; font-size: 11px; }
+            .nav-tab svg { display: none; }
+            .result-title { font-size: 15px; }
+            .result-snippet { -webkit-line-clamp: 2; }
+        }
+        @media print { .header, .sidebar, .footer, .pagination, .nav-tabs { display: none !important; } }
+        @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration: 0.01ms !important; } }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="header-top">
+            <div class="logo">
+                <a href="/"><span class="letter-a">A</span><span class="letter-f">f</span><span class="letter-r">r</span><span class="letter-o">o</span><span class="letter-text">Todo</span></a>
+            </div>
+            <div class="search-wrapper">
+                <form action="/search" method="GET" id="search-form">
+                    <div class="search-box">
+                        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                        <input type="text" name="query" class="search-input" value="{{ query }}" autocomplete="off" placeholder="Search Black business, culture & community...">
+                        <input type="hidden" name="session_id" value="{{ session_id }}">
+                        <div class="search-actions">
+                            <button type="button" class="search-action-btn" onclick="clearSearch()" title="Clear"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+                            <span class="search-divider"></span>
+                            <button type="submit" class="search-submit" title="Search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="header-auth">
+                {% if user.is_authenticated %}
+                <span class="user-greeting">{{ user.username }}</span>
+                <a href="" class="auth-link login">Logout</a>
+                {% else %}
+                <a href="" class="auth-link login">Login</a>
+                <a href="" class="auth-link signup">Sign Up</a>
+                {% endif %}
+            </div>
+        </div>
+        
+        <!-- 6 CATEGORY TABS -->
+        <nav class="nav-tabs">
+            <a href="/search?query={{ query|urlencode }}&session_id={{ session_id }}" class="nav-tab {% if not active_data_type and not active_schema %}active{% endif %}">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+               
+                All {% if facet_total %}<span class="tab-count">{{ facet_total }}</span>{% elif total_results %}<span class="tab-count">{{ total_results }}</span>{% endif %}
+            </a>
+            {% for facet in data_type_facets %}
+            <a href="/search?query={{ query|urlencode }}&data_type={{ facet.value|urlencode }}&session_id={{ session_id }}" class="nav-tab {% if active_data_type == facet.value %}active{% endif %}">
+                {% if facet.value == 'article' %}<svg viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
+                {% elif facet.value == 'person' %}<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+                {% elif facet.value == 'business' %}<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 7V3H2v18h20V7H12zM6 19H4v-2h2v2zm0-4H4v-2h2v2zm0-4H4V9h2v2zm0-4H4V5h2v2zm4 12H8v-2h2v2zm0-4H8v-2h2v2zm0-4H8V9h2v2zm0-4H8V5h2v2zm10 12h-8v-2h2v-2h-2v-2h2v-2h-2V9h8v10zm-2-8h-2v2h2v-2zm0 4h-2v2h2v-2z"/></svg>
+                {% elif facet.value == 'place' %}<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
+                {% elif facet.value == 'media' %}<svg viewBox="0 0 24 24" fill="currentColor"><path d="M18 4l2 4h-3l-2-4h-2l2 4h-3l-2-4H8l2 4H7L5 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V4h-4zM4 18V8h16v10H4z"/></svg>
+                {% elif facet.value == 'event' %}<svg viewBox="0 0 24 24" fill="currentColor"><path d="M17 12h-5v5h5v-5zM16 1v2H8V1H6v2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2h-1V1h-2zm3 18H5V8h14v11z"/></svg>
+                {% elif facet.value == 'product' %}<svg viewBox="0 0 24 24" fill="currentColor"><path d="M18 6h-2c0-2.21-1.79-4-4-4S8 3.79 8 6H6c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-6-2c1.1 0 2 .9 2 2h-4c0-1.1.9-2 2-2zm6 16H6V8h2v2c0 .55.45 1 1 1s1-.45 1-1V8h4v2c0 .55.45 1 1 1s1-.45 1-1V8h2v12z"/></svg>
+                {% else %}<svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 8h4V4H4v4zm6 12h4v-4h-4v4zm-6 0h4v-4H4v4zm0-6h4v-4H4v4zm6 0h4v-4h-4v4zm6-10v4h4V4h-4zm-6 4h4V4h-4v4zm6 6h4v-4h-4v4zm0 6h4v-4h-4v4z"/></svg>{% endif %}
+                {{ facet.label }}<span class="tab-count">{{ facet.count }}</span>
+            </a>
+            {% endfor %}
+        </nav>
+    </header>
+    
+    <div class="main-content">
+        <div class="results-area">
+            <div class="results-stats">
+                <span class="results-count">{{ facet_total|default:total_results|default:"0" }}</span> results for "<strong>{{ query }}</strong>"
+                {% if pagination.total_pages > 1 %}<span>· Page {{ pagination.current_page }} of {{ pagination.total_pages }}</span>{% endif %}
+                {% if active_data_type %}
+                <span class="active-filter-badge">
+                    {% if active_data_type == 'article' %}Articles{% elif active_data_type == 'person' %}People{% elif active_data_type == 'business' %}Businesses{% elif active_data_type == 'place' %}Places{% elif active_data_type == 'media' %}Media{% elif active_data_type == 'event' %}Events{% else %}{{ active_data_type|title }}{% endif %}
+                    <a href="/search?query={{ query|urlencode }}{% if active_category %}&category={{ active_category }}{% endif %}{% if active_schema %}&schema={{ active_schema }}{% endif %}&session_id={{ session_id }}" class="remove-filter" title="Remove filter"><svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M18 6L6 18M6 6l12 12"/></svg></a>
+                </span>
+                {% endif %}
+                {% if active_category %}<span class="active-filter-badge">{{ active_category|cut:"_"|title }}<a href="/search?query={{ query|urlencode }}{% if active_data_type %}&data_type={{ active_data_type }}{% endif %}{% if active_schema %}&schema={{ active_schema }}{% endif %}&session_id={{ session_id }}" class="remove-filter"><svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M18 6L6 18M6 6l12 12"/></svg></a></span>{% endif %}
+                {% if active_schema %}<span class="active-filter-badge schema-badge">{{ active_schema }}<a href="/search?query={{ query|urlencode }}{% if active_data_type %}&data_type={{ active_data_type }}{% endif %}{% if active_category %}&category={{ active_category }}{% endif %}&session_id={{ session_id }}" class="remove-filter"><svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M18 6L6 18M6 6l12 12"/></svg></a></span>{% endif %}
+            </div>
+            
+            {% if was_corrected %}
+            <div class="spelling-correction">
+                <div class="including-results"><span class="label">Showing results for </span><a href="/search?query={{ corrected_query|urlencode }}&session_id={{ session_id }}" class="corrected-link">{{ corrected_query }}</a></div>
+                <div class="search-instead">Search instead for <a href="/search?query={{ query|urlencode }}&session_id={{ session_id }}&no_correct=1">{{ query }}</a></div>
+            </div>
+            {% endif %}
+            
+            {% if has_results %}
+                {% for item in results %}
+                <article class="result-item" data-position="{{ forloop.counter }}" data-result-id="{{ item.id|default:'' }}" data-url="{{ item.url|default:'#' }}" data-title="{{ item.title|default:'Untitled' }}" data-source="{{ item.source|default:item.site_name|default:'' }}" data-data-type="{{ item.data_type|default:'' }}" data-schema="{{ item.schema|default:'' }}">
+                    <div class="result-header">
+                        <div class="result-favicon">{% if item.favicon %}<img src="{{ item.favicon }}" alt="">{% else %}{{ item.site_name|default:item.source|default:"W"|slice:":1"|upper }}{% endif %}</div>
+                        <div class="result-site-info">
+                            <span class="result-site-name">{{ item.site_name|default:item.source|default:"Website" }}</span>
+                            <div class="result-url">{% if item.url_parts %}{% for part in item.url_parts %}<span class="result-url-part">{{ part }}</span>{% endfor %}{% else %}<span class="result-url-part">{{ item.url|default:"#"|truncatechars:60 }}</span>{% endif %}</div>
+                        </div>
+                        {% if item.data_type %}<a href="/search?query={{ query|urlencode }}&data_type={{ item.data_type|urlencode }}&session_id={{ session_id }}" class="result-type-badge {{ item.data_type|lower }}" title="Filter by {% if item.data_type == 'article' %}Articles{% elif item.data_type == 'person' %}People{% elif item.data_type == 'business' %}Businesses{% elif item.data_type == 'place' %}Places{% elif item.data_type == 'media' %}Media{% elif item.data_type == 'event' %}Events{% else %}{{ item.data_type }}{% endif %}">{% if item.data_type == 'article' %}Article{% elif item.data_type == 'person' %}Person{% elif item.data_type == 'business' %}Business{% elif item.data_type == 'place' %}Place{% elif item.data_type == 'media' %}Media{% elif item.data_type == 'event' %}Event{% else %}{{ item.data_type }}{% endif %}</a>{% endif %}
+                    </div>
+                    <h3 class="result-title"><a href="{{ item.url|default:'#' }}" class="result-link">{{ item.title|default:"Untitled" }}</a></h3>
+                    <p class="result-snippet">{% if item.date %}<span class="result-date">{{ item.date }} — </span>{% endif %}{{ item.summary_highlighted|default:item.summary|default:"No description available."|safe|truncatewords:40 }}</p>
+                    <div class="result-meta">
+                        <!-- {% if item.schema %}<a href="/search?query={{ query|urlencode }}&schema={{ item.schema|urlencode }}&session_id={{ session_id }}" class="result-tag clickable {{ item.schema|lower }}" title="Filter by {{ item.schema }}">{{ item.schema }}</a>{% endif %} -->
+                        {% if item.category %}<a href="/search?query={{ query|urlencode }}{% if active_data_type %}&data_type={{ active_data_type }}{% endif %}&category={{ item.category|urlencode }}&session_id={{ session_id }}" class="result-tag clickable" title="Filter by {{ item.category }}">{{ item.category|cut:"_"|title }}</a>{% endif %}
+                       {% if item.location.city or item.location.state %}<span class="result-tag">{% if item.schema|lower == "history" %}📖 From {% else %}📍 {% endif %}{{ item.location.city }}{% if item.location.city and item.location.state %}, {% endif %}{{ item.location.state }}</span>{% endif %}
+                    </div>
+                </article>
+                {% endfor %}
+
+                {% if pagination.total_pages > 1 %}
+                <nav class="pagination" aria-label="Search results pagination">
+                    <div class="pagination-info">Showing {{ pagination.start_result }}-{{ pagination.end_result }} of {{ pagination.total_results }} results</div>
+                    <div class="pagination-controls">
+                        {% if pagination.has_previous %}<a href="?query={{ query|urlencode }}&page=1&per_page={{ per_page }}{% if active_data_type %}&data_type={{ active_data_type }}{% endif %}{% if active_category %}&category={{ active_category }}{% endif %}{% if active_schema %}&schema={{ active_schema }}{% endif %}&session_id={{ session_id }}" class="pagination-btn pagination-first"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 17l-5-5 5-5M18 17l-5-5 5-5"/></svg></a><a href="?query={{ query|urlencode }}&page={{ pagination.previous_page }}&per_page={{ per_page }}{% if active_data_type %}&data_type={{ active_data_type }}{% endif %}{% if active_category %}&category={{ active_category }}{% endif %}{% if active_schema %}&schema={{ active_schema }}{% endif %}&session_id={{ session_id }}" class="pagination-btn pagination-prev"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>Prev</a>{% else %}<span class="pagination-btn pagination-first disabled"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 17l-5-5 5-5M18 17l-5-5 5-5"/></svg></span><span class="pagination-btn pagination-prev disabled"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>Prev</span>{% endif %}
+                        <div class="pagination-pages">{% if pagination.show_first %}<a href="?query={{ query|urlencode }}&page=1&per_page={{ per_page }}{% if active_data_type %}&data_type={{ active_data_type }}{% endif %}{% if active_category %}&category={{ active_category }}{% endif %}{% if active_schema %}&schema={{ active_schema }}{% endif %}&session_id={{ session_id }}" class="pagination-page">1</a><span class="pagination-ellipsis">...</span>{% endif %}{% for page_num in pagination.page_range %}{% if page_num == pagination.current_page %}<span class="pagination-page active">{{ page_num }}</span>{% else %}<a href="?query={{ query|urlencode }}&page={{ page_num }}&per_page={{ per_page }}{% if active_data_type %}&data_type={{ active_data_type }}{% endif %}{% if active_category %}&category={{ active_category }}{% endif %}{% if active_schema %}&schema={{ active_schema }}{% endif %}&session_id={{ session_id }}" class="pagination-page">{{ page_num }}</a>{% endif %}{% endfor %}{% if pagination.show_last %}<span class="pagination-ellipsis">...</span><a href="?query={{ query|urlencode }}&page={{ pagination.total_pages }}&per_page={{ per_page }}{% if active_data_type %}&data_type={{ active_data_type }}{% endif %}{% if active_category %}&category={{ active_category }}{% endif %}{% if active_schema %}&schema={{ active_schema }}{% endif %}&session_id={{ session_id }}" class="pagination-page">{{ pagination.total_pages }}</a>{% endif %}</div>
+                        {% if pagination.has_next %}<a href="?query={{ query|urlencode }}&page={{ pagination.next_page }}&per_page={{ per_page }}{% if active_data_type %}&data_type={{ active_data_type }}{% endif %}{% if active_category %}&category={{ active_category }}{% endif %}{% if active_schema %}&schema={{ active_schema }}{% endif %}&session_id={{ session_id }}" class="pagination-btn pagination-next">Next<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg></a><a href="?query={{ query|urlencode }}&page={{ pagination.total_pages }}&per_page={{ per_page }}{% if active_data_type %}&data_type={{ active_data_type }}{% endif %}{% if active_category %}&category={{ active_category }}{% endif %}{% if active_schema %}&schema={{ active_schema }}{% endif %}&session_id={{ session_id }}" class="pagination-btn pagination-last"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 17l5-5-5-5M6 17l5-5-5-5"/></svg></a>{% else %}<span class="pagination-btn pagination-next disabled">Next<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg></span><span class="pagination-btn pagination-last disabled"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 17l5-5-5-5M6 17l5-5-5-5"/></svg></span>{% endif %}
+                    </div>
+                </nav>
+                {% endif %}
+            {% else %}
+                <div class="no-results">
+                    <div class="no-results-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg></div>
+                    <h2>No results found for <b>{{ query }}</b>{% if active_data_type %} in {% if active_data_type == 'article' %}Articles{% elif active_data_type == 'person' %}People{% elif active_data_type == 'business' %}Businesses{% elif active_data_type == 'place' %}Places{% elif active_data_type == 'media' %}Media{% elif active_data_type == 'event' %}Events{% else %}{{ active_data_type|title }}{% endif %}{% endif %}</h2>
+                    <p>We couldn't find what you're looking for. Try adjusting your search.</p>
+                    {% if active_data_type or active_category or active_schema %}<p style="margin-bottom: var(--space-lg);"><a href="/search?query={{ query|urlencode }}&session_id={{ session_id }}" style="color: var(--green); font-weight: 500;">→ Search all categories instead</a></p>{% endif %}
+                    <div class="no-results-suggestions"><h3>Suggestions</h3><ul><li>Check your spelling</li><li>Try more general keywords</li><li>Try different keywords</li>{% if active_data_type %}<li>Remove the "{% if active_data_type == 'article' %}Articles{% elif active_data_type == 'person' %}People{% elif active_data_type == 'business' %}Businesses{% elif active_data_type == 'place' %}Places{% elif active_data_type == 'media' %}Media{% elif active_data_type == 'event' %}Events{% else %}{{ active_data_type|title }}{% endif %}" filter</li>{% endif %}</ul></div>
+                </div>
+            {% endif %}
+        </div>
+        
+        <aside class="sidebar">
+            {% if data_type_facets %}
+            <div class="sidebar-section">
+                <h3 class="sidebar-title"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 18h4v-2h-4v2zM3 6v2h18V6H3zm3 7h12v-2H6v2z"/></svg>Filter by Type</h3>
+                <div class="filter-options">
+                   
+                    <a href="/search?query={{ query|urlencode }}{% if active_category %}&category={{ active_category }}{% endif %}{% if active_schema %}&schema={{ active_schema }}{% endif %}&session_id={{ session_id }}" class="filter-option {% if not active_data_type %}active{% endif %}">All Results<span class="count">{{ facet_total|default:total_results }}</span></a>
+                    {% for facet in data_type_facets %}<a href="/search?query={{ query|urlencode }}&data_type={{ facet.value|urlencode }}{% if active_category %}&category={{ active_category }}{% endif %}{% if active_schema %}&schema={{ active_schema }}{% endif %}&session_id={{ session_id }}" class="filter-option {% if active_data_type == facet.value %}active{% endif %}">{{ facet.label }}<span class="count">{{ facet.count }}</span></a>{% endfor %}
+                </div>
+            </div>
+            {% endif %}
+            {% if category_facets %}
+            <div class="sidebar-section">
+                <h3 class="sidebar-title"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l-5.5 9h11z"/><circle cx="17.5" cy="17.5" r="4.5"/><path d="M3 13.5h8v8H3z"/></svg>Categories</h3>
+                <div class="filter-options">{% for cat in category_facets|slice:":8" %}<a href="/search?query={{ query|urlencode }}{% if active_data_type %}&data_type={{ active_data_type }}{% endif %}&category={{ cat.value|urlencode }}{% if active_schema %}&schema={{ active_schema }}{% endif %}&session_id={{ session_id }}" class="filter-option {% if active_category == cat.value %}active{% endif %}">{{ cat.label }}<span class="count">{{ cat.count }}</span></a>{% endfor %}</div>
+            </div>
+            {% endif %}
+            {% if schema_facets %}
+            <div class="sidebar-section">
+                <h3 class="sidebar-title"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>Content Format</h3>
+                <div class="filter-options">{% for schema in schema_facets|slice:":6" %}<a href="/search?query={{ query|urlencode }}{% if active_data_type %}&data_type={{ active_data_type }}{% endif %}{% if active_category %}&category={{ active_category }}{% endif %}&schema={{ schema.value|urlencode }}&session_id={{ session_id }}" class="filter-option {% if active_schema == schema.value %}active{% endif %}">{{ schema.label }}<span class="count">{{ schema.count }}</span></a>{% endfor %}</div>
+            </div>
+            {% endif %}
+            <div class="sidebar-section">
+                <h3 class="sidebar-title"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>Related Searches</h3>
+                <div class="related-searches">
+                    <a href="/search?query={{ query|urlencode }}+near+me&session_id={{ session_id }}" class="related-search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>{{ query }} near me</a>
+                    <a href="/search?query=best+{{ query|urlencode }}&session_id={{ session_id }}" class="related-search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>Best {{ query }}</a>
+                    <a href="/search?query={{ query|urlencode }}+Black-owned&session_id={{ session_id }}" class="related-search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>{{ query }} Black-owned</a>
+                </div>
+            </div>
+            <div class="sidebar-section">
+                <h3 class="sidebar-title"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 6l2.29 2.29-4.88 4.88-4-4L2 16.59 3.41 18l6-6 4 4 6.3-6.29L22 12V6z"/></svg>Trending Now</h3>
+                <div class="trending-list">
+                    <a href="/search?query=Black+therapists+Chicago&session_id={{ session_id }}" class="trending-item"><span class="trending-number">1</span><div class="trending-content"><div class="trending-query">Black therapists Chicago</div><div class="trending-meta">+120% this week</div></div></a>
+                    <a href="/search?query=Juneteenth+events+2026&session_id={{ session_id }}" class="trending-item"><span class="trending-number">2</span><div class="trending-content"><div class="trending-query">Juneteenth events 2026</div><div class="trending-meta">Trending</div></div></a>
+                    <a href="/search?query=HBCU+scholarships&session_id={{ session_id }}" class="trending-item"><span class="trending-number">3</span><div class="trending-content"><div class="trending-query">HBCU scholarships</div><div class="trending-meta">+85% this week</div></div></a>
+                </div>
+            </div>
+        </aside>
+    </div>
+    
+    <footer class="footer">
+        <div class="footer-content">
+            <div class="footer-top"><span class="footer-brand">AfroTodo</span><div class="footer-links"><a href="" class="footer-link">About</a><a href="" class="footer-link">Add Business</a><a href="" class="footer-link">Advertise</a><a href="" class="footer-link">Privacy</a><a href="" class="footer-link">Terms</a><a href="" class="footer-link">Help</a></div></div>
+            <p class="footer-tagline">Shop Black. Learn Black. Own the future.</p>
+        </div>
+    </footer>
+    
+    <script>
+        const ANALYTICS_CONFIG={sessionId:'{{ session_id|escapejs }}',query:'{{ query|escapejs }}',correctedQuery:'{{ corrected_query|escapejs }}',wasCorrected:{{ was_corrected|yesno:"true,false" }},totalResults:{{ total_results|default:0 }},requestId:'{{ request_id|escapejs }}',activeDataType:'{{ active_data_type|escapejs }}',activeCategory:'{{ active_category|escapejs }}',activeSchema:'{{ active_schema|escapejs }}',trackClickUrl:'/api/track-click/',searchStartTime:Date.now()};
+        function getCSRFToken(){return document.querySelector('meta[name="csrf-token"]')?.content||document.querySelector('[name=csrfmiddlewaretoken]')?.value||'';}
+        function trackResultClick(r,l){const d={session_id:ANALYTICS_CONFIG.sessionId,query:ANALYTICS_CONFIG.query,url:r.dataset.url||l.href||'',position:parseInt(r.dataset.position)||0,result_id:r.dataset.resultId||'',title:r.dataset.title||'',source:r.dataset.source||'',data_type:r.dataset.dataType||'',schema:r.dataset.schema||'',request_id:ANALYTICS_CONFIG.requestId,results_count:ANALYTICS_CONFIG.totalResults,was_corrected:ANALYTICS_CONFIG.wasCorrected,corrected_query:ANALYTICS_CONFIG.correctedQuery,active_data_type_filter:ANALYTICS_CONFIG.activeDataType,active_category_filter:ANALYTICS_CONFIG.activeCategory,active_schema_filter:ANALYTICS_CONFIG.activeSchema,time_to_click_ms:Date.now()-ANALYTICS_CONFIG.searchStartTime};if(navigator.sendBeacon){navigator.sendBeacon(ANALYTICS_CONFIG.trackClickUrl,new Blob([JSON.stringify(d)],{type:'application/json'}));}}
+        function trackEvent(t,e){const p={session_id:ANALYTICS_CONFIG.sessionId,event_type:t,query:ANALYTICS_CONFIG.query,...e};if(navigator.sendBeacon){navigator.sendBeacon(ANALYTICS_CONFIG.trackClickUrl,new Blob([JSON.stringify(p)],{type:'application/json'}));}}
+        document.addEventListener('DOMContentLoaded',function(){document.querySelectorAll('.result-item').forEach(function(r){r.querySelectorAll('a.result-link, .result-title a').forEach(function(l){l.addEventListener('click',function(){trackResultClick(r,l);});});});document.querySelectorAll('.nav-tab, .filter-option, .result-type-badge').forEach(function(f){f.addEventListener('click',function(){trackEvent('filter_click',{filter_type:f.classList.contains('nav-tab')?'tab':'sidebar',filter_value:f.textContent.trim()});});});});
+        function clearSearch(){const i=document.querySelector('.search-input');i.value='';i.focus();}
+        let pageStartTime=Date.now();window.addEventListener('beforeunload',function(){const t=Date.now()-pageStartTime;if(t>1000&&navigator.sendBeacon){navigator.sendBeacon(ANALYTICS_CONFIG.trackClickUrl,new Blob([JSON.stringify({session_id:ANALYTICS_CONFIG.sessionId,event_type:'page_dwell',query:ANALYTICS_CONFIG.query,time_on_page_ms:t,had_results:ANALYTICS_CONFIG.totalResults>0})],{type:'application/json'}));}});
+    </script>
+</body>
+</html>
