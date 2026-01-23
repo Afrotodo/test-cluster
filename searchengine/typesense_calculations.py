@@ -24596,21 +24596,32 @@
 #     """Logs search event for analytics."""
 #     pass
 """
-typesense_calculations.py (v8.0 - Cache-First Strategy)
+typesense_calculations.py (v9.0 - Staged Retrieval Strategy)
 
-GOOGLE-STYLE SEARCH:
-1. First search: Get ALL matching document IDs (lightweight)
-2. Cache the result set with TTL
-3. Tabs = COUNT from cache (always accurate)
-4. Pagination = SLICE from cache
-5. Filtering = FILTER cache, then slice
-6. Only fetch full docs for current page
+STAGED RETRIEVAL ARCHITECTURE:
+1. STAGE 1 - GRAPH FILTER (Candidate Generation):
+   - Use keyword fields (primary_keywords, entity_names, etc.) for FILTERING
+   - Inverted index lookup = FAST
+   - Millions → Thousands of candidates
+   - CACHE these candidate IDs with metadata
+
+2. STAGE 2 - SEMANTIC RERANK (Precision Ordering):
+   - Generate embedding for query
+   - Run PURE vector search constrained to cached candidate IDs
+   - Rank by vector_distance ONLY (no keyword noise)
+   - Reorder the cached list before pagination
+
+PRESERVED FROM v8.0 (The Numbers Fix):
+- Tab counts ALWAYS come from cache (accurate)
+- Filtering = slice cache (not re-query)
+- Pagination = slice cache (not re-query)
+- Facet counts always match actual results
 
 This ensures:
-- Tab counts ALWAYS match actual results
-- Filtering is instant (from cache)
-- Pagination is accurate
-- Consistent experience across all tabs
+- Graph structure does the filtering (fast, leverages knowledge graph)
+- Vectors do the ranking (pure semantic meaning)
+- Numbers are always consistent
+- Performance is optimal (vector math on thousands, not millions)
 """
 
 import typesense
@@ -25044,7 +25055,7 @@ def detect_query_intent(query: str, pos_tags: List[Tuple] = None) -> str:
 
 
 # ============================================================================
-# FILTER BUILDING (Simplified - no data_type exclusion needed now)
+# FILTER BUILDING (For Stage 1 Graph Filter)
 # ============================================================================
 
 def build_filter_string_from_discovery(
@@ -25134,28 +25145,31 @@ def execute_search_multi(search_params: Dict) -> Dict:
 
 
 # ============================================================================
-# LIGHTWEIGHT RESULT FETCHING (For Cache)
+# STAGE 1: GRAPH FILTER - Candidate Generation (KEYWORD-BASED FILTERING)
 # ============================================================================
 
-def fetch_all_matching_ids_keyword(
+def fetch_candidate_ids_graph_filter(
     query: str,
     discovery: Dict = None,
     filters: Dict = None,
     max_results: int = MAX_CACHED_RESULTS
 ) -> List[Dict]:
     """
-    KEYWORD PATH: Fetch all matching document IDs with minimal data.
-    Returns list of {id, data_type, category, schema, score} for caching.
+    STAGE 1: Graph Filter - Candidate Generation
     
+    Uses inverted index fields (primary_keywords, entity_names, etc.) for FILTERING.
+    This leverages your knowledge graph structure to narrow down candidates FAST.
+    
+    Returns list of {id, data_type, category, schema, authority_score} for caching.
+    
+    IMPORTANT: Does NOT rank semantically - just filters candidates.
     IMPORTANT: Does NOT filter by data_type so we get ALL types for tab counts.
-    
-    Typesense limits to 250 results per page, so we paginate to get more.
     """
     # Build filter WITHOUT data_type (we want ALL types for tabs)
     filter_str = build_filter_string_from_discovery(
         discovery=discovery or {},
         filters=filters,
-        exclude_data_type=True  # Get all types
+        exclude_data_type=True  # Get all types for accurate facet counts
     )
     
     PAGE_SIZE = 250  # Typesense max
@@ -25164,15 +25178,18 @@ def fetch_all_matching_ids_keyword(
     max_pages = (max_results // PAGE_SIZE) + 1  # Safety limit
     
     while len(all_results) < max_results and current_page <= max_pages:
+        # STAGE 1: Pure keyword/graph filtering - NO vector search here
+        # This uses the inverted index for fast candidate retrieval
         params = {
             'q': query,
-            'query_by': 'key_facts,document_title,primary_keywords,entity_names,document_summary',
-            'query_by_weights': '10,8,5,4,2',
+            'query_by': 'primary_keywords,entity_names,semantic_keywords,key_facts,document_title',
+            'query_by_weights': '10,8,6,4,3',  # Weight graph fields heavily
             'per_page': PAGE_SIZE,
             'page': current_page,
             'include_fields': 'document_uuid,document_data_type,document_category,document_schema,authority_score',
             'num_typos': 1,
             'drop_tokens_threshold': 2,
+            'sort_by': 'authority_score:desc',  # Sort by authority for now (reranked later)
         }
         
         if filter_str:
@@ -25195,7 +25212,7 @@ def fetch_all_matching_ids_keyword(
                     'schema': doc.get('document_schema', ''),
                     'authority_score': doc.get('authority_score', 0),
                     'text_match': hit.get('text_match', 0),
-                    'rank': len(all_results)  # Global rank
+                    # No rank yet - will be set by semantic reranking
                 })
             
             # Check if we've fetched all available results
@@ -25205,101 +25222,147 @@ def fetch_all_matching_ids_keyword(
             current_page += 1
             
         except Exception as e:
-            print(f"❌ fetch_all_matching_ids_keyword error (page {current_page}): {e}")
+            print(f"❌ fetch_candidate_ids_graph_filter error (page {current_page}): {e}")
             break
     
-    return all_results[:max_results]
-
-
-def fetch_all_matching_ids_semantic(
-    query: str,
-    query_embedding: List[float],
-    discovery: Dict = None,
-    filters: Dict = None,
-    max_results: int = MAX_CACHED_RESULTS
-) -> List[Dict]:
-    """
-    SEMANTIC PATH: Fetch all matching document IDs with minimal data.
-    Uses mixed search (text + vector) for best results.
-    
-    IMPORTANT: Does NOT filter by data_type so we get ALL types for tab counts.
-    
-    Typesense limits to 250 results per page, so we paginate to get more.
-    """
-    # Build filter WITHOUT data_type (we want ALL types for tabs)
-    filter_str = build_filter_string_from_discovery(
-        discovery=discovery or {},
-        filters=filters,
-        exclude_data_type=True
-    )
-    
-    embedding_str = ','.join(str(x) for x in query_embedding)
-    
-    PAGE_SIZE = 250  # Typesense max
-    all_results = []
-    current_page = 1
-    max_pages = (max_results // PAGE_SIZE) + 1  # Safety limit
-    
-    while len(all_results) < max_results and current_page <= max_pages:
-        params = {
-            'q': query,
-            'query_by': 'document_title,key_facts,primary_keywords,entity_names',
-            'query_by_weights': '5,10,3,2',
-            'vector_query': f"embedding:([{embedding_str}], k:{PAGE_SIZE}, alpha:0.7)",
-            'per_page': PAGE_SIZE,
-            'page': current_page,
-            'include_fields': 'document_uuid,document_data_type,document_category,document_schema,authority_score',
-            'num_typos': 1,
-            'drop_tokens_threshold': 2,
-        }
-        
-        if filter_str:
-            params['filter_by'] = filter_str
-        
-        try:
-            response = execute_search_multi(params)
-            hits = response.get('hits', [])
-            found = response.get('found', 0)
-            
-            if not hits:
-                break  # No more results
-            
-            for hit in hits:
-                doc = hit.get('document', {})
-                vector_distance = hit.get('vector_distance', 1.0)
-                
-                all_results.append({
-                    'id': doc.get('document_uuid'),
-                    'data_type': doc.get('document_data_type', ''),
-                    'category': doc.get('document_category', ''),
-                    'schema': doc.get('document_schema', ''),
-                    'authority_score': doc.get('authority_score', 0),
-                    'vector_distance': vector_distance,
-                    'text_match': hit.get('text_match', 0),
-                    'rank': len(all_results)  # Global rank
-                })
-            
-            # Check if we've fetched all available results
-            if len(all_results) >= found or len(hits) < PAGE_SIZE:
-                break
-            
-            current_page += 1
-            
-        except Exception as e:
-            print(f"❌ fetch_all_matching_ids_semantic error (page {current_page}): {e}")
-            break
-    
+    print(f"📊 STAGE 1 (Graph Filter): Retrieved {len(all_results)} candidates")
     return all_results[:max_results]
 
 
 # ============================================================================
-# FACET COUNTING FROM CACHE
+# STAGE 2: SEMANTIC RERANK - Precision Ordering (VECTOR-BASED RANKING)
+# ============================================================================
+
+def semantic_rerank_candidates(
+    candidate_ids: List[str],
+    query_embedding: List[float],
+    max_to_rerank: int = 500
+) -> List[Dict]:
+    """
+    STAGE 2: Semantic Rerank - Precision Ordering
+    
+    Takes candidate IDs from Stage 1 and reranks them using PURE vector similarity.
+    No keyword influence on ranking - meaning only.
+    
+    Args:
+        candidate_ids: List of document UUIDs from Stage 1 (graph filter)
+        query_embedding: The query embedding vector
+        max_to_rerank: Max candidates to rerank (for performance)
+    
+    Returns:
+        List of {id, vector_distance, semantic_rank} ordered by vector_distance
+    """
+    if not candidate_ids or not query_embedding:
+        # Return original order if no embedding
+        return [{'id': cid, 'vector_distance': 1.0, 'semantic_rank': i} 
+                for i, cid in enumerate(candidate_ids)]
+    
+    # Limit candidates for performance
+    ids_to_rerank = candidate_ids[:max_to_rerank]
+    
+    # Build ID filter for constrained vector search
+    id_filter = ','.join([f'`{doc_id}`' for doc_id in ids_to_rerank])
+    
+    embedding_str = ','.join(str(x) for x in query_embedding)
+    
+    # PURE vector search - no keyword fields, no hybrid blending
+    # This ranks ONLY by semantic similarity (vector_distance)
+    params = {
+        'q': '*',  # No text query - pure vector
+        'vector_query': f"embedding:([{embedding_str}], k:{len(ids_to_rerank)}, alpha:1.0)",  # alpha:1.0 = 100% vector
+        'filter_by': f'document_uuid:[{id_filter}]',
+        'per_page': len(ids_to_rerank),
+        'include_fields': 'document_uuid',
+    }
+    
+    try:
+        response = execute_search_multi(params)
+        hits = response.get('hits', [])
+        
+        reranked = []
+        for i, hit in enumerate(hits):
+            doc = hit.get('document', {})
+            reranked.append({
+                'id': doc.get('document_uuid'),
+                'vector_distance': hit.get('vector_distance', 1.0),
+                'semantic_rank': i
+            })
+        
+        # Add any IDs that weren't returned (shouldn't happen, but safety)
+        reranked_ids = {r['id'] for r in reranked}
+        for cid in ids_to_rerank:
+            if cid not in reranked_ids:
+                reranked.append({
+                    'id': cid,
+                    'vector_distance': 1.0,
+                    'semantic_rank': len(reranked)
+                })
+        
+        print(f"🎯 STAGE 2 (Semantic Rerank): Reranked {len(reranked)} candidates by vector similarity")
+        return reranked
+        
+    except Exception as e:
+        print(f"⚠️ semantic_rerank_candidates error: {e}")
+        # Return original order on error
+        return [{'id': cid, 'vector_distance': 1.0, 'semantic_rank': i} 
+                for i, cid in enumerate(ids_to_rerank)]
+
+
+def apply_semantic_ranking_to_cache(
+    cached_results: List[Dict],
+    reranked_results: List[Dict]
+) -> List[Dict]:
+    """
+    Apply semantic ranking to cached results.
+    
+    Takes the cached results (with metadata) and reorders them based on 
+    semantic reranking results (vector_distance order).
+    
+    Preserves all metadata (data_type, category, schema, authority_score).
+    """
+    if not reranked_results:
+        return cached_results
+    
+    # Create lookup: id -> semantic rank and vector_distance
+    rank_lookup = {
+        r['id']: {
+            'semantic_rank': r['semantic_rank'],
+            'vector_distance': r.get('vector_distance', 1.0)
+        }
+        for r in reranked_results
+    }
+    
+    # Add semantic info to cached results
+    for item in cached_results:
+        item_id = item.get('id')
+        if item_id in rank_lookup:
+            item['semantic_rank'] = rank_lookup[item_id]['semantic_rank']
+            item['vector_distance'] = rank_lookup[item_id]['vector_distance']
+        else:
+            # Items not in rerank set get pushed to end
+            item['semantic_rank'] = 999999
+            item['vector_distance'] = 1.0
+    
+    # Sort by semantic rank (pure vector similarity order)
+    cached_results.sort(key=lambda x: x.get('semantic_rank', 999999))
+    
+    # Update rank field to reflect new order
+    for i, item in enumerate(cached_results):
+        item['rank'] = i
+    
+    return cached_results
+
+
+# ============================================================================
+# FACET COUNTING FROM CACHE (PRESERVED FROM v8.0 - THE FIX)
 # ============================================================================
 
 def count_facets_from_cache(cached_results: List[Dict]) -> Dict[str, List[Dict]]:
     """
     Count facets from cached result set.
     This ensures tab counts ALWAYS match actual results.
+    
+    PRESERVED FROM v8.0 - This is the fix for accurate numbers.
     """
     data_type_counts = {}
     category_counts = {}
@@ -25354,7 +25417,11 @@ def filter_cached_results(
     category: str = None,
     schema: str = None
 ) -> List[Dict]:
-    """Filter cached results by data_type, category, or schema."""
+    """
+    Filter cached results by data_type, category, or schema.
+    
+    PRESERVED FROM v8.0 - This is the fix for accurate filtering.
+    """
     filtered = cached_results
     
     if data_type:
@@ -25374,7 +25441,11 @@ def paginate_cached_results(
     page: int,
     per_page: int
 ) -> Tuple[List[Dict], int]:
-    """Paginate cached results. Returns (page_items, total_count)."""
+    """
+    Paginate cached results. Returns (page_items, total_count).
+    
+    PRESERVED FROM v8.0 - This is the fix for accurate pagination.
+    """
     total = len(cached_results)
     start = (page - 1) * per_page
     end = start + per_page
@@ -25548,7 +25619,7 @@ def get_filter_terms_from_discovery(discovery: Dict) -> List[str]:
 
 
 # ============================================================================
-# MAIN SEARCH FUNCTION (v8.0 - Cache-First Strategy)
+# MAIN SEARCH FUNCTION (v9.0 - Staged Retrieval Strategy)
 # ============================================================================
 
 def execute_full_search(
@@ -25565,20 +25636,28 @@ def execute_full_search(
     search_source: str = None
 ) -> Dict:
     """
-    Main entry point for search - v8.0 Cache-First Strategy.
+    Main entry point for search - v9.0 Staged Retrieval Strategy.
     
-    GOOGLE-STYLE SEARCH:
-    1. Check cache for existing result set
-    2. If miss: Fetch ALL matching IDs (lightweight)
-    3. Cache the result set
-    4. Count facets FROM CACHE (always accurate)
-    5. Filter cache by data_type/category/schema if needed
-    6. Paginate from filtered cache
-    7. Fetch full docs only for current page
+    STAGED RETRIEVAL ARCHITECTURE:
+    
+    1. Check cache for Stage 1 candidates (graph-filtered set)
+    2. If cache miss: Run Stage 1 (Graph Filter) - keyword-based candidate generation
+    3. Cache the candidates (with metadata for accurate facets)
+    4. Count facets FROM CACHE (always accurate - YOUR FIX)
+    5. Filter cache by data_type/category/schema if UI filters active
+    6. Run Stage 2 (Semantic Rerank) - pure vector ranking on filtered set
+    7. Paginate from reranked results
+    8. Fetch full docs only for current page
+    
+    This ensures:
+    - Graph structure does filtering (fast, leverages knowledge graph)
+    - Vectors do ranking (pure semantic meaning)
+    - Numbers are always consistent (facets from cache)
+    - Performance is optimal (vector math on thousands, not millions)
     
     alt_mode:
-        'n' = KEYWORD PATH (dropdown click)
-        'y' = SEMANTIC PATH (typed freely)
+        'n' = KEYWORD PATH (dropdown click) - no semantic reranking
+        'y' = SEMANTIC PATH (typed freely) - full staged retrieval
     """
     import time
     times = {}
@@ -25595,45 +25674,47 @@ def execute_full_search(
             print(f"🎛️ Active UI filters: {active_filters}")
     
     # =========================================================================
-    # KEYWORD PATH (alt_mode='n')
+    # KEYWORD PATH (alt_mode='n') - No semantic reranking
     # =========================================================================
     
     is_keyword_path = (alt_mode == 'n') or search_source in ('dropdown', 'keyword', 'suggestion', 'autocomplete')
     
     if is_keyword_path:
-        print(f"⚡ KEYWORD PATH (Cache-First): '{query}' (alt_mode={alt_mode})")
+        print(f"⚡ KEYWORD PATH (Stage 1 Only): '{query}' (alt_mode={alt_mode})")
         
         t1 = time.time()
         intent = detect_query_intent(query, pos_tags)
         
-        # Generate cache key (without data_type filter - we cache ALL results)
+        # Generate cache key
         cache_key = _generate_cache_key(query, 'keyword', None, None)
         
-        # Check cache
+        # Check cache for Stage 1 candidates
         cached_data = _get_cached_results(cache_key)
         
         if cached_data:
-            print(f"✅ Cache HIT: {len(cached_data)} results")
+            print(f"✅ Cache HIT: {len(cached_data)} candidates")
             all_results = cached_data
             times['cache'] = 'hit'
         else:
-            print(f"❌ Cache MISS: Fetching all matching IDs...")
+            print(f"❌ Cache MISS: Running Stage 1 (Graph Filter)...")
             t2 = time.time()
-            all_results = fetch_all_matching_ids_keyword(
+            
+            # STAGE 1: Graph Filter - Candidate Generation
+            all_results = fetch_candidate_ids_graph_filter(
                 query=query,
                 discovery={},
                 filters=filters,
                 max_results=MAX_CACHED_RESULTS
             )
-            times['fetch_ids'] = round((time.time() - t2) * 1000, 2)
+            times['stage1_graph_filter'] = round((time.time() - t2) * 1000, 2)
             
-            # Cache the results
+            # Cache the candidates (with metadata)
             if all_results:
                 _set_cached_results(cache_key, all_results)
-            print(f"📦 Cached {len(all_results)} results")
+            print(f"📦 Cached {len(all_results)} candidates")
             times['cache'] = 'miss'
         
-        # Count facets FROM CACHE (always accurate!)
+        # Count facets FROM CACHE (always accurate - YOUR FIX!)
         t3 = time.time()
         all_facets = count_facets_from_cache(all_results)
         times['count_facets'] = round((time.time() - t3) * 1000, 2)
@@ -25645,7 +25726,7 @@ def execute_full_search(
         
         print(f"📊 Facets from cache: {[(f['value'], f['count']) for f in data_type_facets]}")
         
-        # Filter cache by active filters
+        # Filter cache by active UI filters (YOUR FIX!)
         filtered_results = filter_cached_results(
             all_results,
             data_type=active_data_type,
@@ -25653,7 +25734,9 @@ def execute_full_search(
             schema=active_schema
         )
         
-        # Paginate
+        # NO Stage 2 for keyword path - use authority_score ordering from Stage 1
+        
+        # Paginate (YOUR FIX!)
         page_items, total_filtered = paginate_cached_results(filtered_results, page, per_page)
         
         # Fetch full documents for this page
@@ -25665,7 +25748,7 @@ def execute_full_search(
         times['total'] = round((time.time() - t0) * 1000, 2)
         
         print(f"⏱️ TIMING: {times}")
-        print(f"🔍 Strategy: KEYWORD (Cache-First) | Total: {facet_total} | Filtered: {total_filtered} | Page: {len(results)}")
+        print(f"🔍 Strategy: KEYWORD (Stage 1 Only) | Total: {facet_total} | Filtered: {total_filtered} | Page: {len(results)}")
         
         search_time = round(time.time() - t0, 3)
         
@@ -25681,7 +25764,7 @@ def execute_full_search(
             'search_time': search_time,
             'session_id': session_id,
             'semantic_enabled': False,
-            'search_strategy': 'keyword_cached',
+            'search_strategy': 'keyword_graph_filter',
             'alt_mode': alt_mode,
             'skip_embedding': True,
             'search_source': search_source or 'dropdown',
@@ -25711,11 +25794,12 @@ def execute_full_search(
         }
     
     # =========================================================================
-    # SEMANTIC PATH (alt_mode='y') - Cache-First Strategy
+    # SEMANTIC PATH (alt_mode='y') - Full Staged Retrieval
     # =========================================================================
     
-    print(f"🔬 SEMANTIC PATH (Cache-First): '{query}' (alt_mode={alt_mode})")
+    print(f"🔬 SEMANTIC PATH (Staged Retrieval): '{query}' (alt_mode={alt_mode})")
     
+    # Run word discovery and embedding generation IN PARALLEL
     t1 = time.time()
     discovery, query_embedding = run_parallel_prep(query, skip_embedding=skip_embedding)
     times['parallel_prep'] = round((time.time() - t1) * 1000, 2)
@@ -25727,7 +25811,7 @@ def execute_full_search(
     semantic_enabled = query_embedding is not None
     intent = detect_query_intent(query, pos_tags)
     
-    # Generate cache key
+    # Generate cache key (includes discovery filters/locations)
     cache_key = _generate_cache_key(
         corrected_query, 
         'semantic',
@@ -25735,43 +25819,34 @@ def execute_full_search(
         discovery.get('locations', [])
     )
     
-    # Check cache
+    # Check cache for Stage 1 candidates
     cached_data = _get_cached_results(cache_key)
     
     if cached_data:
-        print(f"✅ Cache HIT: {len(cached_data)} results")
+        print(f"✅ Cache HIT: {len(cached_data)} candidates")
         all_results = cached_data
         times['cache'] = 'hit'
     else:
-        print(f"❌ Cache MISS: Fetching all matching IDs...")
+        print(f"❌ Cache MISS: Running Stage 1 (Graph Filter)...")
         t2 = time.time()
         
-        if semantic_enabled:
-            all_results = fetch_all_matching_ids_semantic(
-                query=corrected_query,
-                query_embedding=query_embedding,
-                discovery=discovery,
-                filters=filters,
-                max_results=MAX_CACHED_RESULTS
-            )
-        else:
-            # Fallback to keyword search if no embedding
-            all_results = fetch_all_matching_ids_keyword(
-                query=corrected_query,
-                discovery=discovery,
-                filters=filters,
-                max_results=MAX_CACHED_RESULTS
-            )
+        # STAGE 1: Graph Filter - Candidate Generation
+        # Uses keyword/entity fields for FILTERING only (not ranking)
+        all_results = fetch_candidate_ids_graph_filter(
+            query=corrected_query,
+            discovery=discovery,
+            filters=filters,
+            max_results=MAX_CACHED_RESULTS
+        )
+        times['stage1_graph_filter'] = round((time.time() - t2) * 1000, 2)
         
-        times['fetch_ids'] = round((time.time() - t2) * 1000, 2)
-        
-        # Cache the results
+        # Cache the candidates (with metadata for facets)
         if all_results:
             _set_cached_results(cache_key, all_results)
-        print(f"📦 Cached {len(all_results)} results")
+        print(f"📦 Cached {len(all_results)} candidates")
         times['cache'] = 'miss'
     
-    # Count facets FROM CACHE (always accurate!)
+    # Count facets FROM CACHE (always accurate - YOUR FIX!)
     t3 = time.time()
     all_facets = count_facets_from_cache(all_results)
     times['count_facets'] = round((time.time() - t3) * 1000, 2)
@@ -25783,7 +25858,7 @@ def execute_full_search(
     
     print(f"📊 Facets from cache: {[(f['value'], f['count']) for f in data_type_facets]}")
     
-    # Filter cache by active filters
+    # Filter cache by active UI filters (YOUR FIX!)
     filtered_results = filter_cached_results(
         all_results,
         data_type=active_data_type,
@@ -25791,7 +25866,31 @@ def execute_full_search(
         schema=active_schema
     )
     
-    # Paginate
+    # =========================================================================
+    # STAGE 2: Semantic Rerank - Pure Vector Ranking
+    # =========================================================================
+    
+    if semantic_enabled and filtered_results:
+        t_rerank = time.time()
+        
+        # Get IDs to rerank
+        candidate_ids = [item['id'] for item in filtered_results]
+        
+        # Run PURE vector search on candidates only
+        reranked = semantic_rerank_candidates(
+            candidate_ids=candidate_ids,
+            query_embedding=query_embedding,
+            max_to_rerank=500  # Rerank top 500 for performance
+        )
+        
+        # Apply semantic ranking to the filtered results
+        filtered_results = apply_semantic_ranking_to_cache(filtered_results, reranked)
+        
+        times['stage2_semantic_rerank'] = round((time.time() - t_rerank) * 1000, 2)
+    else:
+        print(f"⚠️ Skipping Stage 2: semantic_enabled={semantic_enabled}, filtered_count={len(filtered_results)}")
+    
+    # Paginate from (now semantically-ranked) filtered results (YOUR FIX!)
     page_items, total_filtered = paginate_cached_results(filtered_results, page, per_page)
     
     # Fetch full documents for this page
@@ -25802,7 +25901,7 @@ def execute_full_search(
     
     times['total'] = round((time.time() - t0) * 1000, 2)
     
-    actual_strategy = 'semantic_cached' if semantic_enabled else 'keyword_fallback_cached'
+    actual_strategy = 'staged_semantic' if semantic_enabled else 'keyword_fallback'
     
     print(f"⏱️ TIMING: {times}")
     print(f"🔍 Strategy: {actual_strategy.upper()} | Total: {facet_total} | Filtered: {total_filtered} | Page: {len(results)}")

@@ -411,7 +411,7 @@
     
     <footer class="footer">
         <div class="footer-content">
-            <div class="footer-top"><span class="footer-brand">AfroTodo</span><div class="footer-links"><a href="" class="footer-link">About</a><a href="" class="footer-link">Add Business</a><a href="" class="footer-link">Advertise</a><a href="" class="footer-link">Privacy</a><a href="" class="footer-link">Terms</a><a href="" class="footer-link">Help</a></div></div>
+            <div class="footer-top"><span class="footer-brand">AfroTodo</span><div class="footer-links"><a href="{% url 'searchengine:about' %}" class="footer-link">About</a><a href="{% url 'accounts:register' %}" class="footer-link">Add Business</a><a href="{% url 'searchengine:privacy' %}" class="footer-link">Privacy</a><a href="{% url 'searchengine:term' %}" class="footer-link">Terms</a><a href="{% url 'searchengine:contact' %}" class="footer-link">Contact us</a></div></div>
             <p class="footer-tagline">Shop Black. Learn Black. Own the future.</p>
         </div>
     </footer>

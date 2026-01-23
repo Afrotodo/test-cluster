@@ -875,11 +875,11 @@
         </div>
         
         <nav class="header-nav">
-            <a href="{% url 'searchengine:category' 'business' %}" class="nav-link">Business</a>
+            <!-- <a href="{% url 'searchengine:category' 'business' %}" class="nav-link">Business</a>
             <a href="{% url 'searchengine:category' 'culture' %}" class="nav-link">Culture</a>
             <a href="{% url 'searchengine:category' 'health' %}" class="nav-link">Health</a>
             <a href="{% url 'searchengine:category' 'news' %}" class="nav-link">News</a>
-            <a href="{% url 'searchengine:category' 'community' %}" class="nav-link">Community</a>
+            <a href="{% url 'searchengine:category' 'community' %}" class="nav-link">Community</a> -->
         </nav>
 
         <div class="header-right">
@@ -1026,7 +1026,7 @@
                 <p>This isn't just a platform. It's infrastructure for Black economic power.</p>
                 <div class="cta-buttons">
                     <a href="{% url 'searchengine:home' %}" class="btn-primary">Find a Business</a>
-                    <a href="" class="btn-secondary">List Your Business</a>
+                    <a href="{% url 'accounts:register' %}" class="btn-secondary">List Your Business</a>
                 </div>
             </section>
         </div>
