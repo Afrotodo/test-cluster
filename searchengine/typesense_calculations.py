@@ -24595,6 +24595,8 @@
 # ):
 #     """Logs search event for analytics."""
 #     pass
+
+
 """
 typesense_calculations.py (v9.0 - Staged Retrieval Strategy)
 
@@ -24636,6 +24638,9 @@ import threading
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+
+from .cached_embedding_related_search import store_query_embedding, get_related_searches as get_semantic_related_searches
+from .cached_embedding_related_search import store_query_embedding, get_related_searches as get_semantic_related_searches, debug_related_searches
 
 
 # ============================================================================
@@ -25188,7 +25193,8 @@ def fetch_candidate_ids_graph_filter(
             'page': current_page,
             'include_fields': 'document_uuid,document_data_type,document_category,document_schema,authority_score',
             'num_typos': 1,
-            'drop_tokens_threshold': 2,
+            # 'drop_tokens_threshold': 2,
+             'drop_tokens_threshold': 0, 
             'sort_by': 'authority_score:desc',  # Sort by authority for now (reranked later)
         }
         
@@ -25739,11 +25745,38 @@ def execute_full_search(
         # Paginate (YOUR FIX!)
         page_items, total_filtered = paginate_cached_results(filtered_results, page, per_page)
         
+        # # Fetch full documents for this page
+        # t4 = time.time()
+        # page_ids = [item['id'] for item in page_items]
+        # results = fetch_full_documents(page_ids, query)
+        # times['fetch_docs'] = round((time.time() - t4) * 1000, 2)
+        
+        # times['total'] = round((time.time() - t0) * 1000, 2)
+        
+        # print(f"⏱️ TIMING: {times}")
+        # print(f"🔍 Strategy: KEYWORD (Stage 1 Only) | Total: {facet_total} | Filtered: {total_filtered} | Page: {len(results)}")
+        
+        # search_time = round(time.time() - t0, 3)
         # Fetch full documents for this page
         t4 = time.time()
         page_ids = [item['id'] for item in page_items]
         results = fetch_full_documents(page_ids, query)
         times['fetch_docs'] = round((time.time() - t4) * 1000, 2)
+        
+        # =========================================================================
+        # RELATED SEARCHES (keyword-based fallback for KEYWORD PATH)
+        # =========================================================================
+        
+        related_searches = []
+        
+        try:
+            # Use existing keyword-based related searches (no embedding in KEYWORD PATH)
+            related_searches = get_related_searches(query, intent)
+            if related_searches:
+                print(f"🔗 Related Searches (keyword): {[r.get('label', '')[:20] for r in related_searches]}")
+        except Exception as e:
+            print(f"⚠️ Related searches error: {e}")
+            related_searches = []
         
         times['total'] = round((time.time() - t0) * 1000, 2)
         
@@ -25773,6 +25806,7 @@ def execute_full_search(
             'data_type_facets': data_type_facets,
             'category_facets': category_facets,
             'schema_facets': schema_facets,
+            'related_searches': related_searches,
             'facets': all_facets,
             'word_discovery': {
                 'valid_count': len(query.split()),
@@ -25793,7 +25827,169 @@ def execute_full_search(
             }
         }
     
-    # =========================================================================
+    # # =========================================================================
+    # # SEMANTIC PATH (alt_mode='y') - Full Staged Retrieval
+    # # =========================================================================
+    
+    # print(f"🔬 SEMANTIC PATH (Staged Retrieval): '{query}' (alt_mode={alt_mode})")
+    
+    # # Run word discovery and embedding generation IN PARALLEL
+    # t1 = time.time()
+    # discovery, query_embedding = run_parallel_prep(query, skip_embedding=skip_embedding)
+    # times['parallel_prep'] = round((time.time() - t1) * 1000, 2)
+    
+    # corrected_query = discovery.get('corrected_query', query)
+    # valid_terms = get_filter_terms_from_discovery(discovery)
+    # unknown_terms = [t['word'] for t in discovery.get('terms', []) if t.get('status') == 'unknown']
+    
+    # semantic_enabled = query_embedding is not None
+    # intent = detect_query_intent(query, pos_tags)
+    
+    # # Generate cache key (includes discovery filters/locations)
+    # cache_key = _generate_cache_key(
+    #     corrected_query, 
+    #     'semantic',
+    #     discovery.get('filters', []),
+    #     discovery.get('locations', [])
+    # )
+    
+    # # Check cache for Stage 1 candidates
+    # cached_data = _get_cached_results(cache_key)
+    
+    # if cached_data:
+    #     print(f"✅ Cache HIT: {len(cached_data)} candidates")
+    #     all_results = cached_data
+    #     times['cache'] = 'hit'
+    # else:
+    #     print(f"❌ Cache MISS: Running Stage 1 (Graph Filter)...")
+    #     t2 = time.time()
+        
+    #     # STAGE 1: Graph Filter - Candidate Generation
+    #     # Uses keyword/entity fields for FILTERING only (not ranking)
+    #     all_results = fetch_candidate_ids_graph_filter(
+    #         query=corrected_query,
+    #         discovery=discovery,
+    #         filters=filters,
+    #         max_results=MAX_CACHED_RESULTS
+    #     )
+    #     times['stage1_graph_filter'] = round((time.time() - t2) * 1000, 2)
+        
+    #     # Cache the candidates (with metadata for facets)
+    #     if all_results:
+    #         _set_cached_results(cache_key, all_results)
+    #     print(f"📦 Cached {len(all_results)} candidates")
+    #     times['cache'] = 'miss'
+    
+    # # Count facets FROM CACHE (always accurate - YOUR FIX!)
+    # t3 = time.time()
+    # all_facets = count_facets_from_cache(all_results)
+    # times['count_facets'] = round((time.time() - t3) * 1000, 2)
+    
+    # data_type_facets = all_facets.get('data_type', [])
+    # category_facets = all_facets.get('category', [])
+    # schema_facets = all_facets.get('schema', [])
+    # facet_total = len(all_results)
+    
+    # print(f"📊 Facets from cache: {[(f['value'], f['count']) for f in data_type_facets]}")
+    
+    # # Filter cache by active UI filters (YOUR FIX!)
+    # filtered_results = filter_cached_results(
+    #     all_results,
+    #     data_type=active_data_type,
+    #     category=active_category,
+    #     schema=active_schema
+    # )
+    
+    # # =========================================================================
+    # # STAGE 2: Semantic Rerank - Pure Vector Ranking
+    # # =========================================================================
+    
+    # if semantic_enabled and filtered_results:
+    #     t_rerank = time.time()
+        
+    #     # Get IDs to rerank
+    #     candidate_ids = [item['id'] for item in filtered_results]
+        
+    #     # Run PURE vector search on candidates only
+    #     reranked = semantic_rerank_candidates(
+    #         candidate_ids=candidate_ids,
+    #         query_embedding=query_embedding,
+    #         max_to_rerank=500  # Rerank top 500 for performance
+    #     )
+        
+    #     # Apply semantic ranking to the filtered results
+    #     filtered_results = apply_semantic_ranking_to_cache(filtered_results, reranked)
+        
+    #     times['stage2_semantic_rerank'] = round((time.time() - t_rerank) * 1000, 2)
+    # else:
+    #     print(f"⚠️ Skipping Stage 2: semantic_enabled={semantic_enabled}, filtered_count={len(filtered_results)}")
+    
+    # # Paginate from (now semantically-ranked) filtered results (YOUR FIX!)
+    # page_items, total_filtered = paginate_cached_results(filtered_results, page, per_page)
+    
+    # # Fetch full documents for this page
+    # t4 = time.time()
+    # page_ids = [item['id'] for item in page_items]
+    # results = fetch_full_documents(page_ids, query)
+    # times['fetch_docs'] = round((time.time() - t4) * 1000, 2)
+    
+    # times['total'] = round((time.time() - t0) * 1000, 2)
+    
+    # actual_strategy = 'staged_semantic' if semantic_enabled else 'keyword_fallback'
+    
+    # print(f"⏱️ TIMING: {times}")
+    # print(f"🔍 Strategy: {actual_strategy.upper()} | Total: {facet_total} | Filtered: {total_filtered} | Page: {len(results)}")
+    
+    # search_time = round(time.time() - t0, 3)
+    
+    # return {
+    #     'query': query,
+    #     'corrected_query': corrected_query,
+    #     'intent': intent,
+    #     'results': results,
+    #     'total': total_filtered,
+    #     'facet_total': facet_total,
+    #     'page': page,
+    #     'per_page': per_page,
+    #     'search_time': search_time,
+    #     'session_id': session_id,
+    #     'semantic_enabled': semantic_enabled,
+    #     'search_strategy': actual_strategy,
+    #     'alt_mode': alt_mode,
+    #     'skip_embedding': skip_embedding,
+    #     'search_source': search_source,
+    #     'valid_terms': valid_terms,
+    #     'related_searches': related_searches,
+    #     'unknown_terms': unknown_terms,
+    #     'data_type_facets': data_type_facets,
+    #     'category_facets': category_facets,
+    #     'schema_facets': schema_facets,
+    #     'facets': all_facets,
+    #     'word_discovery': {
+    #         'valid_count': discovery.get('valid_count', 0),
+    #         'unknown_count': discovery.get('unknown_count', 0),
+    #         'corrections': discovery.get('corrections', []),
+    #         'filters': discovery.get('filters', []),
+    #         'locations': discovery.get('locations', []),
+    #         'sort': discovery.get('sort'),
+    #         'total_score': discovery.get('total_score', 0),
+    #         'average_score': discovery.get('average_score', 0),
+    #         'max_score': discovery.get('max_score', 0),
+    #     },
+    #     'timings': times,
+    #     'filters_applied': {
+    #         'data_type': active_data_type,
+    #         'category': active_category,
+    #         'schema': active_schema,
+    #         'graph_filters': discovery.get('filters', []),
+    #         'graph_locations': discovery.get('locations', []),
+    #         'graph_sort': discovery.get('sort'),
+    #     }
+    # }
+
+
+
+# =========================================================================
     # SEMANTIC PATH (alt_mode='y') - Full Staged Retrieval
     # =========================================================================
     
@@ -25899,6 +26095,36 @@ def execute_full_search(
     results = fetch_full_documents(page_ids, query)
     times['fetch_docs'] = round((time.time() - t4) * 1000, 2)
     
+    # =========================================================================
+    # RELATED SEARCHES (from stored query embeddings)
+    # =========================================================================
+    
+    related_searches = []
+    
+    if semantic_enabled and query_embedding:
+        t_related = time.time()
+        
+        try:
+            # Store this query's embedding for future related searches
+            store_query_embedding(corrected_query, query_embedding)
+            debug_related_searches(query_embedding, exclude_query=corrected_query)
+            
+            # Get related searches from stored embeddings
+            related_searches = get_semantic_related_searches(
+                embedding=query_embedding,
+                limit=5,
+                exclude_query=corrected_query
+            )
+            
+            times['related_searches'] = round((time.time() - t_related) * 1000, 2)
+            
+            if related_searches:
+                print(f"🔗 Related Searches: {[r['query'][:30] for r in related_searches]}")
+        
+        except Exception as e:
+            print(f"⚠️ Related searches error: {e}")
+            related_searches = []
+    
     times['total'] = round((time.time() - t0) * 1000, 2)
     
     actual_strategy = 'staged_semantic' if semantic_enabled else 'keyword_fallback'
@@ -25926,6 +26152,7 @@ def execute_full_search(
         'search_source': search_source,
         'valid_terms': valid_terms,
         'unknown_terms': unknown_terms,
+        'related_searches': related_searches,
         'data_type_facets': data_type_facets,
         'category_facets': category_facets,
         'schema_facets': schema_facets,
@@ -25951,7 +26178,6 @@ def execute_full_search(
             'graph_sort': discovery.get('sort'),
         }
     }
-
 
 # ============================================================================
 # CONVENIENCE FUNCTIONS

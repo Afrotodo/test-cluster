@@ -389,15 +389,17 @@
                 <h3 class="sidebar-title"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>Content Format</h3>
                 <div class="filter-options">{% for schema in schema_facets|slice:":6" %}<a href="/search?query={{ query|urlencode }}{% if active_data_type %}&data_type={{ active_data_type }}{% endif %}{% if active_category %}&category={{ active_category }}{% endif %}&schema={{ schema.value|urlencode }}&session_id={{ session_id }}" class="filter-option {% if active_schema == schema.value %}active{% endif %}">{{ schema.label }}<span class="count">{{ schema.count }}</span></a>{% endfor %}</div>
             </div>
-            {% endif %}
+             {% endif %}
+            {% if related_searches %}
             <div class="sidebar-section">
                 <h3 class="sidebar-title"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>Related Searches</h3>
                 <div class="related-searches">
-                    <a href="/search?query={{ query|urlencode }}+near+me&session_id={{ session_id }}" class="related-search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>{{ query }} near me</a>
-                    <a href="/search?query=best+{{ query|urlencode }}&session_id={{ session_id }}" class="related-search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>Best {{ query }}</a>
-                    <a href="/search?query={{ query|urlencode }}+Black-owned&session_id={{ session_id }}" class="related-search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>{{ query }} Black-owned</a>
+                    {% for search in related_searches|slice:":5" %}
+                    <a href="/search?query={{ search.query|urlencode }}&session_id={{ session_id }}&alt_mode=y" class="related-search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>{{ search.query }}</a>
+                    {% endfor %}
                 </div>
             </div>
+            {% endif %}
             <div class="sidebar-section">
                 <h3 class="sidebar-title"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 6l2.29 2.29-4.88 4.88-4-4L2 16.59 3.41 18l6-6 4 4 6.3-6.29L22 12V6z"/></svg>Trending Now</h3>
                 <div class="trending-list">
