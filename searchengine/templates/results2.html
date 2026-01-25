@@ -45,6 +45,18 @@
             --transition-base: 250ms ease;
         }
 
+        /* CRITICAL: Prevent horizontal overflow */
+html, body {
+    overflow-x: hidden;
+    max-width: 100vw;
+}
+
+*, *::before, *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: var(--font-body); font-size: 15px; color: var(--black); background: var(--cream); line-height: 1.6; min-height: 100vh; }
         a { text-decoration: none; color: inherit; }
@@ -205,51 +217,442 @@
         .footer-link:hover { color: var(--black); }
         .footer-tagline { font-size: 13px; color: var(--gray-500); text-align: center; }
 
-        @media (max-width: 1024px) { .sidebar { display: none; } .results-area { max-width: none; } }
-        @media (max-width: 768px) {
-            .header-top { flex-wrap: wrap; padding: var(--space-sm) var(--space-md); gap: var(--space-sm); }
-            .logo a { font-size: 22px; }
-            .search-wrapper { order: 3; width: 100%; max-width: none; }
-            .header-auth { margin-left: auto; }
-            .nav-tabs { padding: 0 var(--space-md); gap: 2px; height: 40px; }
-            .nav-tab { padding: var(--space-sm); font-size: 13px; }
-            .nav-tab svg { width: 14px; height: 14px; }
-            .main-content { padding: var(--space-md); }
-            .result-item { padding: var(--space-md); }
-            .result-title { font-size: 18px; }
-            .result-header { flex-wrap: wrap; gap: var(--space-sm); }
-            .result-type-badge { order: -1; margin-left: 0; margin-bottom: var(--space-xs); }
-            .result-site-info { flex: 1 1 calc(100% - 44px); }
-            .result-url { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
-            .results-stats { flex-wrap: nowrap; overflow-x: auto; padding-bottom: var(--space-sm); -webkit-overflow-scrolling: touch; scrollbar-width: none; }
-            .results-stats::-webkit-scrollbar { display: none; }
-            .footer-top { flex-direction: column; gap: var(--space-md); text-align: center; }
-            .footer-links { justify-content: center; }
+/* Related Searches Inline - Shows on ALL screens */
+        .related-searches-inline {
+            background: var(--warm-white);
+            border: 1px solid var(--gray-200);
+            border-radius: 12px;
+            padding: var(--space-md);
+            margin-top: var(--space-lg);
+            margin-bottom: var(--space-md);
         }
-        @media (max-width: 480px) {
-            body { font-size: 14px; }
-            .logo a { font-size: 20px; }
-            .search-input { font-size: 16px !important; }
-            .nav-tabs { padding: 0 var(--space-sm); height: 36px; }
-            .nav-tab { padding: var(--space-xs) var(--space-sm); font-size: 12px; }
-            .nav-tab svg { width: 12px; height: 12px; }
-            .nav-tab .tab-count { display: none; }
-            .main-content { padding: var(--space-sm); }
-            .result-item { padding: var(--space-sm) var(--space-md); margin-bottom: var(--space-sm); }
-            .result-favicon { width: 28px; height: 28px; }
-            .result-title { font-size: 16px; }
-            .result-snippet { font-size: 13px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
-            .pagination-first, .pagination-last { display: none; }
+        .related-searches-inline-title {
+            font-family: var(--font-display);
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--black);
+            margin-bottom: var(--space-sm);
+            display: flex;
+            align-items: center;
+            gap: var(--space-sm);
         }
-        @media (max-width: 360px) {
-            .logo a { font-size: 18px; }
-            .nav-tab { padding: 6px 8px; font-size: 11px; }
-            .nav-tab svg { display: none; }
-            .result-title { font-size: 15px; }
-            .result-snippet { -webkit-line-clamp: 2; }
+        .related-searches-inline-title svg {
+            color: var(--gold);
+            flex-shrink: 0;
         }
-        @media print { .header, .sidebar, .footer, .pagination, .nav-tabs { display: none !important; } }
-        @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration: 0.01ms !important; } }
+        .related-searches-inline-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: var(--space-sm);
+        }
+        .related-searches-inline-item {
+            display: inline-flex;
+            align-items: center;
+            padding: var(--space-sm) var(--space-md);
+            background: var(--gray-50);
+            border: 1px solid var(--gray-200);
+            border-radius: 20px;
+            font-size: 13px;
+            color: var(--gray-700);
+            transition: all var(--transition-fast);
+        }
+        .related-searches-inline-item:hover {
+            background: var(--gray-100);
+            border-color: var(--gray-300);
+            color: var(--black);
+        }
+/* ==================== RESPONSIVE ==================== */
+
+@media (max-width: 1024px) {
+    .sidebar { 
+        display: none; 
+    }
+    .results-area { 
+        max-width: none;
+        width: 100%;
+    }
+    .main-content {
+        gap: 0;
+    }
+}
+
+@media (max-width: 768px) {
+    /* Header */
+    .header-top {
+        flex-wrap: wrap;
+        padding: var(--space-sm) var(--space-md);
+        gap: var(--space-sm);
+    }
+    .logo a { 
+        font-size: 22px; 
+    }
+    .search-wrapper {
+        order: 3;
+        width: 100%;
+        max-width: none;
+        flex: 1 1 100%;
+    }
+    .search-box {
+        width: 100%;
+    }
+    .header-auth { 
+        margin-left: auto; 
+    }
+    .auth-link {
+        padding: var(--space-xs) var(--space-sm);
+        font-size: 13px;
+    }
+    .user-greeting {
+        font-size: 12px;
+        padding: var(--space-xs) var(--space-sm);
+    }
+    
+    /* Navigation */
+    .nav-tabs {
+        padding: 0 var(--space-md);
+        gap: 2px;
+        height: 40px;
+        width: 100%;
+    }
+    .nav-tab {
+        padding: var(--space-sm);
+        font-size: 13px;
+    }
+    .nav-tab svg { 
+        width: 14px; 
+        height: 14px; 
+    }
+    
+    /* Main Content */
+    .main-content { 
+        padding: var(--space-md);
+        flex-direction: column;
+    }
+    .results-area {
+        width: 100%;
+        max-width: 100%;
+    }
+    
+    /* Results Stats */
+    .results-stats {
+        flex-wrap: wrap;
+        gap: var(--space-xs);
+    }
+    .active-filter-badge {
+        font-size: 11px;
+        padding: 3px 8px;
+    }
+    
+    /* Result Cards */
+    .result-item { 
+        padding: var(--space-md);
+        width: 100%;
+        max-width: 100%;
+    }
+    .result-title { 
+        font-size: 18px; 
+    }
+    .result-header {
+        flex-wrap: wrap;
+        gap: var(--space-sm);
+    }
+    .result-type-badge {
+        order: -1;
+        margin-left: 0;
+        margin-bottom: var(--space-xs);
+        flex-shrink: 0;
+    }
+    .result-site-info { 
+        flex: 1 1 calc(100% - 44px);
+        min-width: 0;
+        max-width: calc(100% - 44px);
+    }
+    .result-site-name {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .result-url {
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        display: block;
+    }
+    .result-snippet {
+        word-break: break-word;
+        overflow-wrap: break-word;
+    }
+    .result-meta {
+        gap: var(--space-sm);
+        flex-wrap: wrap;
+    }
+    .result-tag {
+        font-size: 11px;
+        padding: 3px 8px;
+    }
+    
+    /* Pagination */
+    .pagination-controls {
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: var(--space-xs);
+    }
+    .pagination-pages {
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+    
+    /* Related Searches */
+    .related-searches-inline {
+        padding: var(--space-sm) var(--space-md);
+        margin-top: var(--space-md);
+        border-radius: 10px;
+        width: 100%;
+    }
+    .related-searches-inline-title {
+        font-size: 14px;
+        margin-bottom: var(--space-xs);
+    }
+    .related-searches-inline-title svg { 
+        width: 16px; 
+        height: 16px; 
+    }
+    .related-searches-inline-list { 
+        gap: var(--space-xs);
+    }
+    .related-searches-inline-item {
+        padding: 6px 12px;
+        font-size: 12px;
+        border-radius: 16px;
+    }
+    
+    /* Footer */
+    .footer-top {
+        flex-direction: column;
+        gap: var(--space-md);
+        text-align: center;
+    }
+    .footer-links { 
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+}
+
+@media (max-width: 480px) {
+    body { 
+        font-size: 14px; 
+    }
+    .logo a { 
+        font-size: 20px; 
+    }
+    .search-input { 
+        font-size: 16px !important; 
+    }
+    
+    /* Navigation */
+    .nav-tabs {
+        padding: 0 var(--space-sm);
+        height: 36px;
+    }
+    .nav-tab {
+        padding: var(--space-xs) var(--space-sm);
+        font-size: 12px;
+    }
+    .nav-tab svg { 
+        width: 12px; 
+        height: 12px; 
+    }
+    /* .nav-tab .tab-count { 
+        display: none; 
+    } */
+    
+    /* Main Content */
+    .main-content { 
+        padding: var(--space-sm); 
+    }
+    
+    /* Results */
+    .results-stats {
+        font-size: 12px;
+        padding-bottom: var(--space-sm);
+        margin-bottom: var(--space-sm);
+    }
+    .active-filter-badge {
+        font-size: 10px;
+        padding: 2px 6px;
+    }
+    
+    /* Result Cards */
+    .result-item {
+        padding: var(--space-sm) var(--space-md);
+        margin-bottom: var(--space-sm);
+        border-radius: 10px;
+    }
+    .result-favicon { 
+        width: 28px; 
+        height: 28px; 
+    }
+    .result-title { 
+        font-size: 16px;
+        line-height: 1.3;
+    }
+    .result-snippet {
+        font-size: 13px;
+        display: -webkit-box;
+        -webkit-line-clamp: 3;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+    .result-type-badge {
+        font-size: 9px;
+        padding: 2px 6px;
+    }
+    
+    /* Pagination */
+    .pagination { 
+        gap: var(--space-sm); 
+        margin-top: var(--space-md); 
+        padding-top: var(--space-md); 
+    }
+    .pagination-info { 
+        font-size: 12px; 
+        text-align: center;
+    }
+    .pagination-btn { 
+        padding: var(--space-xs) var(--space-sm); 
+        font-size: 12px; 
+    }
+    .pagination-page { 
+        min-width: 32px; 
+        height: 32px; 
+        font-size: 12px; 
+    }
+    .pagination-first, 
+    .pagination-last { 
+        display: none; 
+    }
+    
+    /* No Results */
+    .no-results { 
+        padding: var(--space-lg) var(--space-sm); 
+    }
+    .no-results h2 { 
+        font-size: 18px; 
+    }
+    .no-results-suggestions { 
+        padding: var(--space-md); 
+    }
+    
+    /* Related Searches */
+    .related-searches-inline { 
+        padding: var(--space-sm); 
+        margin-top: var(--space-sm); 
+        border-radius: 8px; 
+    }
+    .related-searches-inline-title { 
+        font-size: 13px; 
+    }
+    .related-searches-inline-item { 
+        padding: 5px 10px; 
+        font-size: 11px; 
+        border-radius: 14px; 
+    }
+    
+    /* Spelling Correction */
+    .spelling-correction { 
+        padding: var(--space-sm) var(--space-md); 
+    }
+    .including-results { 
+        font-size: 14px; 
+    }
+    .search-instead { 
+        font-size: 12px; 
+    }
+    
+    /* Footer */
+    .footer-content {
+        padding: var(--space-md);
+    }
+    .footer-links {
+        gap: var(--space-md);
+    }
+    .footer-link {
+        font-size: 13px;
+    }
+}
+
+@media (max-width: 360px) {
+    .logo a { 
+        font-size: 18px; 
+    }
+    .auth-link { 
+        padding: 4px 6px; 
+        font-size: 11px; 
+    }
+    .user-greeting { 
+        font-size: 10px; 
+        padding: 4px 6px; 
+    }
+    
+    .nav-tab { 
+        padding: 6px 8px; 
+        font-size: 11px; 
+    }
+    .nav-tab svg { 
+        display: none; 
+    }
+    
+    .result-title { 
+        font-size: 15px; 
+    }
+    .result-snippet { 
+        -webkit-line-clamp: 2; 
+        font-size: 12px; 
+    }
+    .result-type-badge { 
+        font-size: 8px; 
+    }
+    
+    .pagination-btn { 
+        padding: 4px 6px; 
+        font-size: 11px; 
+    }
+    .pagination-page { 
+        min-width: 28px; 
+        height: 28px; 
+        font-size: 11px; 
+    }
+    
+    .related-searches-inline-title { 
+        font-size: 12px; 
+    }
+    .related-searches-inline-item { 
+        padding: 4px 8px; 
+        font-size: 10px; 
+    }
+    
+    .footer-links { 
+        gap: var(--space-sm); 
+    }
+    .footer-link { 
+        font-size: 12px; 
+    }
+}
+
+@media print {
+    .header, .sidebar, .footer, .pagination, .nav-tabs { 
+        display: none !important; 
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { 
+        transition-duration: 0.01ms !important; 
+    }
+}
+
+        
     </style>
 </head>
 
@@ -284,7 +687,6 @@
             </div>
         </div>
         
-        <!-- CATEGORY TABS -->
         <nav class="nav-tabs">
             <a href="/search?query={{ query|urlencode }}&session_id={{ session_id }}" class="nav-tab {% if not active_data_type and not active_schema %}active{% endif %}">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
@@ -347,6 +749,20 @@
                 </article>
                 {% endfor %}
 
+                {% if related_searches %}
+                <div class="related-searches-inline">
+                    <h3 class="related-searches-inline-title">
+                        <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+                        Related Searches
+                    </h3>
+                    <div class="related-searches-inline-list">
+                        {% for search in related_searches|slice:":5" %}
+                        <a href="/search?query={{ search.query|urlencode }}&session_id={{ session_id }}&alt_mode=y" class="related-searches-inline-item">{{ search.query }}</a>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+
                 {% if pagination.total_pages > 1 %}
                 <nav class="pagination" aria-label="Search results pagination">
                     <div class="pagination-info">Showing {{ pagination.start_result }}-{{ pagination.end_result }} of {{ total_results|default:pagination.total_results }} results</div>
@@ -365,6 +781,19 @@
                     {% if active_data_type or active_category or active_schema %}<p style="margin-bottom: var(--space-lg);"><a href="/search?query={{ query|urlencode }}&session_id={{ session_id }}" style="color: var(--green); font-weight: 500;">→ Search all categories instead</a></p>{% endif %}
                     <div class="no-results-suggestions"><h3>Suggestions</h3><ul><li>Check your spelling</li><li>Try more general keywords</li><li>Try different keywords</li>{% if active_data_type %}<li>Remove the "{% if active_data_type == 'article' %}Articles{% elif active_data_type == 'person' %}People{% elif active_data_type == 'business' %}Businesses{% elif active_data_type == 'place' %}Places{% elif active_data_type == 'media' %}Media{% elif active_data_type == 'event' %}Events{% else %}{{ active_data_type|title }}{% endif %}" filter</li>{% endif %}</ul></div>
                 </div>
+                {% if related_searches %}
+                <div class="related-searches-inline">
+                    <h3 class="related-searches-inline-title">
+                        <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+                        Related Searches
+                    </h3>
+                    <div class="related-searches-inline-list">
+                        {% for search in related_searches|slice:":5" %}
+                        <a href="/search?query={{ search.query|urlencode }}&session_id={{ session_id }}&alt_mode=y" class="related-searches-inline-item">{{ search.query }}</a>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
             {% endif %}
         </div>
         
@@ -389,7 +818,7 @@
                 <h3 class="sidebar-title"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>Content Format</h3>
                 <div class="filter-options">{% for schema in schema_facets|slice:":6" %}<a href="/search?query={{ query|urlencode }}{% if active_data_type %}&data_type={{ active_data_type }}{% endif %}{% if active_category %}&category={{ active_category }}{% endif %}&schema={{ schema.value|urlencode }}&session_id={{ session_id }}" class="filter-option {% if active_schema == schema.value %}active{% endif %}">{{ schema.label }}<span class="count">{{ schema.count }}</span></a>{% endfor %}</div>
             </div>
-             {% endif %}
+            {% endif %}
             {% if related_searches %}
             <div class="sidebar-section">
                 <h3 class="sidebar-title"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>Related Searches</h3>
@@ -400,14 +829,6 @@
                 </div>
             </div>
             {% endif %}
-            <!-- <div class="sidebar-section">
-                <h3 class="sidebar-title"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 6l2.29 2.29-4.88 4.88-4-4L2 16.59 3.41 18l6-6 4 4 6.3-6.29L22 12V6z"/></svg>Trending Now</h3>
-                <div class="trending-list">
-                    <a href="/search?query=Black+therapists+Chicago&session_id={{ session_id }}" class="trending-item"><span class="trending-number">1</span><div class="trending-content"><div class="trending-query">Black therapists Chicago</div><div class="trending-meta">+120% this week</div></div></a>
-                    <a href="/search?query=Juneteenth+events+2026&session_id={{ session_id }}" class="trending-item"><span class="trending-number">2</span><div class="trending-content"><div class="trending-query">Juneteenth events 2026</div><div class="trending-meta">Trending</div></div></a>
-                    <a href="/search?query=HBCU+scholarships&session_id={{ session_id }}" class="trending-item"><span class="trending-number">3</span><div class="trending-content"><div class="trending-query">HBCU scholarships</div><div class="trending-meta">+85% this week</div></div></a>
-                </div>
-            </div> -->
         </aside>
     </div>
     
@@ -428,6 +849,4 @@
         let pageStartTime=Date.now();window.addEventListener('beforeunload',function(){const t=Date.now()-pageStartTime;if(t>1000&&navigator.sendBeacon){navigator.sendBeacon(ANALYTICS_CONFIG.trackClickUrl,new Blob([JSON.stringify({session_id:ANALYTICS_CONFIG.sessionId,event_type:'page_dwell',query:ANALYTICS_CONFIG.query,time_on_page_ms:t,had_results:ANALYTICS_CONFIG.totalResults>0})],{type:'application/json'}));}});
     </script>
 </body>
-
-
 </html>

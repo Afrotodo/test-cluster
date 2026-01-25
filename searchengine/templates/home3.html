@@ -1018,28 +1018,20 @@
                     <svg class="section-icon" viewBox="0 0 24 24" fill="currentColor">
                         <path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9-4.03-9-9-9zm0 16c-3.86 0-7-3.14-7-7s3.14-7 7-7 7 3.14 7 7-3.14 7-7 7zm1-11h-2v3H8v2h3v3h2v-3h3v-2h-3V8z"/>
                     </svg>
-                    <span class="section-title">Popular Questions</span>
+                    <span class="section-title">Popular Queries</span>
                 </div>
+                
+
                 <div class="question-list">
-                    <a href="#" class="question-card" data-query="civil rights movement"  data-alt-mode="y">
-                        <span class="question-text"> civil rights movement</span>
-                        <span class="question-meta">
-                            <!-- <span class="answer-count"></span> -->
-                        </span>
-                    </a>
-                    <a href="#" class="question-card" data-query=" mental health blogs"  data-alt-mode="y">
-                        <span class="question-text">  therapy and mental health blogs</span>
-                        <span class="question-meta">
-                            <!-- <span class="answer-count"></span> -->
-                        </span>
-                    </a>
-                    <a href="#" class="question-card" data-query="natural hair products"  data-alt-mode="y">
-                        <span class="question-text">natural hair products</span>
-                        <span class="question-meta">
-                            <!-- <span class="answer-count"></span> -->
-                        </span>
-                    </a>
+                {% for item in popular_queries %}
+                <a href="#" class="question-card" data-query="{{ item.query }}" data-alt-mode="y">
+                    <span class="question-text">{{ item.query }}</span>
+                </a>
+                {% endfor %}
                 </div>
+
+
+
             </section>
 
             <!-- Category Pills -->

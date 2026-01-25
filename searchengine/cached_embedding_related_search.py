@@ -734,3 +734,39 @@ def debug_related_searches(
         
     except Exception as e:
         print(f"🔍 DEBUG ERROR: {e}")
+
+
+
+def get_popular_queries(limit: int = 10) -> List[Dict[str, Any]]:
+    """
+    Get the most searched queries, ordered by search_count descending.
+    """
+    redis_client = _get_redis_client()
+    if not redis_client:
+        return []
+    
+    try:
+        index_key = f"{CACHE_KEY_PREFIX}:index"
+        all_hashes = redis_client.zrange(index_key, 0, -1)
+        
+        if not all_hashes:
+            return []
+        
+        queries_with_counts = []
+        for query_hash in all_hashes:
+            meta_key = _get_key('meta', query_hash)
+            meta = redis_client.hgetall(meta_key)
+            if meta and meta.get('query'):
+                queries_with_counts.append({
+                    'query': meta.get('query', ''),
+                    'search_count': int(meta.get('search_count', 0)),
+                })
+        
+        # Sort by search_count descending
+        queries_with_counts.sort(key=lambda x: x['search_count'], reverse=True)
+        
+        return queries_with_counts[:5]  # <-- limit used here
+        
+    except RedisError as e:
+        logger.error(f"Failed to get popular queries: {e}")
+        return []

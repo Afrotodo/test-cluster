@@ -26,7 +26,7 @@ from django.http import Http404, HttpResponseBadRequest, JsonResponse
 from django.shortcuts import redirect, render
 from django.utils.html import escape
 from django.views.decorators.http import require_GET, require_http_methods
-# from .cached_embedding_related_search import get_query_cache
+
 
 from decouple import config
 
@@ -1209,6 +1209,8 @@ def log_search_analytics(
 # VIEW: HOME
 # =============================================================================
 
+from .cached_embedding_related_search import get_popular_queries
+
 def home(request):
     """Home page view."""
     city = get_user_city(request)
@@ -1216,6 +1218,7 @@ def home(request):
     context = {
         'city': city,
         'supported_cities': list(SUPPORTED_CITIES),
+        'popular_queries': get_popular_queries(limit=6),
     }
     
     return render(request, 'home3.html', context)
