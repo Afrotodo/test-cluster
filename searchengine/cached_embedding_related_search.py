@@ -56,6 +56,27 @@ logger = logging.getLogger(__name__)
 
 # Redis
 REDIS_CACHE_URL = config('REDIS_ANALYTICS_URL')
+# Redis URL - supports multiple databases via URL path (e.g., redis://localhost:6379/2)
+
+
+SESSION_EXPIRE_HOURS = config('SESSION_EXPIRE_HOURS', default=24, cast=int)
+ANALYTICS_RETENTION_DAYS = config('ANALYTICS_RETENTION_DAYS', default=90, cast=int)
+
+# Connection settings
+REDIS_SOCKET_TIMEOUT = config('REDIS_SOCKET_TIMEOUT', default=5, cast=int)
+REDIS_SOCKET_CONNECT_TIMEOUT = config('REDIS_SOCKET_CONNECT_TIMEOUT', default=5, cast=int)
+REDIS_RETRY_ON_TIMEOUT = config('REDIS_RETRY_ON_TIMEOUT', default=True, cast=bool)
+
+# Retry settings
+REDIS_MAX_RETRIES = config('REDIS_MAX_RETRIES', default=3, cast=int)
+REDIS_RETRY_DELAY = config('REDIS_RETRY_DELAY', default=0.1, cast=float)  # Base delay in seconds
+REDIS_RETRY_BACKOFF = config('REDIS_RETRY_BACKOFF', default=2.0, cast=float)  # Exponential backoff multiplier
+
+# Circuit breaker settings
+CIRCUIT_BREAKER_FAILURE_THRESHOLD = config('CIRCUIT_BREAKER_FAILURE_THRESHOLD', default=5, cast=int)
+CIRCUIT_BREAKER_RECOVERY_TIMEOUT = config('CIRCUIT_BREAKER_RECOVERY_TIMEOUT', default=30, cast=int)  # seconds
+CIRCUIT_BREAKER_HALF_OPEN_REQUESTS = config('CIRCUIT_BREAKER_HALF_OPEN_REQUESTS', default=3, cast=int)
+
 
 # Embedding
 EMBEDDING_DIMENSION = 384

@@ -261,8 +261,8 @@ class RedisManager:
         """Initialize Redis connection pool."""
         try:
             self._pool = redis.ConnectionPool(
-                host=config('REDIS_HOST', default='localhost'),
-                port=config('REDIS_PORT', default=6379, cast=int),
+                host=config('REDIS_LOCATION'),
+                port=config('REDIS_PORT', cast=int),
                 db=config('REDIS_DB', default=0, cast=int),
                 password=config('REDIS_PASSWORD', default=None),
                 decode_responses=True,
