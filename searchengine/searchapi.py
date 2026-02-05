@@ -400,11 +400,77 @@ def get_prefix_matches_with_rank(prefix: str, limit: int = 10) -> List[Dict[str,
 # FUZZY SEARCH (SPELL CORRECTION)
 # =============================================================================
 
+# def get_fuzzy_matches(term: str, limit: int = 10, max_distance: int = 2) -> List[Dict[str, Any]]:
+#     """
+#     Get fuzzy matches using RediSearch Levenshtein distance.
+#     %term% = 1 edit distance
+#     %%term%% = 2 edit distance
+#     """
+#     client = RedisLookupTable.get_client()
+#     if not client or not term:
+#         return []
+    
+#     term_lower = term.lower().strip()
+#     if len(term_lower) < 3:
+#         return []
+    
+#     try:
+#         escaped_term = escape_query(term_lower)
+        
+#         # Try 1 edit distance first
+#         if max_distance >= 1:
+#             # FIX: Simplified query without @term:
+#             query_str = f"%{escaped_term}%"
+#             query = Query(query_str).sort_by('rank', asc=False).paging(0, limit)
+            
+#             result = client.ft(INDEX_NAME).search(query)
+            
+#             if result.docs:
+#                 matches = []
+#                 for doc in result.docs:
+#                     parsed = parse_search_doc(doc)
+#                     if parsed:
+#                         parsed['distance'] = damerau_levenshtein_distance(
+#                             term_lower, parsed['term'].lower()
+#                         )
+#                         matches.append(parsed)
+                
+#                 matches.sort(key=lambda x: (x['distance'], -x['rank']))
+#                 return matches[:limit]
+        
+#         # Try 2 edit distance if no results
+#         if max_distance >= 2:
+#             # FIX: Simplified query without @term:
+#             query_str = f"%%{escaped_term}%%"
+#             query = Query(query_str).sort_by('rank', asc=False).paging(0, limit)
+            
+#             result = client.ft(INDEX_NAME).search(query)
+            
+#             matches = []
+#             for doc in result.docs:
+#                 parsed = parse_search_doc(doc)
+#                 if parsed:
+#                     parsed['distance'] = damerau_levenshtein_distance(
+#                         term_lower, parsed['term'].lower()
+#                     )
+#                     matches.append(parsed)
+            
+#             matches.sort(key=lambda x: (x['distance'], -x['rank']))
+#             return matches[:limit]
+        
+#         return []
+        
+#     except Exception as e:
+#         print(f"Fuzzy match error: {e}")
+#         return []
+
 def get_fuzzy_matches(term: str, limit: int = 10, max_distance: int = 2) -> List[Dict[str, Any]]:
     """
     Get fuzzy matches using RediSearch Levenshtein distance.
     %term% = 1 edit distance
     %%term%% = 2 edit distance
+    
+    For multi-word queries, only fuzzy matches the last word.
     """
     client = RedisLookupTable.get_client()
     if not client or not term:
@@ -415,17 +481,101 @@ def get_fuzzy_matches(term: str, limit: int = 10, max_distance: int = 2) -> List
         return []
     
     try:
+        # Split into words
+        words = term_lower.split()
+        
+        if len(words) > 1:
+            # Multi-word: fuzzy match only the last word
+            prefix_words = ' '.join(words[:-1])
+            last_word = words[-1]
+            
+            if len(last_word) < 3:
+                return []
+            
+            escaped_prefix = escape_query(prefix_words)
+            escaped_last = escape_query(last_word)
+            
+            # Try 1 edit distance first
+            if max_distance >= 1:
+                query_str = f"{escaped_prefix} %{escaped_last}%"
+                query = Query(query_str).sort_by('rank', asc=False).paging(0, limit)
+                
+                try:
+                    result = client.ft(INDEX_NAME).search(query)
+                    
+                    if result.docs:
+                        matches = []
+                        for doc in result.docs:
+                            parsed = parse_search_doc(doc)
+                            if parsed:
+                                parsed['distance'] = damerau_levenshtein_distance(
+                                    term_lower, parsed['term'].lower()
+                                )
+                                matches.append(parsed)
+                        
+                        matches.sort(key=lambda x: (x['distance'], -x['rank']))
+                        return matches[:limit]
+                except Exception as e:
+                    print(f"Fuzzy match error (multi-word, 1 edit): {e}")
+            
+            # Try 2 edit distance
+            if max_distance >= 2:
+                query_str = f"{escaped_prefix} %%{escaped_last}%%"
+                query = Query(query_str).sort_by('rank', asc=False).paging(0, limit)
+                
+                try:
+                    result = client.ft(INDEX_NAME).search(query)
+                    
+                    matches = []
+                    for doc in result.docs:
+                        parsed = parse_search_doc(doc)
+                        if parsed:
+                            parsed['distance'] = damerau_levenshtein_distance(
+                                term_lower, parsed['term'].lower()
+                            )
+                            matches.append(parsed)
+                    
+                    matches.sort(key=lambda x: (x['distance'], -x['rank']))
+                    return matches[:limit]
+                except Exception as e:
+                    print(f"Fuzzy match error (multi-word, 2 edit): {e}")
+            
+            return []
+        
+        # Single word - original logic
         escaped_term = escape_query(term_lower)
         
         # Try 1 edit distance first
         if max_distance >= 1:
-            # FIX: Simplified query without @term:
             query_str = f"%{escaped_term}%"
             query = Query(query_str).sort_by('rank', asc=False).paging(0, limit)
             
-            result = client.ft(INDEX_NAME).search(query)
+            try:
+                result = client.ft(INDEX_NAME).search(query)
+                
+                if result.docs:
+                    matches = []
+                    for doc in result.docs:
+                        parsed = parse_search_doc(doc)
+                        if parsed:
+                            parsed['distance'] = damerau_levenshtein_distance(
+                                term_lower, parsed['term'].lower()
+                            )
+                            matches.append(parsed)
+                    
+                    matches.sort(key=lambda x: (x['distance'], -x['rank']))
+                    return matches[:limit]
+            except Exception as e:
+                print(f"Fuzzy match error (single word, 1 edit): {e}")
+        
+        # Try 2 edit distance if no results
+        if max_distance >= 2:
+            query_str = f"%%{escaped_term}%%"
+            query = Query(query_str).sort_by('rank', asc=False).paging(0, limit)
             
-            if result.docs:
+            try:
+                result = client.ft(INDEX_NAME).search(query)
+                
                 matches = []
                 for doc in result.docs:
                     parsed = parse_search_doc(doc)
@@ -437,26 +587,8 @@ def get_fuzzy_matches(term: str, limit: int = 10, max_distance: int = 2) -> List
                 
                 matches.sort(key=lambda x: (x['distance'], -x['rank']))
                 return matches[:limit]
-        
-        # Try 2 edit distance if no results
-        if max_distance >= 2:
-            # FIX: Simplified query without @term:
-            query_str = f"%%{escaped_term}%%"
-            query = Query(query_str).sort_by('rank', asc=False).paging(0, limit)
-            
-            result = client.ft(INDEX_NAME).search(query)
-            
-            matches = []
-            for doc in result.docs:
-                parsed = parse_search_doc(doc)
-                if parsed:
-                    parsed['distance'] = damerau_levenshtein_distance(
-                        term_lower, parsed['term'].lower()
-                    )
-                    matches.append(parsed)
-            
-            matches.sort(key=lambda x: (x['distance'], -x['rank']))
-            return matches[:limit]
+            except Exception as e:
+                print(f"Fuzzy match error (single word, 2 edit): {e}")
         
         return []
         

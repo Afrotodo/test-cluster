@@ -27,7 +27,7 @@ SECRET_KEY = config('SECRET_KEY')
 CACHE_API_SECRET = config('CACHE_API_SECRET')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = False
+DEBUG = True
 ALLOWED_HOSTS = ['afrotodo.com', 'www.afrotodo.com', 'afrotodo.us', 'www.afrotodo.us', '64.225.17.130', 'localhost', '127.0.0.1']
 
 

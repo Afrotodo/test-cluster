@@ -1389,52 +1389,238 @@
 
 
 
-# test_django_flow.py
+# # test_django_flow.py
+# import sys
+# import os
+# sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+# from searchapi import lookup_table
+# from word_discovery import word_discovery_full, batch_validate_words
+
+# query = "tuskegee airman"
+
+# print("=" * 60)
+# print("SIMULATING DJANGO FLOW")
+# print("=" * 60)
+
+# # Step 1: What lookup_table returns (this is what Django uses)
+# print("\n=== Step 1: lookup_table() result ===")
+# lookup_result = lookup_table(query, return_validation_cache=True)
+# print(f"Success: {lookup_result.get('success')}")
+# print(f"Terms returned: {len(lookup_result.get('terms', []))}")
+
+# for term in lookup_result.get('terms', []):
+#     print(f"  Word: '{term.get('word')}'")
+#     print(f"    exists: {term.get('exists')}")
+#     print(f"    pos: {term.get('pos')}")
+#     print(f"    metadata: {term.get('metadata', {}).get('pos')}")
+#     print()
+
+# # Step 2: What word_discovery_full does with that data
+# print("\n=== Step 2: word_discovery_full() with pre_validated ===")
+# result_with_prevalidated = word_discovery_full(
+#     query, 
+#     verbose=True, 
+#     pre_validated=lookup_result.get('terms', [])
+# )
+# print(f"Valid terms: {[t['word'] for t in result_with_prevalidated['valid_terms']]}")
+# print(f"Unknown terms: {[t['word'] for t in result_with_prevalidated['unknown_terms']]}")
+
+# # Step 3: Compare to direct call (what test script does)
+# print("\n=== Step 3: word_discovery_full() WITHOUT pre_validated ===")
+# result_direct = word_discovery_full(query, verbose=True, pre_validated=None)
+# print(f"Valid terms: {[t['word'] for t in result_direct['valid_terms']]}")
+# print(f"Unknown terms: {[t['word'] for t in result_direct['unknown_terms']]}")
+
+# # Summary
+# print("\n" + "=" * 60)
+# print("COMPARISON")
+# print("=" * 60)
+# print(f"With pre_validated (Django path):    Valid={len(result_with_prevalidated['valid_terms'])}, Unknown={len(result_with_prevalidated['unknown_terms'])}")
+# print(f"Without pre_validated (Test path):   Valid={len(result_direct['valid_terms'])}, Unknown={len(result_direct['unknown_terms'])}")
+
+
+
+
+
+
+
+
+"""
+test_word_discovery_intent.py
+Test that intent detection works inside word_discovery.py
+
+Run from your Django project directory:
+    python -c "from search.word_discovery import process_query_optimized; r = process_query_optimized('who was the first president'); print('SIGNALS:', r.get('signals', 'NOT FOUND'))"
+
+Or run this file directly if word_discovery is importable:
+    python test_word_discovery_intent.py
+"""
+
 import sys
 import os
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from searchapi import lookup_table
-from word_discovery import word_discovery_full, batch_validate_words
+print("=" * 70)
+print("TEST: word_discovery.py with intent_detect integration")
+print("=" * 70)
 
-query = "tuskegee airman"
+# =============================================================================
+# Step 1: Try to import word_discovery
+# =============================================================================
+print("\n[Step 1] Attempting to import word_discovery...")
 
-print("=" * 60)
-print("SIMULATING DJANGO FLOW")
-print("=" * 60)
+word_discovery = None
+process_query_optimized = None
 
-# Step 1: What lookup_table returns (this is what Django uses)
-print("\n=== Step 1: lookup_table() result ===")
-lookup_result = lookup_table(query, return_validation_cache=True)
-print(f"Success: {lookup_result.get('success')}")
-print(f"Terms returned: {len(lookup_result.get('terms', []))}")
+# Try different import paths
+import_attempts = [
+    ("from word_discovery import process_query_optimized", "word_discovery"),
+    ("from .word_discovery import process_query_optimized", ".word_discovery"),
+    ("from search.word_discovery import process_query_optimized", "search.word_discovery"),
+    ("from app.search.word_discovery import process_query_optimized", "app.search.word_discovery"),
+]
 
-for term in lookup_result.get('terms', []):
-    print(f"  Word: '{term.get('word')}'")
-    print(f"    exists: {term.get('exists')}")
-    print(f"    pos: {term.get('pos')}")
-    print(f"    metadata: {term.get('metadata', {}).get('pos')}")
-    print()
+for import_code, module_name in import_attempts:
+    try:
+        print(f"  Trying: {import_code}")
+        exec(import_code)
+        print(f"  ✅ Success: imported from {module_name}")
+        break
+    except ImportError as e:
+        print(f"  ❌ Failed: {e}")
+    except Exception as e:
+        print(f"  ❌ Error: {type(e).__name__}: {e}")
+else:
+    print("\n❌ Could not import word_discovery from any path.")
+    print("\nPlease run this test from your Django project directory,")
+    print("or modify the import statement at the top of this file.")
+    print("\nAlternatively, run this in Django shell:")
+    print("  python manage.py shell")
+    print("  >>> from search.word_discovery import process_query_optimized")
+    print("  >>> result = process_query_optimized('who was the first president')")
+    print("  >>> print('SIGNALS:', result.get('signals', 'NOT FOUND'))")
+    sys.exit(1)
 
-# Step 2: What word_discovery_full does with that data
-print("\n=== Step 2: word_discovery_full() with pre_validated ===")
-result_with_prevalidated = word_discovery_full(
-    query, 
-    verbose=True, 
-    pre_validated=lookup_result.get('terms', [])
-)
-print(f"Valid terms: {[t['word'] for t in result_with_prevalidated['valid_terms']]}")
-print(f"Unknown terms: {[t['word'] for t in result_with_prevalidated['unknown_terms']]}")
+# =============================================================================
+# Step 2: Test basic query processing
+# =============================================================================
+print("\n[Step 2] Testing process_query_optimized()...")
 
-# Step 3: Compare to direct call (what test script does)
-print("\n=== Step 3: word_discovery_full() WITHOUT pre_validated ===")
-result_direct = word_discovery_full(query, verbose=True, pre_validated=None)
-print(f"Valid terms: {[t['word'] for t in result_direct['valid_terms']]}")
-print(f"Unknown terms: {[t['word'] for t in result_direct['unknown_terms']]}")
+test_query = "who was the first president of morehouse"
+print(f"  Query: '{test_query}'")
 
+try:
+    result = process_query_optimized(test_query)
+    print(f"  ✅ process_query_optimized() returned successfully")
+    print(f"  Keys in result: {list(result.keys())}")
+except Exception as e:
+    print(f"  ❌ Error calling process_query_optimized(): {type(e).__name__}: {e}")
+    import traceback
+    traceback.print_exc()
+    sys.exit(1)
+
+# =============================================================================
+# Step 3: Check if 'signals' key exists
+# =============================================================================
+print("\n[Step 3] Checking for 'signals' key...")
+
+if 'signals' in result:
+    print("  ✅ 'signals' key EXISTS in result")
+    signals = result['signals']
+    print(f"  Number of signals: {len(signals)}")
+else:
+    print("  ❌ 'signals' key NOT FOUND in result")
+    print("\n  This means detect_intent() is not being called in word_discovery.py")
+    print("  or it's failing silently.")
+    print("\n  Check that word_discovery.py has:")
+    print("    1. Import at top: from .intent_detect import detect_intent")
+    print("    2. Call at end of process_query_optimized(): output = detect_intent(output)")
+    sys.exit(1)
+
+# =============================================================================
+# Step 4: Display signals
+# =============================================================================
+print("\n[Step 4] Displaying detected signals...")
+
+signals = result['signals']
+
+print("\n  --- Question Signals ---")
+print(f"    has_question_word: {signals.get('has_question_word')}")
+print(f"    question_word: {signals.get('question_word')}")
+print(f"    question_position: {signals.get('question_position')}")
+
+print("\n  --- Temporal Signals ---")
+print(f"    has_temporal: {signals.get('has_temporal')}")
+print(f"    temporal_direction: {signals.get('temporal_direction')}")
+print(f"    temporal_word: {signals.get('temporal_word')}")
+
+print("\n  --- Role Signals ---")
+print(f"    has_role_word: {signals.get('has_role_word')}")
+print(f"    role_word: {signals.get('role_word')}")
+
+print("\n  --- Entity Signals ---")
+print(f"    has_person: {signals.get('has_person')}")
+print(f"    has_organization: {signals.get('has_organization')}")
+print(f"    detected_entities: {signals.get('detected_entities')}")
+
+print("\n  --- Structure Signals ---")
+print(f"    word_count: {signals.get('word_count')}")
+print(f"    has_verb: {signals.get('has_verb')}")
+
+# =============================================================================
+# Step 5: Test multiple queries
+# =============================================================================
+print("\n[Step 5] Testing multiple query types...")
+
+test_queries = [
+    "restaurants near me",
+    "black women leadership", 
+    "billie holiday",
+    "where is africa located",
+    "best soul food in atlanta",
+]
+
+for query in test_queries:
+    print(f"\n  Query: '{query}'")
+    try:
+        r = process_query_optimized(query)
+        s = r.get('signals', {})
+        
+        # Show key signals
+        key_signals = []
+        if s.get('has_question_word'):
+            key_signals.append(f"question:{s.get('question_word')}")
+        if s.get('has_temporal'):
+            key_signals.append(f"temporal:{s.get('temporal_direction')}")
+        if s.get('is_local_search'):
+            key_signals.append("local_search")
+        if s.get('has_superlative'):
+            key_signals.append(f"superlative:{s.get('superlative_word')}")
+        if s.get('has_service_word'):
+            key_signals.append(f"service:{s.get('service_words')}")
+        if s.get('has_culture_word'):
+            key_signals.append("culture")
+        if s.get('has_food_word'):
+            key_signals.append("food")
+        if s.get('has_person'):
+            key_signals.append("person")
+        if s.get('has_location'):
+            key_signals.append("location")
+        
+        if key_signals:
+            print(f"    Signals: {', '.join(key_signals)}")
+        else:
+            print(f"    Signals: (none detected)")
+            
+    except Exception as e:
+        print(f"    ❌ Error: {e}")
+
+# =============================================================================
 # Summary
-print("\n" + "=" * 60)
-print("COMPARISON")
-print("=" * 60)
-print(f"With pre_validated (Django path):    Valid={len(result_with_prevalidated['valid_terms'])}, Unknown={len(result_with_prevalidated['unknown_terms'])}")
-print(f"Without pre_validated (Test path):   Valid={len(result_direct['valid_terms'])}, Unknown={len(result_direct['unknown_terms'])}")
+# =============================================================================
+print("\n" + "=" * 70)
+print("TEST COMPLETE")
+print("=" * 70)
+print("✅ word_discovery.py successfully integrates intent_detect")
+print("✅ Signals are being added to the output")
+print("\nThe integration is working correctly.")

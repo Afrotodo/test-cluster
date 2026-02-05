@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 # ============================================================================
 
 EMBEDDING_SERVICE_URL = config('EMBEDDING_SERVICE_URL')
-EMBEDDING_TIMEOUT=config('EMBEDDING_TIMEOUT')
+EMBEDDING_TIMEOUT = config('EMBEDDING_TIMEOUT', default=2, cast=int)
 
 
 

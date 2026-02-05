@@ -261,6 +261,262 @@ html, body {
             border-color: var(--gray-300);
             color: var(--black);
         }
+
+/* ==================== IMAGE TAB STYLES ==================== */
+
+        /* Image Grid */
+        .image-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: var(--space-md);
+            padding: var(--space-md) 0;
+        }
+
+        .image-card {
+            position: relative;
+            border-radius: 12px;
+            overflow: hidden;
+            background: var(--gray-100);
+            aspect-ratio: 1;
+            cursor: pointer;
+            transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+            border: 1px solid var(--gray-200);
+        }
+
+        .image-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+            border-color: var(--gray-300);
+        }
+
+        .image-card img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transition: transform var(--transition-base);
+        }
+
+        .image-card:hover img {
+            transform: scale(1.05);
+        }
+
+        .image-card-overlay {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            padding: var(--space-sm) var(--space-md);
+            background: linear-gradient(transparent, rgba(0, 0, 0, 0.85));
+            color: white;
+            opacity: 0;
+            transition: opacity var(--transition-fast);
+        }
+
+        .image-card:hover .image-card-overlay {
+            opacity: 1;
+        }
+
+        .image-card-title {
+            font-size: 12px;
+            font-weight: 500;
+            line-height: 1.3;
+            margin-bottom: 2px;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .image-card-source {
+            font-size: 10px;
+            opacity: 0.8;
+        }
+
+        .image-card-type {
+            position: absolute;
+            top: var(--space-sm);
+            right: var(--space-sm);
+            background: rgba(0, 0, 0, 0.6);
+            color: white;
+            padding: 3px 6px;
+            border-radius: 4px;
+            font-size: 9px;
+            text-transform: uppercase;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+
+        /* Lightbox */
+        .lightbox {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.95);
+            z-index: 9999;
+            justify-content: center;
+            align-items: center;
+            padding: 40px;
+        }
+
+        .lightbox.active {
+            display: flex;
+        }
+
+        .lightbox-content {
+            max-width: 90vw;
+            max-height: 90vh;
+            position: relative;
+            text-align: center;
+        }
+
+        .lightbox-content img {
+            max-width: 100%;
+            max-height: 75vh;
+            object-fit: contain;
+            border-radius: 8px;
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
+        }
+
+        .lightbox-close {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            color: white;
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background var(--transition-fast);
+            z-index: 10001;
+        }
+
+        .lightbox-close:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .lightbox-info {
+            color: white;
+            margin-top: var(--space-md);
+            text-align: center;
+        }
+
+        .lightbox-title {
+            font-size: 16px;
+            font-weight: 500;
+            margin-bottom: var(--space-sm);
+        }
+
+        .lightbox-source {
+            font-size: 14px;
+            opacity: 0.8;
+        }
+
+        .lightbox-source a {
+            color: var(--green-light);
+            text-decoration: none;
+        }
+
+        .lightbox-source a:hover {
+            text-decoration: underline;
+        }
+
+        .lightbox-nav {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            color: white;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background var(--transition-fast);
+            z-index: 10001;
+        }
+
+        .lightbox-nav:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .lightbox-prev {
+            left: 20px;
+        }
+
+        .lightbox-next {
+            right: 20px;
+        }
+
+        /* Image Filter Chips */
+        .image-filters {
+            display: flex;
+            gap: var(--space-sm);
+            margin-bottom: var(--space-md);
+            flex-wrap: wrap;
+        }
+
+        .image-filter-chip {
+            padding: 6px 14px;
+            border-radius: 20px;
+            background: var(--gray-100);
+            color: var(--gray-700);
+            font-size: 13px;
+            cursor: pointer;
+            border: 1px solid var(--gray-200);
+            transition: all var(--transition-fast);
+            font-weight: 500;
+            font-family: var(--font-body);
+        }
+
+        .image-filter-chip:hover {
+            background: var(--gray-200);
+            border-color: var(--gray-300);
+        }
+
+        .image-filter-chip.active {
+            background: var(--green);
+            color: white;
+            border-color: var(--green);
+        }
+
+        /* No Images State */
+        .no-images {
+            text-align: center;
+            padding: var(--space-2xl) var(--space-lg);
+            color: var(--gray-600);
+        }
+
+        .no-images-icon {
+            width: 64px;
+            height: 64px;
+            margin: 0 auto var(--space-md);
+            color: var(--gray-400);
+        }
+
+        .no-images h3 {
+            font-family: var(--font-display);
+            font-size: 18px;
+            margin-bottom: var(--space-sm);
+            color: var(--black);
+        }
+
+        .no-images p {
+            font-size: 14px;
+        }
+
 /* ==================== RESPONSIVE ==================== */
 
 @media (max-width: 1024px) {
@@ -437,6 +693,38 @@ html, body {
         justify-content: center;
         flex-wrap: wrap;
     }
+
+    /* Image Grid Responsive */
+    .image-grid {
+        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+        gap: var(--space-sm);
+    }
+
+    .lightbox {
+        padding: 20px;
+    }
+
+    .lightbox-nav {
+        width: 40px;
+        height: 40px;
+        font-size: 24px;
+    }
+
+    .lightbox-prev {
+        left: 10px;
+    }
+
+    .lightbox-next {
+        right: 10px;
+    }
+
+    .lightbox-close {
+        top: 10px;
+        right: 10px;
+        width: 36px;
+        height: 36px;
+        font-size: 24px;
+    }
 }
 
 @media (max-width: 480px) {
@@ -580,6 +868,30 @@ html, body {
     .footer-link {
         font-size: 13px;
     }
+
+    /* Image Grid Responsive */
+    .image-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: var(--space-sm);
+    }
+
+    .image-card-overlay {
+        padding: var(--space-xs) var(--space-sm);
+    }
+
+    .image-card-title {
+        font-size: 11px;
+    }
+
+    .image-card-type {
+        font-size: 8px;
+        padding: 2px 4px;
+    }
+
+    .image-filter-chip {
+        padding: 4px 10px;
+        font-size: 12px;
+    }
 }
 
 @media (max-width: 360px) {
@@ -638,6 +950,11 @@ html, body {
     .footer-link { 
         font-size: 12px; 
     }
+
+    .image-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 6px;
+    }
 }
 
 @media print {
@@ -688,10 +1005,17 @@ html, body {
         </div>
         
         <nav class="nav-tabs">
-            <a href="/search?query={{ query|urlencode }}&session_id={{ session_id }}" class="nav-tab {% if not active_data_type and not active_schema %}active{% endif %}">
+            <a href="/search?query={{ query|urlencode }}&session_id={{ session_id }}" class="nav-tab {% if not active_data_type and not active_schema and not show_images %}active{% endif %}">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
                 All <span class="tab-count">{{ facet_total|default:total_results|default:"0" }}</span>
             </a>
+            
+            <!-- Images Tab -->
+            <a href="/search?query={{ query|urlencode }}&view=images&session_id={{ session_id }}" class="nav-tab {% if show_images %}active{% endif %}">
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>
+                Images <span class="tab-count">{{ image_count|default:"0" }}</span>
+            </a>
+            
             {% for facet in data_type_facets %}
             <a href="/search?query={{ query|urlencode }}&data_type={{ facet.value|urlencode }}&session_id={{ session_id }}" class="nav-tab {% if active_data_type == facet.value %}active{% endif %}">
                 {% if facet.value == 'article' %}<svg viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
@@ -712,6 +1036,12 @@ html, body {
         <div class="results-area">
             <div class="results-stats">
                <span class="results-count">{{ display_total|default:total_results|default:"0" }}</span> results for "<strong>{{ query }}</strong>"
+                {% if show_images %}
+                <span class="active-filter-badge">
+                    Images
+                    <a href="/search?query={{ query|urlencode }}&session_id={{ session_id }}" class="remove-filter" title="Remove filter"><svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M18 6L6 18M6 6l12 12"/></svg></a>
+                </span>
+                {% endif %}
                 {% if active_data_type %}
                 <span class="active-filter-badge">
                     {% if active_data_type == 'article' %}Articles{% elif active_data_type == 'person' %}People{% elif active_data_type == 'business' %}Businesses{% elif active_data_type == 'place' %}Places{% elif active_data_type == 'media' %}Media{% elif active_data_type == 'event' %}Events{% else %}{{ active_data_type|title }}{% endif %}
@@ -729,7 +1059,46 @@ html, body {
             </div>
             {% endif %}
             
-            {% if has_results %}
+            {% if show_images %}
+                <!-- IMAGE GRID VIEW -->
+                {% if image_results %}
+                    <div class="image-filters">
+                        <button class="image-filter-chip active" data-filter="all">All Images</button>
+                        <button class="image-filter-chip" data-filter="photo">Photos</button>
+                        <button class="image-filter-chip" data-filter="logo">Logos</button>
+                    </div>
+                    
+                    <div class="image-grid">
+                        {% for img in image_results %}
+                        <div class="image-card" 
+                             data-index="{{ forloop.counter0 }}"
+                             data-url="{{ img.url }}"
+                             data-title="{{ img.title }}"
+                             data-source="{{ img.source_url }}"
+                             data-source-name="{{ img.source_name }}"
+                             data-type="{{ img.image_type }}"
+                             onclick="openLightbox(this)">
+                            <img src="{{ img.url }}" alt="{{ img.title }}" loading="lazy" onerror="this.parentElement.style.display='none'">
+                            {% if img.image_type %}
+                            <span class="image-card-type">{{ img.image_type }}</span>
+                            {% endif %}
+                            <div class="image-card-overlay">
+                                <div class="image-card-title">{{ img.title|truncatewords:8 }}</div>
+                                <div class="image-card-source">{{ img.source_name|truncatewords:4 }}</div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="no-images">
+                        <svg class="no-images-icon" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
+                        </svg>
+                        <h3>No images found for "{{ query }}"</h3>
+                        <p>Try searching for something else or browse all results.</p>
+                    </div>
+                {% endif %}
+            {% elif has_results %}
                 {% for item in results %}
                 <article class="result-item" data-position="{{ forloop.counter }}" data-result-id="{{ item.id|default:'' }}" data-url="{{ item.url|default:'#' }}" data-title="{{ item.title|default:'Untitled' }}" data-source="{{ item.source|default:item.site_name|default:'' }}" data-data-type="{{ item.data_type|default:'' }}" data-schema="{{ item.schema|default:'' }}">
                     <div class="result-header">
@@ -802,7 +1171,8 @@ html, body {
             <div class="sidebar-section">
                 <h3 class="sidebar-title"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 18h4v-2h-4v2zM3 6v2h18V6H3zm3 7h12v-2H6v2z"/></svg>Filter by Type</h3>
                 <div class="filter-options">
-                    <a href="/search?query={{ query|urlencode }}{% if active_category %}&category={{ active_category }}{% endif %}{% if active_schema %}&schema={{ active_schema }}{% endif %}&session_id={{ session_id }}" class="filter-option {% if not active_data_type %}active{% endif %}">All Results<span class="count">{{ facet_total|default:total_results }}</span></a>
+                    <a href="/search?query={{ query|urlencode }}{% if active_category %}&category={{ active_category }}{% endif %}{% if active_schema %}&schema={{ active_schema }}{% endif %}&session_id={{ session_id }}" class="filter-option {% if not active_data_type and not show_images %}active{% endif %}">All Results<span class="count">{{ facet_total|default:total_results }}</span></a>
+                    <a href="/search?query={{ query|urlencode }}&view=images&session_id={{ session_id }}" class="filter-option {% if show_images %}active{% endif %}">Images<span class="count">{{ image_count|default:"0" }}</span></a>
                     {% for facet in data_type_facets %}<a href="/search?query={{ query|urlencode }}&data_type={{ facet.value|urlencode }}{% if active_category %}&category={{ active_category }}{% endif %}{% if active_schema %}&schema={{ active_schema }}{% endif %}&session_id={{ session_id }}" class="filter-option {% if active_data_type == facet.value %}active{% endif %}">{{ facet.label }}<span class="count">{{ facet.count }}</span></a>{% endfor %}
                 </div>
             </div>
@@ -832,6 +1202,20 @@ html, body {
         </aside>
     </div>
     
+    <!-- Lightbox for Image Viewing -->
+    <div class="lightbox" id="lightbox">
+        <button class="lightbox-close" onclick="closeLightbox()">&times;</button>
+        <button class="lightbox-nav lightbox-prev" onclick="navigateLightbox(-1)">&#8249;</button>
+        <div class="lightbox-content">
+            <img id="lightbox-image" src="" alt="">
+            <div class="lightbox-info">
+                <div class="lightbox-title" id="lightbox-title"></div>
+                <div class="lightbox-source">From: <a id="lightbox-source" href="" target="_blank"></a></div>
+            </div>
+        </div>
+        <button class="lightbox-nav lightbox-next" onclick="navigateLightbox(1)">&#8250;</button>
+    </div>
+    
     <footer class="footer">
         <div class="footer-content">
             <div class="footer-top"><span class="footer-brand">AfroTodo</span><div class="footer-links"><a href="{% url 'searchengine:about' %}" class="footer-link">About</a><a href="{% url 'accounts:register' %}" class="footer-link">Add Business</a><a href="{% url 'searchengine:privacy' %}" class="footer-link">Privacy</a><a href="{% url 'searchengine:term' %}" class="footer-link">Terms</a><a href="{% url 'searchengine:contact' %}" class="footer-link">Contact us</a></div></div>
@@ -847,6 +1231,75 @@ html, body {
         document.addEventListener('DOMContentLoaded',function(){document.querySelectorAll('.result-item').forEach(function(r){r.querySelectorAll('a.result-link, .result-title a').forEach(function(l){l.addEventListener('click',function(){trackResultClick(r,l);});});});document.querySelectorAll('.nav-tab, .filter-option, .result-type-badge').forEach(function(f){f.addEventListener('click',function(){trackEvent('filter_click',{filter_type:f.classList.contains('nav-tab')?'tab':'sidebar',filter_value:f.textContent.trim()});});});});
         function clearSearch(){const i=document.querySelector('.search-input');i.value='';i.focus();}
         let pageStartTime=Date.now();window.addEventListener('beforeunload',function(){const t=Date.now()-pageStartTime;if(t>1000&&navigator.sendBeacon){navigator.sendBeacon(ANALYTICS_CONFIG.trackClickUrl,new Blob([JSON.stringify({session_id:ANALYTICS_CONFIG.sessionId,event_type:'page_dwell',query:ANALYTICS_CONFIG.query,time_on_page_ms:t,had_results:ANALYTICS_CONFIG.totalResults>0})],{type:'application/json'}));}});
+        
+        // Lightbox functionality for Images tab
+        let currentImageIndex = 0;
+        let imageCards = [];
+        
+        function openLightbox(card) {
+            imageCards = Array.from(document.querySelectorAll('.image-card'));
+            currentImageIndex = parseInt(card.dataset.index);
+            updateLightboxContent();
+            document.getElementById('lightbox').classList.add('active');
+            document.body.style.overflow = 'hidden';
+            trackEvent('image_view', {
+                image_url: card.dataset.url,
+                image_title: card.dataset.title,
+                source: card.dataset.sourceName
+            });
+        }
+        
+        function closeLightbox() {
+            document.getElementById('lightbox').classList.remove('active');
+            document.body.style.overflow = '';
+        }
+        
+        function navigateLightbox(direction) {
+            currentImageIndex += direction;
+            if (currentImageIndex < 0) currentImageIndex = imageCards.length - 1;
+            if (currentImageIndex >= imageCards.length) currentImageIndex = 0;
+            updateLightboxContent();
+        }
+        
+        function updateLightboxContent() {
+            const card = imageCards[currentImageIndex];
+            if (card) {
+                document.getElementById('lightbox-image').src = card.dataset.url;
+                document.getElementById('lightbox-title').textContent = card.dataset.title;
+                const sourceLink = document.getElementById('lightbox-source');
+                sourceLink.href = card.dataset.source;
+                sourceLink.textContent = card.dataset.sourceName;
+            }
+        }
+        
+        // Keyboard navigation for lightbox
+        document.addEventListener('keydown', function(e) {
+            if (!document.getElementById('lightbox').classList.contains('active')) return;
+            if (e.key === 'Escape') closeLightbox();
+            if (e.key === 'ArrowLeft') navigateLightbox(-1);
+            if (e.key === 'ArrowRight') navigateLightbox(1);
+        });
+        
+        // Close lightbox on background click
+        document.getElementById('lightbox').addEventListener('click', function(e) {
+            if (e.target === this) closeLightbox();
+        });
+        
+        // Image filter chips functionality
+        document.querySelectorAll('.image-filter-chip').forEach(chip => {
+            chip.addEventListener('click', function() {
+                document.querySelectorAll('.image-filter-chip').forEach(c => c.classList.remove('active'));
+                this.classList.add('active');
+                const filter = this.dataset.filter;
+                document.querySelectorAll('.image-card').forEach(card => {
+                    if (filter === 'all' || card.dataset.type === filter) {
+                        card.style.display = '';
+                    } else {
+                        card.style.display = 'none';
+                    }
+                });
+            });
+        });
     </script>
 </body>
 </html>

@@ -1,0 +1,1172 @@
+{
+  "generated_at": "2026-02-02T10:40:25.169517",
+  "redis": {
+    "index_info": {
+      "index_name": "terms_idx",
+      "num_docs": 224928,
+      "num_terms": 206562,
+      "num_records": 1814843
+    },
+    "hash_schema": {
+      "term": {
+        "type": "term",
+        "properties": {
+          "type": "TEXT",
+          "WEIGHT": "5"
+        }
+      },
+      "display": {
+        "type": "display",
+        "properties": {
+          "type": "TEXT",
+          "WEIGHT": "3"
+        }
+      },
+      "category": {
+        "type": "category",
+        "properties": {
+          "type": "TAG",
+          "SEPARATOR": ","
+        }
+      },
+      "description": {
+        "type": "description",
+        "properties": {
+          "type": "TEXT",
+          "WEIGHT": "1"
+        }
+      },
+      "pos": {
+        "type": "pos",
+        "properties": {
+          "type": "TAG",
+          "SEPARATOR": ","
+        }
+      },
+      "entity_type": {
+        "type": "entity_type",
+        "properties": {
+          "type": "TAG",
+          "SEPARATOR": ","
+        }
+      },
+      "rank": {
+        "type": "rank",
+        "properties": {
+          "type": "NUMERIC",
+          "SORTABLE": "UNF"
+        }
+      }
+    },
+    "categories": {
+      "us city": {
+        "count": 112449,
+        "samples": [
+          {
+            "term": "tawanta",
+            "display": "Tawanta",
+            "rank": "0"
+          },
+          {
+            "term": "soleo",
+            "display": "Soleo",
+            "rank": "0"
+          }
+        ]
+      },
+      "dictionary word": {
+        "count": 75869,
+        "samples": [
+          {
+            "term": "fearful",
+            "display": "fearful",
+            "rank": "0"
+          },
+          {
+            "term": "nonsexual",
+            "display": "nonsexual",
+            "rank": "0"
+          }
+        ]
+      },
+      "city": {
+        "count": 28110,
+        "samples": [
+          {
+            "term": "liberpolis",
+            "display": "Liberpolis",
+            "rank": "0"
+          },
+          {
+            "term": "alofi",
+            "display": "Alofi",
+            "rank": "0"
+          }
+        ]
+      },
+      "keyword": {
+        "count": 3323,
+        "samples": [
+          {
+            "term": "ubuntu",
+            "display": "Ubuntu",
+            "rank": "13"
+          },
+          {
+            "term": "fatalities",
+            "display": "fatalities",
+            "rank": "10"
+          }
+        ]
+      },
+      "state/province": {
+        "count": 3250,
+        "samples": []
+      },
+      "person": {
+        "count": 509,
+        "samples": [
+          {
+            "term": "sierra vista",
+            "display": "Sierra Vista",
+            "rank": "20"
+          },
+          {
+            "term": "florida gators",
+            "display": "Florida Gators",
+            "rank": "20"
+          }
+        ]
+      },
+      "organization": {
+        "count": 480,
+        "samples": [
+          {
+            "term": "church unity",
+            "display": "church unity",
+            "rank": "20"
+          },
+          {
+            "term": "stillman college",
+            "display": "Stillman College",
+            "rank": "40"
+          }
+        ]
+      },
+      "country": {
+        "count": 292,
+        "samples": [
+          {
+            "term": "antarctica",
+            "display": "Antarctica",
+            "rank": "0"
+          },
+          {
+            "term": "bonaire island",
+            "display": "Bonaire",
+            "rank": "0"
+          }
+        ]
+      },
+      "entity": {
+        "count": 208,
+        "samples": [
+          {
+            "term": "simpsonville",
+            "display": "simpsonville",
+            "rank": "20"
+          },
+          {
+            "term": "memphis",
+            "display": "Memphis",
+            "rank": "114"
+          }
+        ]
+      },
+      "legal term": {
+        "count": 89,
+        "samples": [
+          {
+            "term": "policy development",
+            "display": "policy development",
+            "rank": "13"
+          },
+          {
+            "term": "social policy",
+            "display": "Social Policy",
+            "rank": "13"
+          }
+        ]
+      },
+      "concept": {
+        "count": 55,
+        "samples": [
+          {
+            "term": "resistance",
+            "display": "resistance",
+            "rank": "144"
+          },
+          {
+            "term": "remembrance",
+            "display": "remembrance",
+            "rank": "63"
+          }
+        ]
+      },
+      "us state": {
+        "count": 51,
+        "samples": [
+          {
+            "term": "california",
+            "display": "California",
+            "rank": "370"
+          },
+          {
+            "term": "indiana",
+            "display": "Indiana",
+            "rank": "60"
+          }
+        ]
+      },
+      "location": {
+        "count": 40,
+        "samples": [
+          {
+            "term": "west virginia",
+            "display": "West Virginia",
+            "rank": "48"
+          },
+          {
+            "term": "kansas city",
+            "display": "Kansas City",
+            "rank": "56"
+          }
+        ]
+      },
+      "culture": {
+        "count": 33,
+        "samples": [
+          {
+            "term": "reparations",
+            "display": "Reparations",
+            "rank": "27"
+          },
+          {
+            "term": "juneteenth",
+            "display": "Juneteenth",
+            "rank": "350"
+          }
+        ]
+      },
+      "beauty": {
+        "count": 28,
+        "samples": [
+          {
+            "term": "texturizer",
+            "display": "Texturizer",
+            "rank": "0"
+          },
+          {
+            "term": "cornrows",
+            "display": "Cornrows",
+            "rank": "53"
+          }
+        ]
+      },
+      "food": {
+        "count": 22
+      },
+      "music": {
+        "count": 18
+      },
+      "business": {
+        "count": 18
+      },
+      "historical event": {
+        "count": 14
+      },
+      "fashion": {
+        "count": 13
+      },
+      "education": {
+        "count": 11
+      },
+      "health": {
+        "count": 11
+      },
+      "state": {
+        "count": 10
+      },
+      "media": {
+        "count": 9
+      },
+      "entertainment": {
+        "count": 8
+      },
+      "community": {
+        "count": 4
+      },
+      "products": {
+        "count": 3
+      },
+      "continent": {
+        "count": 1
+      }
+    },
+    "entity_types": {
+      "unigram": {
+        "count": 139344
+      },
+      "bigram": {
+        "count": 61204
+      },
+      "trigram": {
+        "count": 15034
+      },
+      "quadgram": {
+        "count": 9200
+      },
+      "4-gram": {
+        "count": 114
+      },
+      "5-gram": {
+        "count": 32
+      }
+    },
+    "pos_values": {
+      "['noun']": {
+        "count": 195523
+      },
+      "['adjective']": {
+        "count": 20177
+      },
+      "['verb']": {
+        "count": 4404
+      },
+      "['adverb']": {
+        "count": 3277
+      },
+      "[\"proper noun\"]": {
+        "count": 543
+      },
+      "[\"noun\"]": {
+        "count": 491
+      },
+      "['proper_noun']": {
+        "count": 249
+      },
+      "[\"adjective\"]": {
+        "count": 68
+      },
+      "['noun', 'verb']": {
+        "count": 56
+      },
+      "[\"noun\", \"adjective\"]": {
+        "count": 31
+      },
+      "[\"proper noun\", \"noun\"]": {
+        "count": 16
+      },
+      "['verb', 'adjective']": {
+        "count": 13
+      },
+      "['determiner']": {
+        "count": 11
+      },
+      "[\"proper noun\", \"noun\", \"adjective\"]": {
+        "count": 10
+      },
+      "['preposition']": {
+        "count": 10
+      },
+      "['unknown']": {
+        "count": 8
+      },
+      "['be']": {
+        "count": 8
+      },
+      "['modal']": {
+        "count": 8
+      },
+      "['pronoun']": {
+        "count": 7
+      },
+      "['wh_pronoun']": {
+        "count": 5
+      },
+      "['conjunction']": {
+        "count": 4
+      },
+      "['article']": {
+        "count": 3
+      },
+      "[\"proper noun\", \"adjective\"]": {
+        "count": 3
+      },
+      "['negation']": {
+        "count": 2
+      },
+      "['noun', 'adjective']": {
+        "count": 1
+      }
+    },
+    "rank_stats": {
+      "min": "0",
+      "max": "12679",
+      "avg": "2.01629854887"
+    },
+    "sample_hashes": [
+      {
+        "id": "term:fearful:dictionary_word",
+        "fields": {
+          "category": "Dictionary Word",
+          "description": "",
+          "display": "fearful",
+          "entity_type": "unigram",
+          "pos": "['adjective']",
+          "rank": "0",
+          "term": "fearful"
+        }
+      },
+      {
+        "id": "term:nonsexual:dictionary_word",
+        "fields": {
+          "category": "Dictionary Word",
+          "description": "",
+          "display": "nonsexual",
+          "entity_type": "unigram",
+          "pos": "['adjective']",
+          "rank": "0",
+          "term": "nonsexual"
+        }
+      },
+      {
+        "id": "term:ducking:dictionary_word",
+        "fields": {
+          "category": "Dictionary Word",
+          "description": "",
+          "display": "ducking",
+          "entity_type": "unigram",
+          "pos": "['noun']",
+          "rank": "0",
+          "term": "ducking"
+        }
+      }
+    ]
+  },
+  "typesense": {
+    "collection_name": "documents",
+    "num_documents": 6431,
+    "schema_fields": [
+      {
+        "name": "document_uuid",
+        "type": "string",
+        "facet": false,
+        "index": true,
+        "optional": false,
+        "sort": false
+      },
+      {
+        "name": "semantic_uuid",
+        "type": "string",
+        "facet": false,
+        "index": true,
+        "optional": false,
+        "sort": false
+      },
+      {
+        "name": "cluster_uuid",
+        "type": "string",
+        "facet": false,
+        "index": true,
+        "optional": false,
+        "sort": false
+      },
+      {
+        "name": "image_url",
+        "type": "string[]",
+        "facet": false,
+        "index": true,
+        "optional": true,
+        "sort": false
+      },
+      {
+        "name": "video_url",
+        "type": "string[]",
+        "facet": false,
+        "index": true,
+        "optional": true,
+        "sort": false
+      },
+      {
+        "name": "logo_url",
+        "type": "string[]",
+        "facet": false,
+        "index": true,
+        "optional": true,
+        "sort": false
+      },
+      {
+        "name": "social_media",
+        "type": "string[]",
+        "facet": false,
+        "index": true,
+        "optional": true,
+        "sort": false
+      },
+      {
+        "name": "time_context",
+        "type": "string",
+        "facet": true,
+        "index": true,
+        "optional": true,
+        "sort": false
+      },
+      {
+        "name": "temporal_relevance",
+        "type": "string",
+        "facet": true,
+        "index": true,
+        "optional": true,
+        "sort": false
+      },
+      {
+        "name": "time_period_start",
+        "type": "int32",
+        "facet": false,
+        "index": true,
+        "optional": true,
+        "sort": true
+      },
+      {
+        "name": "time_period_end",
+        "type": "int32",
+        "facet": false,
+        "index": true,
+        "optional": true,
+        "sort": true
+      },
+      {
+        "name": "location_city",
+        "type": "string",
+        "facet": true,
+        "index": true,
+        "optional": true,
+        "sort": false
+      },
+      {
+        "name": "location_state",
+        "type": "string",
+        "facet": true,
+        "index": true,
+        "optional": true,
+        "sort": false
+      },
+      {
+        "name": "location_country",
+        "type": "string",
+        "facet": true,
+        "index": true,
+        "optional": true,
+        "sort": false
+      },
+      {
+        "name": "location_region",
+        "type": "string",
+        "facet": true,
+        "index": true,
+        "optional": true,
+        "sort": false
+      },
+      {
+        "name": "location_coordinates",
+        "type": "geopoint",
+        "facet": false,
+        "index": true,
+        "optional": true,
+        "sort": true
+      },
+      {
+        "name": "location_address",
+        "type": "string",
+        "facet": false,
+        "index": true,
+        "optional": true,
+        "sort": false
+      },
+      {
+        "name": "location_geopoint",
+        "type": "geopoint",
+        "facet": false,
+        "index": true,
+        "optional": true,
+        "sort": true
+      },
+      {
+        "name": "document_title",
+        "type": "string",
+        "facet": true,
+        "index": true,
+        "optional": false,
+        "sort": false
+      },
+      {
+        "name": "document_summary",
+        "type": "string",
+        "facet": false,
+        "index": true,
+        "optional": false,
+        "sort": false
+      },
+      {
+        "name": "document_category",
+        "type": "string",
+        "facet": true,
+        "index": true,
+        "optional": false,
+        "sort": false
+      },
+      {
+        "name": "document_data_type",
+        "type": "string",
+        "facet": true,
+        "index": true,
+        "optional": false,
+        "sort": false
+      },
+      {
+        "name": "document_schema",
+        "type": "string",
+        "facet": true,
+        "index": true,
+        "optional": false,
+        "sort": false
+      },
+      {
+        "name": "document_author",
+        "type": "string",
+        "facet": true,
+        "index": true,
+        "optional": true,
+        "sort": false
+      },
+      {
+        "name": "document_url",
+        "type": "string",
+        "facet": false,
+        "index": true,
+        "optional": false,
+        "sort": false
+      },
+      {
+        "name": "document_brand",
+        "type": "string",
+        "facet": true,
+        "index": true,
+        "optional": true,
+        "sort": false
+      },
+      {
+        "name": "primary_keywords",
+        "type": "string[]",
+        "facet": true,
+        "index": true,
+        "optional": false,
+        "sort": false
+      },
+      {
+        "name": "keywords",
+        "type": "string[]",
+        "facet": true,
+        "index": true,
+        "optional": false,
+        "sort": false
+      },
+      {
+        "name": "semantic_keywords",
+        "type": "string[]",
+        "facet": true,
+        "index": true,
+        "optional": false,
+        "sort": false
+      },
+      {
+        "name": "key_passages",
+        "type": "string[]",
+        "facet": false,
+        "index": true,
+        "optional": true,
+        "sort": false
+      },
+      {
+        "name": "published_date",
+        "type": "int64",
+        "facet": false,
+        "index": true,
+        "optional": true,
+        "sort": true
+      },
+      {
+        "name": "published_date_string",
+        "type": "string",
+        "facet": false,
+        "index": false,
+        "optional": true,
+        "sort": false
+      },
+      {
+        "name": "created_at",
+        "type": "int64",
+        "facet": false,
+        "index": true,
+        "optional": false,
+        "sort": true
+      },
+      {
+        "name": "entity_names",
+        "type": "string[]",
+        "facet": true,
+        "index": true,
+        "optional": true,
+        "sort": false
+      },
+      {
+        "name": "authority_score",
+        "type": "float",
+        "facet": false,
+        "index": true,
+        "optional": true,
+        "sort": true
+      },
+      {
+        "name": "content_depth",
+        "type": "int32",
+        "facet": false,
+        "index": true,
+        "optional": true,
+        "sort": true
+      },
+      {
+        "name": "product_category",
+        "type": "string",
+        "facet": true,
+        "index": true,
+        "optional": true,
+        "sort": false
+      },
+      {
+        "name": "product_price",
+        "type": "float",
+        "facet": false,
+        "index": true,
+        "optional": true,
+        "sort": true
+      },
+      {
+        "name": "product_currency",
+        "type": "string",
+        "facet": true,
+        "index": true,
+        "optional": true,
+        "sort": false
+      },
+      {
+        "name": "product_rating",
+        "type": "float",
+        "facet": false,
+        "index": true,
+        "optional": true,
+        "sort": true
+      },
+      {
+        "name": "product_available",
+        "type": "bool",
+        "facet": true,
+        "index": true,
+        "optional": true,
+        "sort": true
+      },
+      {
+        "name": "product_features",
+        "type": "string[]",
+        "facet": true,
+        "index": true,
+        "optional": true,
+        "sort": false
+      },
+      {
+        "name": "person_full_name",
+        "type": "string",
+        "facet": false,
+        "index": true,
+        "optional": true,
+        "sort": false
+      },
+      {
+        "name": "person_birth_date",
+        "type": "string",
+        "facet": false,
+        "index": true,
+        "optional": true,
+        "sort": false
+      },
+      {
+        "name": "person_gender",
+        "type": "string",
+        "facet": true,
+        "index": true,
+        "optional": true,
+        "sort": false
+      },
+      {
+        "name": "person_race",
+        "type": "string",
+        "facet": true,
+        "index": true,
+        "optional": true,
+        "sort": false
+      },
+      {
+        "name": "person_positions",
+        "type": "string[]",
+        "facet": true,
+        "index": true,
+        "optional": true,
+        "sort": false
+      },
+      {
+        "name": "person_education",
+        "type": "string[]",
+        "facet": false,
+        "index": true,
+        "optional": true,
+        "sort": false
+      },
+      {
+        "name": "person_achievements",
+        "type": "string[]",
+        "facet": false,
+        "index": true,
+        "optional": true,
+        "sort": false
+      },
+      {
+        "name": "media_author_creator",
+        "type": "string",
+        "facet": true,
+        "index": true,
+        "optional": true,
+        "sort": false
+      },
+      {
+        "name": "media_genre",
+        "type": "string[]",
+        "facet": true,
+        "index": true,
+        "optional": true,
+        "sort": false
+      },
+      {
+        "name": "media_duration",
+        "type": "string",
+        "facet": false,
+        "index": true,
+        "optional": true,
+        "sort": false
+      },
+      {
+        "name": "media_release_date",
+        "type": "string",
+        "facet": true,
+        "index": true,
+        "optional": true,
+        "sort": false
+      },
+      {
+        "name": "media_language",
+        "type": "string",
+        "facet": true,
+        "index": true,
+        "optional": true,
+        "sort": false
+      },
+      {
+        "name": "media_rating",
+        "type": "float",
+        "facet": false,
+        "index": true,
+        "optional": true,
+        "sort": true
+      },
+      {
+        "name": "service_type",
+        "type": "string[]",
+        "facet": true,
+        "index": true,
+        "optional": true,
+        "sort": false
+      },
+      {
+        "name": "service_specialties",
+        "type": "string[]",
+        "facet": true,
+        "index": true,
+        "optional": true,
+        "sort": false
+      },
+      {
+        "name": "service_phone",
+        "type": "string",
+        "facet": false,
+        "index": true,
+        "optional": true,
+        "sort": false
+      },
+      {
+        "name": "service_rating",
+        "type": "float",
+        "facet": false,
+        "index": true,
+        "optional": true,
+        "sort": true
+      },
+      {
+        "name": "status",
+        "type": "string",
+        "facet": true,
+        "index": true,
+        "optional": true,
+        "sort": false
+      },
+      {
+        "name": "black_owned",
+        "type": "bool",
+        "facet": true,
+        "index": true,
+        "optional": true,
+        "sort": true
+      },
+      {
+        "name": "rating",
+        "type": "float",
+        "facet": false,
+        "index": true,
+        "optional": true,
+        "sort": true
+      },
+      {
+        "name": "key_facts",
+        "type": "string[]",
+        "facet": false,
+        "index": true,
+        "optional": true,
+        "sort": false
+      },
+      {
+        "name": "embedding",
+        "type": "float[]",
+        "facet": false,
+        "index": true,
+        "optional": true,
+        "sort": false
+      }
+    ],
+    "field_categories": {
+      "searchable_text": [
+        "document_uuid",
+        "semantic_uuid",
+        "cluster_uuid",
+        "image_url",
+        "video_url",
+        "logo_url",
+        "social_media",
+        "time_context",
+        "temporal_relevance",
+        "location_city",
+        "location_state",
+        "location_country",
+        "location_region",
+        "location_address",
+        "document_title",
+        "document_summary",
+        "document_category",
+        "document_data_type",
+        "document_schema",
+        "document_author",
+        "document_url",
+        "document_brand",
+        "primary_keywords",
+        "keywords",
+        "semantic_keywords",
+        "key_passages",
+        "entity_names",
+        "product_category",
+        "product_currency",
+        "product_features",
+        "person_full_name",
+        "person_birth_date",
+        "person_gender",
+        "person_race",
+        "person_positions",
+        "person_education",
+        "person_achievements",
+        "media_author_creator",
+        "media_genre",
+        "media_duration",
+        "media_release_date",
+        "media_language",
+        "service_type",
+        "service_specialties",
+        "service_phone",
+        "status",
+        "key_facts"
+      ],
+      "filterable": [
+        "document_uuid",
+        "semantic_uuid",
+        "cluster_uuid",
+        "image_url",
+        "video_url",
+        "logo_url",
+        "social_media",
+        "time_context",
+        "temporal_relevance",
+        "time_period_start",
+        "time_period_end",
+        "location_city",
+        "location_state",
+        "location_country",
+        "location_region",
+        "location_address",
+        "document_title",
+        "document_summary",
+        "document_category",
+        "document_data_type",
+        "document_schema",
+        "document_author",
+        "document_url",
+        "document_brand",
+        "primary_keywords",
+        "keywords",
+        "semantic_keywords",
+        "key_passages",
+        "published_date",
+        "published_date_string",
+        "created_at",
+        "entity_names",
+        "authority_score",
+        "content_depth",
+        "product_category",
+        "product_price",
+        "product_currency",
+        "product_rating",
+        "product_available",
+        "product_features",
+        "person_full_name",
+        "person_birth_date",
+        "person_gender",
+        "person_race",
+        "person_positions",
+        "person_education",
+        "person_achievements",
+        "media_author_creator",
+        "media_genre",
+        "media_duration",
+        "media_release_date",
+        "media_language",
+        "media_rating",
+        "service_type",
+        "service_specialties",
+        "service_phone",
+        "service_rating",
+        "status",
+        "black_owned",
+        "rating",
+        "key_facts"
+      ],
+      "facetable": [
+        "time_context",
+        "temporal_relevance",
+        "location_city",
+        "location_state",
+        "location_country",
+        "location_region",
+        "document_title",
+        "document_category",
+        "document_data_type",
+        "document_schema",
+        "document_author",
+        "document_brand",
+        "primary_keywords",
+        "keywords",
+        "semantic_keywords",
+        "entity_names",
+        "product_category",
+        "product_currency",
+        "product_available",
+        "product_features",
+        "person_gender",
+        "person_race",
+        "person_positions",
+        "media_author_creator",
+        "media_genre",
+        "media_release_date",
+        "media_language",
+        "service_type",
+        "service_specialties",
+        "status",
+        "black_owned"
+      ],
+      "sortable": [
+        "time_period_start",
+        "time_period_end",
+        "location_coordinates",
+        "location_geopoint",
+        "published_date",
+        "created_at",
+        "authority_score",
+        "content_depth",
+        "product_price",
+        "product_rating",
+        "product_available",
+        "media_rating",
+        "service_rating",
+        "black_owned",
+        "rating"
+      ],
+      "vector": [
+        "embedding"
+      ]
+    },
+    "sample_document": {
+      "authority_score": "float",
+      "cluster_uuid": "str",
+      "content_depth": "int",
+      "created_at": "int",
+      "document_author": "str",
+      "document_brand": "str",
+      "document_category": "str",
+      "document_data_type": "str",
+      "document_schema": "str",
+      "document_summary": "str",
+      "document_title": "str",
+      "document_url": "str",
+      "document_uuid": "str",
+      "embed_text": "str",
+      "entity_names": "list",
+      "id": "str",
+      "image_url": "list",
+      "key_passages": "list",
+      "keywords": "list",
+      "logo_url": "list",
+      "primary_keywords": "list",
+      "published_date_string": "str",
+      "semantic_keywords": "list",
+      "semantic_uuid": "str",
+      "social_media": "list",
+      "status": "str",
+      "temporal_relevance": "str",
+      "video_url": "list"
+    }
+  }
+}
