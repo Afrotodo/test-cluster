@@ -316,7 +316,7 @@ def cache_test_view(request):
             'error': f'Server error: {str(e)}'
         }, status=500)
     
-    # =============================================================================
+# =============================================================================
 # ADD THIS TO cache_views.py
 # =============================================================================
 # This endpoint ADDS new terms without overwriting existing ones.
@@ -393,11 +393,29 @@ def add_to_cache_view(request):
         skipped = 0
         
         for key, value in data.items():
-            if key in vocab_cache._cache:
+            # Check if key exists in vocab_cache.terms
+            if key in vocab_cache.terms:
                 skipped += 1
             else:
-                vocab_cache._cache[key] = value
+                vocab_cache.terms[key] = value
                 added += 1
+                
+                # Also add to location sets if applicable
+                term_lower = value.get('term', '').lower()
+                category = value.get('category', '')
+                
+                if category in ('US City', 'City'):
+                    vocab_cache.cities.add(term_lower)
+                    vocab_cache.locations.add(term_lower)
+                elif category in ('US State', 'State'):
+                    vocab_cache.states.add(term_lower)
+                    vocab_cache.locations.add(term_lower)
+                elif category == 'Country':
+                    vocab_cache.locations.add(term_lower)
+        
+        # Update term count
+        vocab_cache.term_count = len(vocab_cache.terms)
+        vocab_cache.last_updated = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         
         # Save updated cache to file
         vocab_cache._save_to_file()
@@ -406,9 +424,7 @@ def add_to_cache_view(request):
         if not vocab_cache.loaded:
             vocab_cache.loaded = True
         
-        total_after = len(vocab_cache._cache)
-        
-        logger.info(f"Cache ADD complete: added {added:,}, skipped {skipped:,}, total {total_after:,}")
+        logger.info(f"Cache ADD complete: added {added:,}, skipped {skipped:,}, total {vocab_cache.term_count:,}")
         
         return JsonResponse({
             'success': True,
@@ -416,7 +432,7 @@ def add_to_cache_view(request):
             'stats': {
                 'added': added,
                 'skipped': skipped,
-                'total_after': total_after
+                'total_after': vocab_cache.term_count
             }
         })
     
@@ -426,4 +442,3 @@ def add_to_cache_view(request):
             'success': False,
             'error': f'Server error: {str(e)}'
         }, status=500)
-
