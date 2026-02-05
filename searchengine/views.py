@@ -4488,44 +4488,85 @@ def search(request):
                 intent = {}
     
     # === 8. EXECUTE SEARCH ===
-    if execute_full_search:
-        try:
-            result = execute_full_search(
-                query=corrected_query,
-                session_id=params.session_id,
-                filters=filters,
-                page=page,
-                per_page=per_page,
-                alt_mode=params.alt_mode, 
-                user_location=user_location,
-                pos_tags=tuple_array if params.is_semantic_search else [],
-                safe_search=safe_search
-            )
+    # if execute_full_search:
+    #     try:
+    #         result = execute_full_search(
+    #             query=corrected_query,
+    #             session_id=params.session_id,
+    #             filters=filters,
+    #             page=page,
+    #             per_page=per_page,
+    #             alt_mode=params.alt_mode, 
+    #             user_location=user_location,
+    #             pos_tags=tuple_array if params.is_semantic_search else [],
+    #             safe_search=safe_search
+    #         )
             
-            results = result.get('results', [])
-            total_results = result.get('total', 0)
-            search_time = result.get('search_time', 0)
-            search_strategy = result.get('search_strategy', search_type)
+    #         results = result.get('results', [])
+    #         total_results = result.get('total', 0)
+    #         search_time = result.get('search_time', 0)
+    #         search_strategy = result.get('search_strategy', search_type)
             
-            # Get facets from the search result
-            data_type_facets = result.get('data_type_facets', [])
-            category_facets = result.get('category_facets', [])
-            schema_facets = result.get('schema_facets', [])
-            facet_total = result.get('facet_total', 0)
+    #         # Get facets from the search result
+    #         data_type_facets = result.get('data_type_facets', [])
+    #         category_facets = result.get('category_facets', [])
+    #         schema_facets = result.get('schema_facets', [])
+    #         facet_total = result.get('facet_total', 0)
             
-            # Get related searches from the search result (handled in typesense_calculations.py)
-            related_searches = result.get('related_searches', [])
+    #         # Get related searches from the search result (handled in typesense_calculations.py)
+    #         related_searches = result.get('related_searches', [])
             
-            # Extract images from results
-            image_results = extract_images_from_results(results)
-            image_count = len(image_results)
+    #         # Extract images from results
+    #         image_results = extract_images_from_results(results)
+    #         image_count = len(image_results)
             
-        except Exception as e:
-            logger.error(f"Search execution error: {e}")
-            # Keep default empty values set in section 6
+    #     except Exception as e:
+    #         logger.error(f"Search execution error: {e}")
+    #         # Keep default empty values set in section 6
     
-    search_time_ms = (time.time() - search_start_time) * 1000
+    # search_time_ms = (time.time() - search_start_time) * 1000
     
+        if execute_full_search:
+            try:
+                result = execute_full_search(
+                    query=params.query,           # ← CHANGED: pass ORIGINAL query, not corrected_query
+                    session_id=params.session_id,
+                    filters=filters,
+                    page=page,
+                    per_page=per_page,
+                    alt_mode=params.alt_mode, 
+                    user_location=user_location,
+                    pos_tags=tuple_array if params.is_semantic_search else [],
+                    safe_search=safe_search
+                )
+                
+                results = result.get('results', [])
+                total_results = result.get('total', 0)
+                search_time = result.get('search_time', 0)
+                search_strategy = result.get('search_strategy', search_type)
+                
+                # === ADDED: Get correction info from bridge ===
+                bridge_corrected = result.get('corrected_query', params.query)
+                if bridge_corrected and bridge_corrected.lower() != params.query.lower():
+                    corrected_query = bridge_corrected
+                    was_corrected = True
+                    word_corrections = result.get('word_discovery', {}).get('corrections', [])
+                
+                # Get facets from the search result
+                data_type_facets = result.get('data_type_facets', [])
+                category_facets = result.get('category_facets', [])
+                schema_facets = result.get('schema_facets', [])
+                facet_total = result.get('facet_total', 0)
+                
+                # Get related searches from the search result
+                related_searches = result.get('related_searches', [])
+                
+                # Extract images from results
+                image_results = extract_images_from_results(results)
+                image_count = len(image_results)
+                
+            except Exception as e:
+                logger.error(f"Search execution error: {e}")
     # === 9. TRACK SEARCH (Analytics) ===
     if analytics:
         try:
