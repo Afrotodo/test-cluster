@@ -315,3 +315,115 @@ def cache_test_view(request):
             'success': False,
             'error': f'Server error: {str(e)}'
         }, status=500)
+    
+    # =============================================================================
+# ADD THIS TO cache_views.py
+# =============================================================================
+# This endpoint ADDS new terms without overwriting existing ones.
+# Use /api/cache/reload/ for full replace, /api/cache/add/ for merge.
+# =============================================================================
+
+@csrf_exempt
+@require_http_methods(["POST"])
+@require_api_key
+def add_to_cache_view(request):
+    """
+    Add new terms to vocabulary cache WITHOUT overwriting existing.
+    
+    Called by Colab to add new terms while preserving existing data.
+    
+    Request:
+        POST /api/cache/add/
+        Headers:
+            Authorization: Bearer <your-secret-key>
+            Content-Type: application/json
+        Body:
+            {
+                "term:category:dictionary_word": {"term": "category", ...},
+                "term:flavor:food": {"term": "flavor", ...},
+                ...
+            }
+    
+    Response:
+        {
+            "success": true,
+            "message": "Added 5,000 new terms (skipped 2,000 existing)",
+            "stats": {
+                "added": 5000,
+                "skipped": 2000,
+                "total_after": 229928
+            }
+        }
+    """
+    try:
+        # Check content length
+        content_length = int(request.headers.get('Content-Length', 0))
+        if content_length > MAX_PAYLOAD_SIZE:
+            return JsonResponse({
+                'success': False,
+                'error': f'Payload too large (max {MAX_PAYLOAD_SIZE // 1024 // 1024}MB)'
+            }, status=413)
+        
+        # Parse JSON body
+        try:
+            data = json.loads(request.body)
+        except json.JSONDecodeError as e:
+            return JsonResponse({
+                'success': False,
+                'error': f'Invalid JSON: {str(e)}'
+            }, status=400)
+        
+        # Validate data structure
+        if not isinstance(data, dict):
+            return JsonResponse({
+                'success': False,
+                'error': 'Expected JSON object with term data'
+            }, status=400)
+        
+        if len(data) == 0:
+            return JsonResponse({
+                'success': False,
+                'error': 'Empty data - nothing to add'
+            }, status=400)
+        
+        logger.info(f"Received cache ADD request with {len(data):,} terms")
+        
+        # ADD to cache (not replace)
+        added = 0
+        skipped = 0
+        
+        for key, value in data.items():
+            if key in vocab_cache._cache:
+                skipped += 1
+            else:
+                vocab_cache._cache[key] = value
+                added += 1
+        
+        # Save updated cache to file
+        vocab_cache._save_to_file()
+        
+        # Update loaded flag if needed
+        if not vocab_cache.loaded:
+            vocab_cache.loaded = True
+        
+        total_after = len(vocab_cache._cache)
+        
+        logger.info(f"Cache ADD complete: added {added:,}, skipped {skipped:,}, total {total_after:,}")
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'Added {added:,} new terms (skipped {skipped:,} existing)',
+            'stats': {
+                'added': added,
+                'skipped': skipped,
+                'total_after': total_after
+            }
+        })
+    
+    except Exception as e:
+        logger.exception(f"Error adding to cache: {e}")
+        return JsonResponse({
+            'success': False,
+            'error': f'Server error: {str(e)}'
+        }, status=500)
+

@@ -1771,6 +1771,11 @@ class WordDiscovery:
         # STEP 3: Determine POS for remaining words
         # =====================================================================
         self._step3_determine_pos(word_data, consumed_positions)
+
+        # =====================================================================
+        # STEP 3.5: Refine POS from suffixes
+        # =====================================================================
+        self._step3_5_refine_pos_from_suffix(word_data)
         
         # =====================================================================
         # STEP 4: Select best match (POS + Rank)
@@ -2082,7 +2087,128 @@ class WordDiscovery:
     #             print(f"       Context: {context}")
     
 
-    # =========================================================================
+    # # =========================================================================
+    # # STEP 3: Determine POS for ALL Words (including n-gram members)
+    # # =========================================================================
+    
+    # def _step3_determine_pos(
+    #     self, 
+    #     word_data: List[Dict[str, Any]], 
+    #     consumed_positions: Set[int]
+    # ) -> None:
+    #     """
+    #     Determine POS for ALL words using grammar rules.
+        
+    #     IMPORTANT: Run POS on EVERY word, including those in n-grams.
+    #     This ensures "black" gets adjective (not city) even when part of "black owned".
+        
+    #     Stores:
+    #     - predicted_pos: string (e.g., 'noun') for Step 4 compatibility
+    #     - predicted_pos_list: list of tuples (e.g., [('noun', 0.95), ('proper_noun', 0.85)]) for Step 5
+    #     """
+    #     if self.verbose:
+    #         print("\n" + "-" * 70)
+    #         print("🧠 STEP 3: Determine POS (Grammar Rules)")
+    #         print("-" * 70)
+        
+    #     for i, wd in enumerate(word_data):
+    #         position = wd['position']
+            
+    #         # Mark if part of n-gram (for reference), but DON'T skip
+    #         pos_index = position - 1
+    #         wd['part_of_ngram'] = pos_index in consumed_positions
+            
+    #         # Skip stopwords (already have POS)
+    #         if wd['is_stopword']:
+    #             wd['predicted_pos'] = wd['pos']
+    #             wd['predicted_pos_list'] = [(wd['pos'], 1.0)]
+    #             if self.verbose:
+    #                 print(f"  [{position}] '{wd['word']}' → Stopword ({wd['pos']})")
+    #             continue
+            
+    #         # Get left neighbor POS (normalized!)
+    #         left_pos = None
+    #         if i > 0:
+    #             left_wd = word_data[i - 1]
+    #             if left_wd['is_stopword']:
+    #                 left_pos = left_wd['pos']
+    #             elif left_wd.get('predicted_pos'):
+    #                 # Handle both string and tuple formats
+    #                 pred = left_wd['predicted_pos']
+    #                 if isinstance(pred, tuple):
+    #                     left_pos = pred[0]
+    #                 else:
+    #                     left_pos = pred
+    #             elif left_wd['all_matches']:
+    #                 # Use highest-ranked match's POS as hint - NORMALIZE IT!
+    #                 raw_pos = left_wd['all_matches'][0]['pos']
+    #                 left_pos = normalize_pos_string(raw_pos)
+    #         else:
+    #             # First word in query - use 'start' marker for LOCAL_CONTEXT_RULES
+    #             left_pos = 'start'
+            
+    #         # Get right neighbor POS (normalized!)
+    #         right_pos = None
+    #         if i < len(word_data) - 1:
+    #             right_wd = word_data[i + 1]
+    #             if right_wd['is_stopword']:
+    #                 right_pos = right_wd['pos']
+    #             elif right_wd['all_matches']:
+    #                 # NORMALIZE the POS!
+    #                 raw_pos = right_wd['all_matches'][0]['pos']
+    #                 right_pos = normalize_pos_string(raw_pos)
+    #         else:
+    #             right_pos = 'end'
+            
+    #         # Apply grammar rules - try LOCAL_CONTEXT_RULES first, then GRAMMAR_RULES
+    #         predicted_pos = None
+            
+    #         # Try both neighbors with LOCAL_CONTEXT_RULES (has confidence scores)
+    #         if left_pos and right_pos:
+    #             predicted_pos = GRAMMAR_RULES.get((left_pos, right_pos))
+    #             if not predicted_pos:
+    #                 # Fall back to GRAMMAR_RULES
+    #                 simple_pos = GRAMMAR_RULES.get((left_pos, right_pos))
+    #                 if simple_pos:
+    #                     predicted_pos = [(simple_pos, 0.90)]
+            
+    #         # Try left only
+    #         if not predicted_pos and left_pos:
+    #             predicted_pos = GRAMMAR_RULES.get((left_pos, None))
+    #             if not predicted_pos:
+    #                 simple_pos = GRAMMAR_RULES.get((left_pos, None))
+    #                 if simple_pos:
+    #                     predicted_pos = [(simple_pos, 0.85)]
+            
+    #         # Try right only
+    #         if not predicted_pos and right_pos:
+    #             predicted_pos = GRAMMAR_RULES.get((None, right_pos))
+    #             if not predicted_pos:
+    #                 simple_pos = GRAMMAR_RULES.get((None, right_pos))
+    #                 if simple_pos:
+    #                     predicted_pos = [(simple_pos, 0.85)]
+            
+    #         # Default to noun
+    #         if not predicted_pos:
+    #             predicted_pos = [('noun', 0.75)]
+            
+    #         # Store both formats for compatibility
+    #         if isinstance(predicted_pos, list):
+    #             # LOCAL_CONTEXT_RULES format: [('noun', 0.95), ('proper_noun', 0.85)]
+    #             wd['predicted_pos_list'] = predicted_pos
+    #             wd['predicted_pos'] = predicted_pos[0][0] if predicted_pos else 'noun'
+    #         else:
+    #             # GRAMMAR_RULES format: 'noun' (shouldn't happen now, but just in case)
+    #             wd['predicted_pos_list'] = [(predicted_pos, 0.90)]
+    #             wd['predicted_pos'] = predicted_pos
+            
+    #         if self.verbose:
+    #             context = f"[{left_pos or '???'}] _{wd['word']}_ [{right_pos or '???'}]"
+    #             ngram_note = " (in n-gram)" if wd['part_of_ngram'] else ""
+    #             print(f"  [{position}] '{wd['word']}' → Predicted: {wd['predicted_pos_list']}{ngram_note}")
+    #             print(f"       Context: {context}")
+
+# =========================================================================
     # STEP 3: Determine POS for ALL Words (including n-gram members)
     # =========================================================================
     
@@ -2187,6 +2313,36 @@ class WordDiscovery:
             if not predicted_pos:
                 predicted_pos = [('noun', 0.75)]
             
+            # ---------------------------------------------------------
+            # PASSIVE VOICE LOOKAHEAD: [be] _X_ [-ed] → X is a noun
+            # "where is african located" → african = noun (subject)
+            # ---------------------------------------------------------
+            has_be_before = any(
+                word_data[j]['is_stopword'] and word_data[j]['pos'] == 'be'
+                for j in range(0, i)
+            )
+            next_ends_ed = False
+            if i + 1 < len(word_data):
+                next_word_clean = word_data[i + 1]['word'].rstrip('?!.,;:')
+                next_ends_ed = next_word_clean.endswith('ed')
+
+            if has_be_before and next_ends_ed and not wd['is_stopword']:
+                # Check it's not already a known adverb in dictionary
+                is_known_adverb = any(
+                    m['pos'] in ('adverb',)
+                    for m in wd.get('all_matches', [])
+                )
+                if not is_known_adverb:
+                    # Override: this word is the subject of a passive construction
+                    predicted_pos = [
+                        ('noun', 0.95),
+                        ('proper_noun', 0.85),
+                        ('adjective', 0.4),
+                        ('adverb', 0.3),
+                    ]
+                    if self.verbose:
+                        print(f"       ⚡ Passive voice detected: [be]..._{wd['word']}_...[-ed] → noun (0.95)")
+
             # Store both formats for compatibility
             if isinstance(predicted_pos, list):
                 # LOCAL_CONTEXT_RULES format: [('noun', 0.95), ('proper_noun', 0.85)]
@@ -2202,6 +2358,250 @@ class WordDiscovery:
                 ngram_note = " (in n-gram)" if wd['part_of_ngram'] else ""
                 print(f"  [{position}] '{wd['word']}' → Predicted: {wd['predicted_pos_list']}{ngram_note}")
                 print(f"       Context: {context}")
+# =========================================================================
+    # STEP 3.5: Refine POS from Word Suffixes
+    # =========================================================================
+    
+    # Suffix rules - maps suffix to likely POS with confidence
+    # Format: suffix -> [(pos, confidence), ...]
+    SUFFIX_POS_RULES = {
+        # Verb/Gerund/Adjective suffixes
+        'ing': [('gerund', 0.80), ('adjective', 0.75), ('verb', 0.70), ('noun', 0.50)],
+        'ed': [('verb', 0.85), ('adjective', 0.75), ('participle', 0.70)],
+        
+        # Adverb suffixes
+        'ly': [('adverb', 0.95), ('adjective', 0.40)],
+        
+        # Noun suffixes
+        'tion': [('noun', 0.95)],
+        'sion': [('noun', 0.95)],
+        'ment': [('noun', 0.95)],
+        'ness': [('noun', 0.95)],
+        'ity': [('noun', 0.95)],
+        'ence': [('noun', 0.90)],
+        'ance': [('noun', 0.90)],
+        'ure': [('noun', 0.80)],
+        'ism': [('noun', 0.95)],
+        'ist': [('noun', 0.90)],
+        'ery': [('noun', 0.85)],
+        'ory': [('noun', 0.80), ('adjective', 0.60)],
+        'age': [('noun', 0.80)],
+        'ship': [('noun', 0.95)],
+        'dom': [('noun', 0.90)],
+        'hood': [('noun', 0.95)],
+        'ling': [('noun', 0.80)],
+        
+        # Adjective suffixes
+        'ful': [('adjective', 0.95)],
+        'less': [('adjective', 0.95)],
+        'able': [('adjective', 0.90)],
+        'ible': [('adjective', 0.90)],
+        'ous': [('adjective', 0.95)],
+        'ious': [('adjective', 0.95)],
+        'ive': [('adjective', 0.90)],
+        'al': [('adjective', 0.85), ('noun', 0.50)],
+        'ial': [('adjective', 0.90)],
+        'ical': [('adjective', 0.90)],
+        'ish': [('adjective', 0.85)],
+        'ern': [('adjective', 0.80)],
+        'ese': [('adjective', 0.80), ('noun', 0.70)],
+        'ian': [('adjective', 0.80), ('noun', 0.75)],
+        'ean': [('adjective', 0.80)],
+        'ic': [('adjective', 0.85)],
+        'est': [('adjective', 0.85)],
+        'ent': [('adjective', 0.75), ('noun', 0.65)],
+        'ant': [('adjective', 0.75), ('noun', 0.65)],
+        
+        # Verb suffixes
+        'ify': [('verb', 0.95)],
+        'ize': [('verb', 0.95)],
+        'ise': [('verb', 0.90)],
+        'ate': [('verb', 0.80), ('adjective', 0.60), ('noun', 0.50)],
+        'en': [('verb', 0.70), ('adjective', 0.60)],
+        
+        # Person/Agent suffixes
+        'er': [('noun', 0.75), ('adjective', 0.65)],
+        'or': [('noun', 0.80)],
+        'ee': [('noun', 0.85)],
+        'eer': [('noun', 0.85)],
+    }
+    
+    # Words that look like they have a suffix but don't follow the rule
+    SUFFIX_EXCEPTIONS = frozenset({
+        # -ing words that are NOT gerunds
+        'ring', 'king', 'sing', 'bring', 'thing', 'string', 'spring',
+        'wing', 'swing', 'sting', 'cling', 'fling', 'sling', 'wring',
+        'bling', 'ding', 'ping', 'zing', 'ming', 'bing', 'ling',
+        'beijing', 'sterling', 'viking', 'darling', 'ceiling',
+        'feeling', 'dealing', 'healing', 'meaning', 'evening',
+        
+        # -ed words that are NOT verbs
+        'bed', 'red', 'shed', 'led', 'fed', 'wed', 'sled',
+        
+        # -ly words that are NOT adverbs
+        'fly', 'ply', 'sly', 'holy', 'ugly', 'bully', 'belly',
+        'lily', 'jelly', 'jolly', 'rally', 'ally', 'tally',
+        'family', 'italy', 'july', 'daily', 'early',
+        
+        # -er words that are NOT agents
+        'water', 'after', 'under', 'over', 'never', 'ever', 'other',
+        'rather', 'either', 'neither', 'whether', 'together',
+        'butter', 'letter', 'matter', 'better', 'bitter', 'litter',
+        'dinner', 'inner', 'upper', 'lower', 'power', 'flower',
+        'tower', 'shower', 'silver', 'river', 'liver', 'cover',
+        'fever', 'clever', 'finger', 'ginger', 'tiger', 'anger',
+        'danger', 'hunger', 'umber', 'number', 'member', 'timber',
+        'order', 'border', 'murder', 'wonder', 'thunder', 'super',
+        'paper', 'copper', 'proper', 'whisper', 'chapter', 'master',
+        'sister', 'mister', 'winter', 'center', 'corner', 'monster',
+        'soccer', 'cancer', 'rubber', 'hammer', 'summer', 'manner',
+        
+        # -al words that are NOT adjectives
+        'animal', 'hospital', 'capital', 'metal', 'total', 'eral',
+        'canal', 'eral', 'general', 'mineral', 'festival', 'signal',
+        'journal', 'rival', 'survival', 'arrival', 'proposal',
+        
+        # -ful words that are exceptions
+        'awful',
+        
+        # -age words that are NOT nouns
+        'age', 'page', 'sage', 'cage', 'rage', 'wage', 'stage',
+        
+        # -ment words that are exceptions
+        'cement', 'moment', 'comment', 'segment', 'element',
+        
+        # -ness words that are exceptions (very few)
+        
+        # -ic words that are NOT adjectives
+        'music', 'magic', 'basic', 'logic', 'topic', 'panic',
+        'fabric', 'garlic', 'picnic', 'traffic', 'public',
+        
+        # -est words that are NOT superlatives
+        'west', 'east', 'nest', 'rest', 'test', 'best', 'chest',
+        'quest', 'guest', 'forest', 'harvest', 'interest', 'protest',
+        'request', 'suggest', 'modest', 'honest', 'invest',
+        
+        # -ate words that are NOT verbs
+        'gate', 'late', 'mate', 'date', 'fate', 'rate', 'state',
+        'plate', 'private', 'climate', 'chocolate', 'senate',
+        'debate', 'estate', 'ultimate', 'intimate', 'accurate',
+        'delicate', 'separate', 'desperate', 'moderate', 'adequate',
+        
+        # -ish words that are NOT adjectives  
+        'fish', 'dish', 'wish', 'finish', 'publish', 'polish',
+        'vanish', 'perish', 'cherish', 'nourish', 'flourish',
+    })
+    
+    # Minimum word length to apply suffix rules (avoid false positives on short words)
+    MIN_SUFFIX_WORD_LENGTH = 4
+    
+    def _step3_5_refine_pos_from_suffix(
+        self,
+        word_data: List[Dict[str, Any]]
+    ) -> None:
+        """
+        Refine POS predictions using word suffixes.
+        
+        Runs on ALL words (known and unknown).
+        Does NOT replace predictions - only refines confidence scores.
+        
+        For known words:
+        - If suffix suggests adjective but context predicted verb, boost adjective
+        - Example: "running shoes" → boost adjective for "running"
+        
+        For unknown words:
+        - Suffix gives strong signal for what POS the correction should have
+        - Example: "beautful" (misspelled) → suffix -ful → adjective
+        """
+        if self.verbose:
+            print("\n" + "-" * 70)
+            print("🔤 STEP 3.5: Refine POS from Suffixes")
+            print("-" * 70)
+        
+        for wd in word_data:
+            # Skip stopwords
+            if wd['is_stopword']:
+                continue
+            
+            word = wd.get('corrected', wd['word']).lower()
+            
+            # Skip short words
+            if len(word) < self.MIN_SUFFIX_WORD_LENGTH:
+                if self.verbose:
+                    print(f"  [{wd['position']}] '{word}' → Too short, skipping")
+                continue
+            
+            # Skip exceptions
+            if word in self.SUFFIX_EXCEPTIONS:
+                if self.verbose:
+                    print(f"  [{wd['position']}] '{word}' → Exception, skipping")
+                continue
+            
+            # Find matching suffix (try longest first)
+            matched_suffix = None
+            suffix_predictions = None
+            
+            # Sort suffixes by length descending so we match longest first
+            # e.g., "ical" before "al", "ious" before "ous"
+            sorted_suffixes = sorted(
+                self.SUFFIX_POS_RULES.keys(),
+                key=len,
+                reverse=True
+            )
+            
+            for suffix in sorted_suffixes:
+                if word.endswith(suffix) and len(word) > len(suffix) + 1:
+                    matched_suffix = suffix
+                    suffix_predictions = self.SUFFIX_POS_RULES[suffix]
+                    break
+            
+            if not matched_suffix:
+                if self.verbose:
+                    print(f"  [{wd['position']}] '{word}' → No suffix match")
+                continue
+            
+            # Get current predictions
+            current_list = wd.get('predicted_pos_list', [])
+            current_primary = wd.get('predicted_pos', 'noun')
+            
+            # Build refined list
+            # Merge context predictions with suffix predictions
+            # Context predictions are weighted by their original confidence
+            # Suffix predictions boost or add POS options
+            
+            refined = {}
+            
+            # Add context predictions
+            for pos, conf in current_list:
+                refined[pos] = conf
+            
+            # Merge suffix predictions
+            for pos, suffix_conf in suffix_predictions:
+                if pos in refined:
+                    # Boost: average of context and suffix confidence
+                    # But cap at 0.98
+                    existing = refined[pos]
+                    boosted = min((existing + suffix_conf) / 2 + 0.10, 0.98)
+                    refined[pos] = boosted
+                else:
+                    # Add new POS from suffix (slightly reduced since context didn't predict it)
+                    refined[pos] = suffix_conf * 0.85
+            
+            # Sort by confidence descending
+            refined_list = sorted(refined.items(), key=lambda x: -x[1])
+            
+            # Update word data
+            wd['predicted_pos_list'] = refined_list
+            wd['predicted_pos'] = refined_list[0][0] if refined_list else current_primary
+            wd['suffix_detected'] = matched_suffix
+            
+            if self.verbose:
+                changed = wd['predicted_pos'] != current_primary
+                change_marker = " ⚡ CHANGED" if changed else ""
+                print(f"  [{wd['position']}] '{word}' → Suffix: -{matched_suffix}{change_marker}")
+                print(f"       Before: {current_list}")
+                print(f"       After:  {refined_list}")
+
 
      # =========================================================================
     # STEP 4: Select Best Match for ALL Words (including n-gram members)
@@ -2277,18 +2677,124 @@ class WordDiscovery:
                 
                 if self.verbose:
                     print(f"  [{position}] '{wd['word']}' → Fallback: {best['category']} (no POS match, using rank){ngram_note}")
+    # # =========================================================================
+    # # STEP 5: Correct Unknown Words
+    # # =========================================================================
+    
+    # def _step5_correct_unknowns(self, word_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    #     """
+    #     Correct unknown/misspelled words using fuzzy search.
+    #     Position is preserved.
+    #     """
+    #     unknowns = [wd for wd in word_data if wd['status'] == 'unknown']
+        
+    #     if not unknowns:
+    #         if self.verbose:
+    #             print("\n" + "-" * 70)
+    #             print("🔧 STEP 5: Correct Unknowns")
+    #             print("-" * 70)
+    #             print("  (no unknown words)")
+    #         return []
+        
+    #     if self.verbose:
+    #         print("\n" + "-" * 70)
+    #         print("🔧 STEP 5: Correct Unknowns (Redis Fuzzy)")
+    #         print("-" * 70)
+        
+    #     corrections = []
+        
+    #     for wd in unknowns:
+    #         word = wd['word']
+    #         position = wd['position']
+    #         predicted_pos = wd['predicted_pos'] or 'noun'
+            
+    #         # Get fuzzy suggestions
+    #         suggestions = get_fuzzy_suggestions(word, limit=10, max_distance=2)
+            
+    #         if not suggestions:
+    #             if self.verbose:
+    #                 print(f"  [{position}] '{word}' → No suggestions found")
+    #             continue
+            
+    #         # Filter by POS compatibility
+    #         compatible = [s for s in suggestions if is_pos_compatible(s['pos'], predicted_pos)]
+            
+    #         # Select best correction
+    #         if compatible:
+    #             # Sort by distance, then rank
+    #             compatible.sort(key=lambda x: (x['distance'], -x['rank']))
+    #             best = compatible[0]
+    #         else:
+    #             # No POS match - use closest by distance
+    #             best = suggestions[0]
+            
+    #         # Update word data (position preserved!)
+    #         wd['status'] = 'corrected'
+    #         wd['corrected'] = best['term']
+    #         wd['corrected_display'] = best['display']
+    #         wd['pos'] = best['pos']
+    #         wd['distance'] = best['distance']
+    #         wd['selected_match'] = {
+    #             'term': best['term'],
+    #             'display': best['display'],
+    #             'category': best['category'],
+    #             'description': best['description'],
+    #             'pos': best['pos'],
+    #             'entity_type': best['entity_type'],
+    #             'rank': best['rank'],
+    #         }
+            
+    #         corrections.append({
+    #             'position': position,
+    #             'original': word,
+    #             'corrected': best['term'],
+    #             'distance': best['distance'],
+    #             'pos': best['pos'],
+    #             'category': best['category'],
+    #         })
+            
+    #         if self.verbose:
+    #             print(f"  [{position}] '{word}' → '{best['term']}' (distance={best['distance']}, pos={best['pos']})")
+    #             if len(suggestions) > 1:
+    #                 others = [s['term'] for s in suggestions[1:4] if s['term'] != best['term']]
+    #                 if others:
+    #                     print(f"       Other options: {others}")
+        
+    #     return corrections
+    
     # =========================================================================
-    # STEP 5: Correct Unknown Words
+    # STEP 5: Correct Unknown Words + POS Mismatches
     # =========================================================================
     
     def _step5_correct_unknowns(self, word_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
         Correct unknown/misspelled words using fuzzy search.
+        Also corrects valid words where predicted POS doesn't match dictionary POS
+        with high confidence (contextual correction).
         Position is preserved.
         """
-        unknowns = [wd for wd in word_data if wd['status'] == 'unknown']
         
-        if not unknowns:
+        # --- Build candidate list ---
+        unknowns = []
+        pos_mismatches = []
+        
+        for wd in word_data:
+            if wd['status'] == 'unknown':
+                unknowns.append(wd)
+            elif (
+                wd['status'] == 'valid'
+                and not wd['is_stopword']
+                and wd.get('predicted_pos')
+                and wd.get('pos')
+                and wd['predicted_pos'] != wd['pos']
+            ):
+                # Check confidence threshold - only act on high-confidence predictions
+                predicted_list = wd.get('predicted_pos_list', [])
+                top_confidence = predicted_list[0][1] if predicted_list else 0
+                if top_confidence >= 0.90:
+                    pos_mismatches.append(wd)
+        
+        if not unknowns and not pos_mismatches:
             if self.verbose:
                 print("\n" + "-" * 70)
                 print("🔧 STEP 5: Correct Unknowns")
@@ -2303,6 +2809,7 @@ class WordDiscovery:
         
         corrections = []
         
+        # --- Process unknowns (existing logic, unchanged) ---
         for wd in unknowns:
             word = wd['word']
             position = wd['position']
@@ -2360,8 +2867,74 @@ class WordDiscovery:
                     if others:
                         print(f"       Other options: {others}")
         
+        # --- Process POS mismatches (new logic) ---
+        for wd in pos_mismatches:
+            word = wd['word']
+            position = wd['position']
+            predicted_pos = wd['predicted_pos']
+            original_pos = wd['pos']
+            
+            # Tighter distance for valid words - they're not typos
+            suggestions = get_fuzzy_suggestions(word, limit=10, max_distance=2)
+            
+            if not suggestions:
+                if self.verbose:
+                    print(f"  [{position}] '{word}' → POS mismatch ({original_pos}→{predicted_pos}), no suggestions found")
+                continue
+            
+            # STRICT: only accept suggestions that match the predicted POS
+            compatible = [
+                s for s in suggestions
+                if is_pos_compatible(s['pos'], predicted_pos)
+                and s['term'] != word  # must be a different word
+                and s['distance'] <= 2  # keep it close
+            ]
+            
+            if not compatible:
+                # No POS-compatible alternative found - leave the word alone
+                if self.verbose:
+                    print(f"  [{position}] '{word}' → POS mismatch ({original_pos}→{predicted_pos}), no compatible alternative found")
+                continue
+            
+            # Sort by distance first, then rank
+            compatible.sort(key=lambda x: (x['distance'], -x['rank']))
+            best = compatible[0]
+            
+            # Update word data
+            wd['status'] = 'pos_corrected'
+            wd['corrected'] = best['term']
+            wd['corrected_display'] = best['display']
+            wd['original_pos'] = original_pos
+            wd['pos'] = best['pos']
+            wd['distance'] = best['distance']
+            wd['selected_match'] = {
+                'term': best['term'],
+                'display': best['display'],
+                'category': best['category'],
+                'description': best['description'],
+                'pos': best['pos'],
+                'entity_type': best['entity_type'],
+                'rank': best['rank'],
+            }
+            
+            corrections.append({
+                'position': position,
+                'original': word,
+                'corrected': best['term'],
+                'distance': best['distance'],
+                'pos': best['pos'],
+                'category': best['category'],
+                'correction_type': 'pos_mismatch',
+            })
+            
+            if self.verbose:
+                print(f"  [{position}] '{word}' → '{best['term']}' (POS: {original_pos}→{best['pos']}, distance={best['distance']})")
+                if len(compatible) > 1:
+                    others = [s['term'] for s in compatible[1:4] if s['term'] != best['term']]
+                    if others:
+                        print(f"       Other options: {others}")
+        
         return corrections
-    
     # =========================================================================
     # STEP 6: Re-check N-grams After Correction
     # =========================================================================
@@ -2377,7 +2950,8 @@ class WordDiscovery:
         Only checks positions not already consumed.
         """
         # Check if any words were corrected
-        has_corrections = any(wd['status'] == 'corrected' for wd in word_data)
+        # has_corrections = any(wd['status'] == 'corrected' for wd in word_data)
+        has_corrections = any(wd['status'] in ('corrected', 'pos_corrected') for wd in word_data)
         
         if not has_corrections:
             if self.verbose:
@@ -2405,8 +2979,10 @@ class WordDiscovery:
                 
                 # Only check if at least one word was corrected in this range
                 relevant_words = word_data[i:i+3]
-                if not any(wd['status'] == 'corrected' for wd in relevant_words):
+                # if not any(wd['status'] == 'corrected' for wd in relevant_words):
+                if not any(wd['status'] in ('corrected', 'pos_corrected') for wd in relevant_words):
                     continue
+                
                 
                 tri = words[i:i+3]
                 result = self.cache.get_ngram(tri)
@@ -2544,7 +3120,13 @@ class WordDiscovery:
                 term['entity_type'] = 'unigram'
             
             # Add correction info
-            if wd['status'] == 'corrected':
+            # if wd['status'] == 'corrected':
+            #     term['corrected'] = wd.get('corrected')
+            #     term['corrected_display'] = wd.get('corrected_display')
+            #     term['distance'] = wd.get('distance')
+            # Add correction info
+
+            if wd['status'] in ('corrected', 'pos_corrected'):
                 term['corrected'] = wd.get('corrected')
                 term['corrected_display'] = wd.get('corrected_display')
                 term['distance'] = wd.get('distance')
@@ -2590,11 +3172,21 @@ class WordDiscovery:
     # Helper Methods
     # =========================================================================
     
+    # def _get_working_words(self, word_data: List[Dict[str, Any]]) -> List[str]:
+    #     """Get the working word list (using corrected words where available)."""
+    #     words = []
+    #     for wd in word_data:
+    #         if wd['status'] == 'corrected':
+    #             words.append(wd['corrected'])
+    #         else:
+    #             words.append(wd['word'])
+    #     return words
+    
     def _get_working_words(self, word_data: List[Dict[str, Any]]) -> List[str]:
         """Get the working word list (using corrected words where available)."""
         words = []
         for wd in word_data:
-            if wd['status'] == 'corrected':
+            if wd['status'] in ('corrected', 'pos_corrected'):
                 words.append(wd['corrected'])
             else:
                 words.append(wd['word'])
@@ -2826,7 +3418,11 @@ def main():
     import sys
     
     test_queries = [
-    "black owned restaurants in atlanta georgia",
+        "where is african located",
+        "where is american located",
+        "african food near me",
+        "when was slavery abolished",
+        "where is quickly located"
   
 ]
     

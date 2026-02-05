@@ -2495,6 +2495,19 @@ if __name__ == "__main__":
     print(f"Strategy: {result['search_strategy']}")
     print(f"Semantic: {result['semantic_enabled']}")
     
+    print(f"\n🔧 Corrections:")
+    for c in result.get('word_discovery', {}).get('corrections', []):
+        print(f"   '{c['original']}' → '{c['corrected']}' (type: {c.get('correction_type', 'unknown')})")
+
+    print(f"\n🔄 Query Flow:")
+    print(f"   Original:  '{result['query']}'")
+    print(f"   Corrected: '{result['corrected_query']}'")
+    print(f"   Changed:   {result['query'] != result['corrected_query']}")
+        
+    print(f"\n📝 Terms:")
+    print(f"   Valid: {result['valid_terms']}")
+    print(f"   Unknown: {result['unknown_terms']}")
+
     print(f"\n📍 Locations:")
     for loc in result.get('word_discovery', {}).get('locations', []):
         print(f"   {loc['field']}: {loc['values']}")

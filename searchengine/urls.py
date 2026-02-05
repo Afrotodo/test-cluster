@@ -47,6 +47,7 @@ urlpatterns = [
     path('api/cache/reload-from-file/', cache_views.reload_cache_from_file_view, name='cache_reload_file'),
     path('api/cache/status/', cache_views.cache_status_view, name='cache_status'),
     path('api/cache/test/', cache_views.cache_test_view, name='cache_test'),
+    path('api/cache/add/', cache_views.add_to_cache_view, name='cache_add'),
 
     
     # ==================== CATEGORY PAGES ====================
