@@ -2410,7 +2410,8 @@ def execute_full_search(
     """
     times = {}
     t0 = time.time()
-    
+    print(f"🔴 DEBUG: alt_mode='{alt_mode}' type={type(alt_mode)} search_source='{search_source}'")
+    print(f"🔴 DEBUG: is_keyword_path would be: {(alt_mode == 'n') or search_source in ('dropdown', 'keyword', 'suggestion', 'autocomplete')}")
     # Extract active filters
     active_data_type = filters.get('data_type') if filters else None
     active_category = filters.get('category') if filters else None

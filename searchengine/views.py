@@ -4526,7 +4526,7 @@ def search(request):
     
     # search_time_ms = (time.time() - search_start_time) * 1000
     
-        if execute_full_search:
+    if execute_full_search:
             try:
                 result = execute_full_search(
                     query=params.query,           # ← CHANGED: pass ORIGINAL query, not corrected_query
