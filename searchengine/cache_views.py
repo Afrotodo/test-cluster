@@ -316,47 +316,86 @@ def cache_test_view(request):
             'error': f'Server error: {str(e)}'
         }, status=500)
     
+## =============================================================================
+# ADD THIS METHOD TO vocabulary_cache.py (inside the VocabularyCache class)
 # =============================================================================
-# ADD THIS TO cache_views.py
+
+def add_terms(self, data: Dict[str, Dict]) -> Dict[str, int]:
+    """
+    Add new terms WITHOUT clearing existing data.
+    Only adds terms that don't already exist.
+    
+    Args:
+        data: Dict with keys like "term:atlanta:us_city" and value dicts
+    
+    Returns:
+        Dict with 'added' and 'skipped' counts
+    """
+    with self._lock:
+        added = 0
+        skipped = 0
+        
+        for key, value in data.items():
+            # Skip if already exists
+            if key in self.terms:
+                skipped += 1
+                continue
+            
+            # Add to terms dict
+            self.terms[key] = value
+            added += 1
+            
+            # Parse the key to get term and category
+            term_lower = value.get('term', '').lower()
+            category = value.get('category', '')
+            entity_type = value.get('entity_type', 'unigram')
+            
+            # Add to appropriate sets/dicts based on category
+            if category in ('US City', 'City'):
+                self.cities.add(term_lower)
+                self.locations.add(term_lower)
+            elif category in ('US State', 'State'):
+                self.states.add(term_lower)
+                self.locations.add(term_lower)
+            elif category == 'Country':
+                self.locations.add(term_lower)
+            
+            # Add to bigrams/trigrams if applicable
+            if entity_type == 'bigram' or ' ' in term_lower:
+                words = term_lower.split()
+                if len(words) == 2:
+                    self.bigrams[term_lower] = value
+                elif len(words) == 3:
+                    self.trigrams[term_lower] = value
+        
+        # Update metadata
+        self.term_count = len(self.terms)
+        self.last_updated = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        
+        # Save to file (pass the full terms dict)
+        self._save_to_file(self.terms)
+        
+        logger.info(f"Added {added:,} terms, skipped {skipped:,} existing")
+        
+        return {'added': added, 'skipped': skipped}
+
+
 # =============================================================================
-# This endpoint ADDS new terms without overwriting existing ones.
-# Use /api/cache/reload/ for full replace, /api/cache/add/ for merge.
+# ADD THIS IMPORT AT THE TOP OF vocabulary_cache.py (if not already there)
+# =============================================================================
+# from datetime import datetime
+
+
+# =============================================================================
+# UPDATE cache_views.py - replace the add_to_cache_view function with:
 # =============================================================================
 
 @csrf_exempt
 @require_http_methods(["POST"])
 @require_api_key
 def add_to_cache_view(request):
-    """
-    Add new terms to vocabulary cache WITHOUT overwriting existing.
-    
-    Called by Colab to add new terms while preserving existing data.
-    
-    Request:
-        POST /api/cache/add/
-        Headers:
-            Authorization: Bearer <your-secret-key>
-            Content-Type: application/json
-        Body:
-            {
-                "term:category:dictionary_word": {"term": "category", ...},
-                "term:flavor:food": {"term": "flavor", ...},
-                ...
-            }
-    
-    Response:
-        {
-            "success": true,
-            "message": "Added 5,000 new terms (skipped 2,000 existing)",
-            "stats": {
-                "added": 5000,
-                "skipped": 2000,
-                "total_after": 229928
-            }
-        }
-    """
+    """Add new terms to cache WITHOUT overwriting existing."""
     try:
-        # Check content length
         content_length = int(request.headers.get('Content-Length', 0))
         if content_length > MAX_PAYLOAD_SIZE:
             return JsonResponse({
@@ -364,7 +403,6 @@ def add_to_cache_view(request):
                 'error': f'Payload too large (max {MAX_PAYLOAD_SIZE // 1024 // 1024}MB)'
             }, status=413)
         
-        # Parse JSON body
         try:
             data = json.loads(request.body)
         except json.JSONDecodeError as e:
@@ -373,66 +411,23 @@ def add_to_cache_view(request):
                 'error': f'Invalid JSON: {str(e)}'
             }, status=400)
         
-        # Validate data structure
-        if not isinstance(data, dict):
+        if not isinstance(data, dict) or len(data) == 0:
             return JsonResponse({
                 'success': False,
-                'error': 'Expected JSON object with term data'
-            }, status=400)
-        
-        if len(data) == 0:
-            return JsonResponse({
-                'success': False,
-                'error': 'Empty data - nothing to add'
+                'error': 'Expected non-empty JSON object with term data'
             }, status=400)
         
         logger.info(f"Received cache ADD request with {len(data):,} terms")
         
-        # ADD to cache (not replace)
-        added = 0
-        skipped = 0
-        
-        for key, value in data.items():
-            # Check if key exists in vocab_cache.terms
-            if key in vocab_cache.terms:
-                skipped += 1
-            else:
-                vocab_cache.terms[key] = value
-                added += 1
-                
-                # Also add to location sets if applicable
-                term_lower = value.get('term', '').lower()
-                category = value.get('category', '')
-                
-                if category in ('US City', 'City'):
-                    vocab_cache.cities.add(term_lower)
-                    vocab_cache.locations.add(term_lower)
-                elif category in ('US State', 'State'):
-                    vocab_cache.states.add(term_lower)
-                    vocab_cache.locations.add(term_lower)
-                elif category == 'Country':
-                    vocab_cache.locations.add(term_lower)
-        
-        # Update term count
-        vocab_cache.term_count = len(vocab_cache.terms)
-        vocab_cache.last_updated = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        
-        # Save updated cache to file
-        # vocab_cache._save_to_file()
-        vocab_cache._save_to_file(vocab_cache.terms)
-        
-        # Update loaded flag if needed
-        if not vocab_cache.loaded:
-            vocab_cache.loaded = True
-        
-        logger.info(f"Cache ADD complete: added {added:,}, skipped {skipped:,}, total {vocab_cache.term_count:,}")
+        # Use the new add_terms method
+        result = vocab_cache.add_terms(data)
         
         return JsonResponse({
             'success': True,
-            'message': f'Added {added:,} new terms (skipped {skipped:,} existing)',
+            'message': f"Added {result['added']:,} new terms (skipped {result['skipped']:,} existing)",
             'stats': {
-                'added': added,
-                'skipped': skipped,
+                'added': result['added'],
+                'skipped': result['skipped'],
                 'total_after': vocab_cache.term_count
             }
         })
