@@ -370,7 +370,9 @@ def get_prefix_matches(prefix: str, limit: int = 50) -> List[Dict[str, Any]]:
     try:
         escaped_prefix = escape_query(prefix_lower)
         # FIX: Simplified query without @term:
-        query_str = f"{escaped_prefix}*"
+        # query_str = f"{escaped_prefix}*"
+        # After
+        query_str = f"@term:{escaped_prefix}*"
         
         query = Query(query_str).sort_by('rank', asc=False).paging(0, limit)
         result = client.ft(INDEX_NAME).search(query)
