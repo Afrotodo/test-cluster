@@ -444,7 +444,6 @@
 #             'error': f'Server error: {str(e)}'
 #         }, status=500)
 
-
 """
 cache_views.py
 API endpoints for vocabulary cache management.
