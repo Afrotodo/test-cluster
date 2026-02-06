@@ -418,7 +418,8 @@ def add_to_cache_view(request):
         vocab_cache.last_updated = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         
         # Save updated cache to file
-        vocab_cache._save_to_file()
+        # vocab_cache._save_to_file()
+        vocab_cache._save_to_file(vocab_cache.terms)
         
         # Update loaded flag if needed
         if not vocab_cache.loaded:
