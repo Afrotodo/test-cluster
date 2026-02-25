@@ -155,3 +155,5 @@ REST_FRAMEWORK = {
         'rest_framework.parsers.JSONParser',
     ],
 }
+
+DATA_UPLOAD_MAX_MEMORY_SIZE = 104857600
