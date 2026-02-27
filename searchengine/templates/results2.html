@@ -403,6 +403,18 @@
             </div>
             {% if was_corrected %}<div class="spelling-correction"><div class="including-results"><span class="label">Showing results for </span><a href="{% url 'searchengine:search' %}?query={{ corrected_query|urlencode }}&session_id={{ session_id }}" class="corrected-link">{{ corrected_query }}</a></div><div class="search-instead">Search instead for <a href="{% url 'searchengine:search' %}?query={{ query|urlencode }}&session_id={{ session_id }}&no_correct=1">{{ query }}</a></div></div>{% endif %}
 
+            
+            {% if results.0.humanized_summary and map_location_count < 2 %}
+            <div class="featured-snippet" style="background: var(--warm-white); border: 1px solid var(--gray-200); border-left: 3px solid var(--green); border-radius: 0 12px 12px 0; padding: var(--space-lg); margin-bottom: var(--space-lg);">
+                <p style="font-size: 15px; line-height: 1.7; color: var(--black); margin-bottom: var(--space-sm);">{{ results.0.humanized_summary }}</p>
+                <div style="display: flex; align-items: center; gap: var(--space-sm); font-size: 13px; color: var(--gray-500);">
+                    <span>From: <a href="{{ results.0.url }}" style="color: var(--green); font-weight: 500;">{{ results.0.site_name|default:results.0.source }}</a></span>
+                </div>
+            </div>
+            {% endif %}
+
+
+
             {# ═══════════ MULTI-PIN MAP (shows when 2+ results have geopoints) ═══════════ #}
             {% if map_location_count >= 2 and not show_images %}
             <div class="multi-map-section" id="multi-map-section">
