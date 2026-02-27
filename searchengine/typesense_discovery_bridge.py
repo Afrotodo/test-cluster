@@ -1036,7 +1036,7 @@ except ImportError:
 
 
 
-import requests
+
 
 def humanize_key_facts(key_facts: list) -> str:
     """Summarize key_facts into a readable sentence using Flan-T5."""
@@ -2708,7 +2708,7 @@ def execute_full_search(
     page_ids = [item['id'] for item in page_items]
     results = fetch_full_documents(page_ids, query)
     times['fetch_docs'] = round((time.time() - t5) * 1000, 2)
-    
+
     # Humanize top result key_facts (semantic path only)
     if results and results[0].get('key_facts') and page == 1:
             results[0]['humanized_summary'] = humanize_key_facts(results[0]['key_facts'])
