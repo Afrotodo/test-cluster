@@ -8,6 +8,7 @@ from datetime import date, datetime, timedelta, timezone
 from functools import wraps
 from typing import Any, Dict, List, Optional, Tuple, Union
 from django.views.decorators.csrf import csrf_exempt
+from .address_utils import process_address_maps
 
 import redis
 import typesense
@@ -4660,10 +4661,12 @@ def search(request):
     
     log_search_analytics(params, search_type, total_results, is_suspicious)
     
+    map_data = process_address_maps(request, results)
     # === 15. BUILD CONTEXT ===
     context = {
         # Core search
         'query': params.query,
+        **map_data,          
         'corrected_query': corrected_query,
         'was_corrected': was_corrected,
         'word_corrections': word_corrections,

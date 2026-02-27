@@ -1,50 +1,1020 @@
+# """
+# intent_detect.py
+# Pure fact extraction from word discovery output.
+
+# PURPOSE:
+#     Extract and report ALL linguistic signals from the query.
+#     Does NOT make decisions - only presents facts for Typesense to interpret.
+
+# SIGNALS EXTRACTED:
+#     - Question signals (who, what, when, where, why, how)
+#     - Temporal signals (first, last, oldest, newest)
+#     - Proximity signals (near, in, at, around)
+#     - Superlative signals (best, top, most, biggest)
+#     - Quantity signals (plural nouns, list requests)
+#     - Entity signals (person, place, organization detected)
+#     - Service signals (restaurants, designers, doctors)
+#     - Action signals (find, show, get, search)
+#     - Comparison signals (vs, versus, compare, difference)
+#     - Definition signals (what is, define, meaning)
+
+# PERFORMANCE:
+#     All lookups are O(1) using frozensets and dicts.
+#     No loops over external data.
+#     Single pass through terms list.
+
+# USAGE:
+#     from intent_detect import detect_intent
+    
+#     result = process_query_optimized(query)
+#     result = detect_intent(result)
+    
+#     # Access signals
+#     signals = result['signals']
+#     if signals['has_question_word']:
+#         # Query contains who/what/when/where/why/how
+#     if signals['has_proximity']:
+#         # Query contains near/in/around
+# """
+
+# from typing import Dict, Any, List, Optional, Set, Tuple
+
+
+# # =============================================================================
+# # SIGNAL WORD SETS (O(1) lookup)
+# # =============================================================================
+
+# # Question words - signal user is asking a question
+# QUESTION_WORDS = frozenset({
+#     'who', "who's", 'whom', 'whose',
+#     'what', "what's", 'whatever',
+#     'when', "when's",
+#     'where', "where's", 'wherever',
+#     'why', "why's",
+#     'how', "how's",
+#     'which', 'whichever',
+# })
+
+# # Question starters - verbs that start questions
+# QUESTION_STARTERS = frozenset({
+#     'is', 'are', 'was', 'were',
+#     'do', 'does', 'did',
+#     'can', 'could',
+#     'will', 'would',
+#     'should', 'shall',
+#     'has', 'have', 'had',
+#     'may', 'might', 'must',
+# })
+
+# # Temporal words - signal time-based filtering/sorting
+# TEMPORAL_OLDEST = frozenset({
+#     'first', 'oldest', 'earliest', 'original', 'initial',
+#     'founding', 'pioneer', 'pioneering', 'inaugural',
+# })
+
+# TEMPORAL_NEWEST = frozenset({
+#     'last', 'latest', 'newest', 'recent', 'current',
+#     'modern', 'contemporary', 'today', 'now',
+# })
+
+# TEMPORAL_ALL = TEMPORAL_OLDEST | TEMPORAL_NEWEST
+
+# # Proximity words - signal location-based search
+# PROXIMITY_WORDS = frozenset({
+#     'near', 'nearby', 'around', 'close',
+#     'in', 'at', 'on', 'within',
+#     'local', 'locally',
+# })
+
+# # Location prepositions - words before location names
+# LOCATION_PREPOSITIONS = frozenset({
+#     'in', 'at', 'near', 'around', 'from', 'to',
+#     'within', 'outside', 'inside',
+# })
+
+# # Superlative words - signal ranking/best-of queries
+# SUPERLATIVE_WORDS = frozenset({
+#     'best', 'top', 'most', 'greatest', 'finest',
+#     'worst', 'least',
+#     'biggest', 'largest', 'smallest',
+#     'highest', 'lowest',
+#     'richest', 'poorest',
+#     'fastest', 'slowest',
+#     'strongest', 'weakest',
+#     'famous', 'popular', 'renowned',
+# })
+
+# # Quantity/list words - signal multiple results wanted
+# QUANTITY_WORDS = frozenset({
+#     'list', 'lists',
+#     'all', 'every', 'any', 'some',
+#     'many', 'few', 'several', 'multiple',
+#     'examples', 'options', 'choices',
+#     'types', 'kinds', 'varieties',
+#     'recommendations', 'suggestions',
+# })
+
+# # Action words - signal user intent
+# ACTION_FIND = frozenset({
+#     'find', 'search', 'look', 'looking', 'seek', 'seeking',
+#     'locate', 'discover',
+# })
+
+# ACTION_SHOW = frozenset({
+#     'show', 'display', 'give', 'tell', 'list',
+#     'get', 'fetch', 'bring',
+# })
+
+# ACTION_LEARN = frozenset({
+#     'learn', 'understand', 'explain', 'know',
+#     'teach', 'study',
+# })
+
+# ACTION_ALL = ACTION_FIND | ACTION_SHOW | ACTION_LEARN
+
+# # Definition signals - signal user wants explanation
+# DEFINITION_PATTERNS = frozenset({
+#     'define', 'definition', 'meaning',
+#     'means', 'mean',
+# })
+
+# # Comparison words - signal comparison query
+# COMPARISON_WORDS = frozenset({
+#     'vs', 'vs.', 'versus', 'against',
+#     'compare', 'compared', 'comparing', 'comparison',
+#     'difference', 'differences', 'different',
+#     'between', 'or', 'better',
+# })
+
+# # Service/business types - signal local search
+# SERVICE_WORDS = frozenset({
+#     # Food & Dining
+#     'restaurant', 'restaurants', 'cafe', 'cafes', 'coffee',
+#     'bar', 'bars', 'club', 'clubs', 'lounge', 'lounges',
+#     'bakery', 'bakeries', 'diner', 'diners',
+#     'pizzeria', 'pizzerias', 'steakhouse', 'steakhouses',
+#     'food', 'foods', 'dining', 'eatery', 'eateries',
+    
+#     # Professional Services
+#     'lawyer', 'lawyers', 'attorney', 'attorneys',
+#     'doctor', 'doctors', 'physician', 'physicians',
+#     'dentist', 'dentists', 'therapist', 'therapists',
+#     'accountant', 'accountants', 'consultant', 'consultants',
+#     'designer', 'designers', 'developer', 'developers',
+#     'architect', 'architects', 'engineer', 'engineers',
+#     'photographer', 'photographers', 'videographer', 'videographers',
+#     'plumber', 'plumbers', 'electrician', 'electricians',
+#     'mechanic', 'mechanics', 'contractor', 'contractors',
+    
+#     # Retail & Shopping
+#     'store', 'stores', 'shop', 'shops', 'boutique', 'boutiques',
+#     'market', 'markets', 'mall', 'malls',
+#     'salon', 'salons', 'spa', 'spas', 'barbershop', 'barbershops',
+    
+#     # Health & Fitness
+#     'gym', 'gyms', 'fitness', 'yoga', 'studio', 'studios',
+#     'clinic', 'clinics', 'hospital', 'hospitals',
+#     'pharmacy', 'pharmacies',
+    
+#     # Education
+#     'school', 'schools', 'college', 'colleges',
+#     'university', 'universities', 'tutor', 'tutors',
+    
+#     # Entertainment
+#     'theater', 'theaters', 'theatre', 'theatres',
+#     'cinema', 'cinemas', 'museum', 'museums',
+#     'gallery', 'galleries', 'venue', 'venues',
+    
+#     # Lodging
+#     'hotel', 'hotels', 'motel', 'motels',
+#     'inn', 'inns', 'resort', 'resorts',
+#     'airbnb', 'hostel', 'hostels',
+    
+#     # Other Services
+#     'bank', 'banks', 'atm', 'atms',
+#     'gas', 'station', 'stations',
+#     'parking', 'garage', 'garages',
+#     'church', 'churches', 'mosque', 'mosques', 'temple', 'temples',
+# })
+
+# # Role/title words - signal looking for a specific person by role
+# ROLE_WORDS = frozenset({
+#     # Leadership
+#     'president', 'vice-president', 'vp',
+#     'ceo', 'cfo', 'cto', 'coo', 'cmo',
+#     'chairman', 'chairwoman', 'chairperson', 'chair',
+#     'director', 'directors',
+#     'manager', 'managers',
+#     'leader', 'leaders',
+#     'head', 'chief',
+#     'boss', 'executive', 'executives',
+    
+#     # Founders & Creators
+#     'founder', 'founders', 'co-founder',
+#     'creator', 'creators',
+#     'inventor', 'inventors',
+#     'pioneer', 'pioneers',
+#     'originator',
+    
+#     # Government
+#     'mayor', 'governor', 'senator', 'representative',
+#     'congressman', 'congresswoman',
+#     'president', 'minister', 'ambassador',
+#     'judge', 'justice',
+    
+#     # Education
+#     'principal', 'dean', 'provost', 'chancellor',
+#     'professor', 'teacher', 'instructor',
+#     'superintendent',
+    
+#     # Religion
+#     'pastor', 'priest', 'minister', 'rabbi', 'imam',
+#     'bishop', 'pope', 'reverend',
+    
+#     # Arts & Entertainment
+#     'author', 'writer', 'poet', 'playwright',
+#     'singer', 'musician', 'artist', 'performer',
+#     'actor', 'actress', 'director',
+#     'producer', 'composer', 'conductor',
+#     'chef', 'photographer',
+    
+#     # Sports
+#     'coach', 'captain', 'quarterback', 'pitcher',
+#     'player', 'athlete', 'champion',
+    
+#     # Business
+#     'owner', 'proprietor',
+#     'partner', 'associate',
+#     'employee', 'worker',
+# })
+
+# # Plural noun endings - signal multiple results expected
+# PLURAL_ENDINGS = ('s', 'es', 'ies')
+
+# # "Me" signals - signal personalized/location-based
+# ME_WORDS = frozenset({
+#     'me', 'my', 'i', 'mine',
+# })
+
+# # Category words from your domain
+# CULTURE_WORDS = frozenset({
+#     'black', 'african', 'american', 'african-american',
+#     'culture', 'cultural', 'heritage', 'history', 'historical',
+#     'tradition', 'traditional', 'community',
+# })
+
+# FOOD_WORDS = frozenset({
+#     'food', 'foods', 'recipe', 'recipes', 'cooking',
+#     'cuisine', 'dish', 'dishes', 'meal', 'meals',
+#     'soul', 'southern', 'comfort',
+# })
+
+# MUSIC_WORDS = frozenset({
+#     'music', 'song', 'songs', 'album', 'albums',
+#     'jazz', 'blues', 'gospel', 'soul', 'hip-hop', 'rap',
+#     'r&b', 'funk', 'motown',
+#     'artist', 'artists', 'singer', 'singers',
+#     'musician', 'musicians', 'band', 'bands',
+# })
+
+
+# # =============================================================================
+# # PATTERN DETECTION (position-aware)
+# # =============================================================================
+
+# def _check_definition_pattern(terms: List[Dict]) -> bool:
+#     """Check for 'what is X' or 'define X' patterns."""
+#     if len(terms) < 2:
+#         return False
+    
+#     first = terms[0].get('word', '').lower()
+#     second = terms[1].get('word', '').lower() if len(terms) > 1 else ''
+    
+#     # "what is X" pattern
+#     if first == 'what' and second == 'is':
+#         return True
+    
+#     # "define X" pattern
+#     if first in DEFINITION_PATTERNS:
+#         return True
+    
+#     return False
+
+
+# def _check_proximity_pattern(terms: List[Dict]) -> Tuple[bool, Optional[str]]:
+#     """
+#     Check for 'X near Y' or 'X in Y' patterns.
+#     Returns (has_pattern, proximity_word).
+#     """
+#     for i, term in enumerate(terms):
+#         word = term.get('word', '').lower()
+        
+#         if word in PROXIMITY_WORDS:
+#             # Check if there's something after the proximity word
+#             if i < len(terms) - 1:
+#                 return True, word
+    
+#     return False, None
+
+
+# def _check_me_pattern(terms: List[Dict]) -> bool:
+#     """Check for 'near me', 'for me', 'my area' patterns."""
+#     words = [t.get('word', '').lower() for t in terms]
+    
+#     # Direct "me" reference
+#     if 'me' in words:
+#         return True
+    
+#     # "my" + location word
+#     for i, word in enumerate(words):
+#         if word == 'my' and i < len(words) - 1:
+#             next_word = words[i + 1]
+#             if next_word in {'area', 'location', 'city', 'neighborhood', 'town'}:
+#                 return True
+    
+#     return False
+
+
+# def _check_comparison_pattern(terms: List[Dict]) -> Tuple[bool, List[str]]:
+#     """
+#     Check for comparison patterns like 'X vs Y' or 'X or Y'.
+#     Returns (has_comparison, items_being_compared).
+#     """
+#     words = [t.get('word', '').lower() for t in terms]
+#     items = []
+    
+#     for i, word in enumerate(words):
+#         if word in {'vs', 'vs.', 'versus', 'or', 'and'}:
+#             # Get words before and after
+#             if i > 0:
+#                 items.append(words[i - 1])
+#             if i < len(words) - 1:
+#                 items.append(words[i + 1])
+    
+#     return len(items) >= 2, items
+
+
+# # =============================================================================
+# # MAIN SIGNAL EXTRACTION
+# # =============================================================================
+
+# def detect_intent(discovery_result: Dict[str, Any]) -> Dict[str, Any]:
+#     """
+#     Extract all linguistic signals from word discovery output.
+    
+#     Does NOT make decisions - only reports facts.
+#     Typesense uses these signals to decide how to search.
+    
+#     Args:
+#         discovery_result: Dict from process_query_optimized()
+    
+#     Returns:
+#         Same dict with 'signals' field added
+#     """
+#     # Get data from discovery result
+#     query = discovery_result.get('query', '').lower().strip()
+#     terms = discovery_result.get('terms', [])
+#     ngrams = discovery_result.get('ngrams', [])
+#     category_summary = discovery_result.get('category_summary', {})
+#     sort_info = discovery_result.get('sort')
+    
+#     # Initialize signals dict
+#     signals = {
+#         # Question signals
+#         'has_question_word': False,
+#         'question_word': None,
+#         'question_position': None,  # 'start', 'middle', 'end'
+#         'has_question_starter': False,
+#         'question_starter': None,
+        
+#         # Temporal signals
+#         'has_temporal': False,
+#         'temporal_direction': None,  # 'oldest', 'newest'
+#         'temporal_word': None,
+        
+#         # Proximity/location signals
+#         'has_proximity': False,
+#         'proximity_word': None,
+#         'has_me_reference': False,
+#         'has_location_preposition': False,
+#         'location_preposition': None,
+        
+#         # Superlative signals
+#         'has_superlative': False,
+#         'superlative_word': None,
+        
+#         # Quantity signals
+#         'has_quantity_word': False,
+#         'quantity_word': None,
+#         'has_plural_noun': False,
+#         'plural_nouns': [],
+        
+#         # Action signals
+#         'has_action_word': False,
+#         'action_type': None,  # 'find', 'show', 'learn'
+#         'action_word': None,
+        
+#         # Pattern signals
+#         'is_definition_query': False,
+#         'is_comparison_query': False,
+#         'comparison_items': [],
+        
+#         # Service/local signals
+#         'has_service_word': False,
+#         'service_words': [],
+#         'is_local_search': False,
+        
+#         # Role signals
+#         'has_role_word': False,
+#         'role_word': None,
+        
+#         # Domain signals (from your content)
+#         'has_culture_word': False,
+#         'has_food_word': False,
+#         'has_music_word': False,
+        
+#         # Entity signals (from category_summary)
+#         'has_person': category_summary.get('has_person', False),
+#         'has_location': category_summary.get('has_location', False),
+#         'has_organization': category_summary.get('has_business', False),
+#         'has_media': category_summary.get('has_media', False),
+#         'has_song_title': category_summary.get('has_song_title', False),
+        
+#         # Query structure signals
+#         'word_count': len(terms),
+#         'all_nouns': False,
+#         'starts_with_noun': False,
+#         'ends_with_noun': False,
+#         'has_adjective': False,
+#         'has_verb': False,
+        
+#         # Detected entities (from ngrams and high-rank terms)
+#         'detected_entities': [],
+        
+#         # Sort signal (from word_discovery)
+#         'has_sort_signal': sort_info is not None,
+#         'sort_field': sort_info.get('field') if sort_info else None,
+#         'sort_order': sort_info.get('order') if sort_info else None,
+#     }
+    
+#     # Track for aggregate analysis
+#     noun_count = 0
+#     service_words_found = []
+#     plural_nouns_found = []
+#     entities_found = []
+    
+#     # =================================================================
+#     # SINGLE PASS THROUGH TERMS
+#     # =================================================================
+#     for i, term in enumerate(terms):
+#         word = term.get('word', '').lower()
+#         search_word = term.get('search_word', word).lower()
+#         pos = term.get('pos', '').lower()
+#         category = term.get('category', '').lower()
+#         rank = term.get('rank', 0)
+        
+#         position = 'start' if i == 0 else ('end' if i == len(terms) - 1 else 'middle')
+        
+#         # --- Question word check ---
+#         if word in QUESTION_WORDS:
+#             signals['has_question_word'] = True
+#             signals['question_word'] = word
+#             signals['question_position'] = position
+        
+#         # --- Question starter check (only at start) ---
+#         if i == 0 and word in QUESTION_STARTERS:
+#             signals['has_question_starter'] = True
+#             signals['question_starter'] = word
+        
+#         # --- Temporal check ---
+#         if word in TEMPORAL_OLDEST:
+#             signals['has_temporal'] = True
+#             signals['temporal_direction'] = 'oldest'
+#             signals['temporal_word'] = word
+#         elif word in TEMPORAL_NEWEST:
+#             signals['has_temporal'] = True
+#             signals['temporal_direction'] = 'newest'
+#             signals['temporal_word'] = word
+        
+#         # --- Proximity check ---
+#         if word in PROXIMITY_WORDS:
+#             signals['has_proximity'] = True
+#             signals['proximity_word'] = word
+        
+#         if word in LOCATION_PREPOSITIONS:
+#             signals['has_location_preposition'] = True
+#             signals['location_preposition'] = word
+        
+#         # --- Me reference check ---
+#         if word in ME_WORDS:
+#             signals['has_me_reference'] = True
+        
+#         # --- Superlative check ---
+#         if word in SUPERLATIVE_WORDS:
+#             signals['has_superlative'] = True
+#             signals['superlative_word'] = word
+        
+#         # --- Quantity check ---
+#         if word in QUANTITY_WORDS:
+#             signals['has_quantity_word'] = True
+#             signals['quantity_word'] = word
+        
+#         # --- Action word check ---
+#         if word in ACTION_FIND:
+#             signals['has_action_word'] = True
+#             signals['action_type'] = 'find'
+#             signals['action_word'] = word
+#         elif word in ACTION_SHOW:
+#             signals['has_action_word'] = True
+#             signals['action_type'] = 'show'
+#             signals['action_word'] = word
+#         elif word in ACTION_LEARN:
+#             signals['has_action_word'] = True
+#             signals['action_type'] = 'learn'
+#             signals['action_word'] = word
+        
+#         # --- Service word check ---
+#         if word in SERVICE_WORDS or search_word in SERVICE_WORDS:
+#             signals['has_service_word'] = True
+#             service_words_found.append(word)
+        
+#         # --- Role word check ---
+#         if word in ROLE_WORDS or search_word in ROLE_WORDS:
+#             signals['has_role_word'] = True
+#             signals['role_word'] = word
+        
+#         # --- Domain word checks ---
+#         if word in CULTURE_WORDS:
+#             signals['has_culture_word'] = True
+#         if word in FOOD_WORDS:
+#             signals['has_food_word'] = True
+#         if word in MUSIC_WORDS:
+#             signals['has_music_word'] = True
+        
+#         # --- Comparison check ---
+#         if word in COMPARISON_WORDS:
+#             signals['is_comparison_query'] = True
+        
+#         # --- POS analysis ---
+#         if pos in {'noun', 'proper_noun'}:
+#             noun_count += 1
+#             if i == 0:
+#                 signals['starts_with_noun'] = True
+#             if i == len(terms) - 1:
+#                 signals['ends_with_noun'] = True
+            
+#             # Check for plural
+#             if word.endswith(PLURAL_ENDINGS) and len(word) > 2:
+#                 signals['has_plural_noun'] = True
+#                 plural_nouns_found.append(word)
+        
+#         if pos == 'adjective':
+#             signals['has_adjective'] = True
+        
+#         if pos in {'verb', 'be', 'auxiliary', 'modal'}:
+#             signals['has_verb'] = True
+        
+#         # --- Entity detection (high-rank proper nouns) ---
+#         if pos == 'proper_noun' and rank > 100 and category != 'stopword':
+#             entities_found.append({
+#                 'word': search_word,
+#                 'category': category,
+#                 'rank': rank
+#             })
+    
+#     # =================================================================
+#     # POST-LOOP ANALYSIS
+#     # =================================================================
+    
+#     # All nouns check
+#     non_stopword_terms = [t for t in terms if t.get('category') != 'stopword']
+#     if non_stopword_terms and noun_count == len(non_stopword_terms):
+#         signals['all_nouns'] = True
+    
+#     # Service words list
+#     signals['service_words'] = service_words_found
+    
+#     # Plural nouns list
+#     signals['plural_nouns'] = plural_nouns_found
+    
+#     # Definition pattern check
+#     signals['is_definition_query'] = _check_definition_pattern(terms)
+    
+#     # Proximity pattern check
+#     has_prox, prox_word = _check_proximity_pattern(terms)
+#     if has_prox:
+#         signals['has_proximity'] = True
+#         signals['proximity_word'] = prox_word
+    
+#     # Me pattern check
+#     if _check_me_pattern(terms):
+#         signals['has_me_reference'] = True
+    
+#     # Comparison pattern check
+#     has_comp, comp_items = _check_comparison_pattern(terms)
+#     if has_comp:
+#         signals['is_comparison_query'] = True
+#         signals['comparison_items'] = comp_items
+    
+#     # Local search detection
+#     signals['is_local_search'] = (
+#         signals['has_service_word'] and 
+#         (signals['has_proximity'] or signals['has_me_reference'] or signals['has_location'])
+#     )
+    
+#     # =================================================================
+#     # NGRAM ENTITY EXTRACTION
+#     # =================================================================
+#     for ngram in ngrams:
+#         ngram_text = ngram.get('ngram', '')
+#         category = ngram.get('category', '').lower()
+#         rank = ngram.get('rank', 0)
+        
+#         if category and ngram_text:
+#             entities_found.append({
+#                 'phrase': ngram_text,
+#                 'category': category,
+#                 'rank': rank,
+#                 'is_ngram': True
+#             })
+    
+#     # Sort entities by rank (highest first)
+#     entities_found.sort(key=lambda x: -x.get('rank', 0))
+#     signals['detected_entities'] = entities_found
+    
+#     # =================================================================
+#     # ADD SIGNALS TO RESULT
+#     # =================================================================
+#     discovery_result['signals'] = signals
+    
+#     return discovery_result
+
+
+# # =============================================================================
+# # DEBUG PRINT FUNCTION
+# # =============================================================================
+
+# def print_intent_debug(discovery_result: Dict[str, Any]) -> None:
+#     """Print all detected signals for debugging."""
+#     signals = discovery_result.get('signals', {})
+    
+#     print("\n" + "=" * 70)
+#     print("🎯 SIGNAL DETECTION DEBUG")
+#     print("=" * 70)
+    
+#     print(f"\n📝 Query: '{discovery_result.get('query', '')}'")
+#     print(f"📊 Word Count: {signals.get('word_count', 0)}")
+    
+#     # Question signals
+#     print("\n" + "-" * 70)
+#     print("❓ QUESTION SIGNALS")
+#     print("-" * 70)
+#     print(f"  has_question_word: {signals.get('has_question_word')} → {signals.get('question_word')} ({signals.get('question_position')})")
+#     print(f"  has_question_starter: {signals.get('has_question_starter')} → {signals.get('question_starter')}")
+#     print(f"  is_definition_query: {signals.get('is_definition_query')}")
+    
+#     # Temporal signals
+#     print("\n" + "-" * 70)
+#     print("⏰ TEMPORAL SIGNALS")
+#     print("-" * 70)
+#     print(f"  has_temporal: {signals.get('has_temporal')} → {signals.get('temporal_word')}")
+#     print(f"  temporal_direction: {signals.get('temporal_direction')}")
+#     print(f"  has_sort_signal: {signals.get('has_sort_signal')} → {signals.get('sort_field')} {signals.get('sort_order')}")
+    
+#     # Location/Proximity signals
+#     print("\n" + "-" * 70)
+#     print("📍 LOCATION/PROXIMITY SIGNALS")
+#     print("-" * 70)
+#     print(f"  has_proximity: {signals.get('has_proximity')} → {signals.get('proximity_word')}")
+#     print(f"  has_me_reference: {signals.get('has_me_reference')}")
+#     print(f"  has_location_preposition: {signals.get('has_location_preposition')} → {signals.get('location_preposition')}")
+#     print(f"  has_location (entity): {signals.get('has_location')}")
+#     print(f"  is_local_search: {signals.get('is_local_search')}")
+    
+#     # Service signals
+#     print("\n" + "-" * 70)
+#     print("🏪 SERVICE SIGNALS")
+#     print("-" * 70)
+#     print(f"  has_service_word: {signals.get('has_service_word')}")
+#     print(f"  service_words: {signals.get('service_words')}")
+    
+#     # Superlative/Quantity signals
+#     print("\n" + "-" * 70)
+#     print("📈 SUPERLATIVE/QUANTITY SIGNALS")
+#     print("-" * 70)
+#     print(f"  has_superlative: {signals.get('has_superlative')} → {signals.get('superlative_word')}")
+#     print(f"  has_quantity_word: {signals.get('has_quantity_word')} → {signals.get('quantity_word')}")
+#     print(f"  has_plural_noun: {signals.get('has_plural_noun')}")
+#     print(f"  plural_nouns: {signals.get('plural_nouns')}")
+    
+#     # Action signals
+#     print("\n" + "-" * 70)
+#     print("🎬 ACTION SIGNALS")
+#     print("-" * 70)
+#     print(f"  has_action_word: {signals.get('has_action_word')} → {signals.get('action_word')}")
+#     print(f"  action_type: {signals.get('action_type')}")
+    
+#     # Role signals
+#     print("\n" + "-" * 70)
+#     print("👔 ROLE SIGNALS")
+#     print("-" * 70)
+#     print(f"  has_role_word: {signals.get('has_role_word')} → {signals.get('role_word')}")
+    
+#     # Comparison signals
+#     print("\n" + "-" * 70)
+#     print("⚖️ COMPARISON SIGNALS")
+#     print("-" * 70)
+#     print(f"  is_comparison_query: {signals.get('is_comparison_query')}")
+#     print(f"  comparison_items: {signals.get('comparison_items')}")
+    
+#     # Domain signals
+#     print("\n" + "-" * 70)
+#     print("🎨 DOMAIN SIGNALS")
+#     print("-" * 70)
+#     print(f"  has_culture_word: {signals.get('has_culture_word')}")
+#     print(f"  has_food_word: {signals.get('has_food_word')}")
+#     print(f"  has_music_word: {signals.get('has_music_word')}")
+    
+#     # Entity signals
+#     print("\n" + "-" * 70)
+#     print("🏷️ ENTITY SIGNALS")
+#     print("-" * 70)
+#     print(f"  has_person: {signals.get('has_person')}")
+#     print(f"  has_organization: {signals.get('has_organization')}")
+#     print(f"  has_media: {signals.get('has_media')}")
+#     print(f"  has_song_title: {signals.get('has_song_title')}")
+    
+#     # Structure signals
+#     print("\n" + "-" * 70)
+#     print("🔤 STRUCTURE SIGNALS")
+#     print("-" * 70)
+#     print(f"  all_nouns: {signals.get('all_nouns')}")
+#     print(f"  starts_with_noun: {signals.get('starts_with_noun')}")
+#     print(f"  ends_with_noun: {signals.get('ends_with_noun')}")
+#     print(f"  has_adjective: {signals.get('has_adjective')}")
+#     print(f"  has_verb: {signals.get('has_verb')}")
+    
+#     # Detected entities
+#     print("\n" + "-" * 70)
+#     print("🎯 DETECTED ENTITIES")
+#     print("-" * 70)
+#     entities = signals.get('detected_entities', [])
+#     if entities:
+#         for ent in entities[:5]:  # Show top 5
+#             if ent.get('is_ngram'):
+#                 print(f"  📎 '{ent.get('phrase')}' → {ent.get('category')} (rank: {ent.get('rank')})")
+#             else:
+#                 print(f"  📌 '{ent.get('word')}' → {ent.get('category')} (rank: {ent.get('rank')})")
+#     else:
+#         print("  (none detected)")
+    
+#     print("\n" + "=" * 70)
+
+
+# # =============================================================================
+# # CONVENIENCE FUNCTIONS (for Typesense to use)
+# # =============================================================================
+
+# def get_signals(discovery_result: Dict[str, Any]) -> Dict[str, Any]:
+#     """Get the signals dict from discovery result."""
+#     return discovery_result.get('signals', {})
+
+
+# def is_question_query(discovery_result: Dict[str, Any]) -> bool:
+#     """Check if query has question signals."""
+#     signals = get_signals(discovery_result)
+#     return signals.get('has_question_word', False) or signals.get('has_question_starter', False)
+
+
+# def is_local_search(discovery_result: Dict[str, Any]) -> bool:
+#     """Check if query is a local/proximity search."""
+#     signals = get_signals(discovery_result)
+#     return signals.get('is_local_search', False)
+
+
+# def wants_single_result(discovery_result: Dict[str, Any]) -> bool:
+#     """
+#     Heuristic: Does this query likely want a single/specific result?
+    
+#     Signals that suggest single result:
+#     - Question word (who, what, when, where)
+#     - Temporal superlative (first, last)
+#     - Role word + organization
+#     - Specific entity detected
+#     """
+#     signals = get_signals(discovery_result)
+    
+#     # Strong single-result signals
+#     if signals.get('has_question_word') and signals.get('question_word') in {'who', 'what', 'when', 'where'}:
+#         if signals.get('has_temporal') or signals.get('has_role_word'):
+#             return True
+    
+#     # Temporal + role is strong signal
+#     if signals.get('has_temporal') and signals.get('has_role_word'):
+#         return True
+    
+#     return False
+
+
+# def wants_multiple_results(discovery_result: Dict[str, Any]) -> bool:
+#     """
+#     Heuristic: Does this query likely want multiple results?
+    
+#     Signals that suggest multiple results:
+#     - Plural nouns
+#     - Quantity words (list, all, many)
+#     - Service words (restaurants, designers)
+#     - Superlatives (best, top)
+#     - No question word, all nouns
+#     """
+#     signals = get_signals(discovery_result)
+    
+#     if signals.get('has_plural_noun'):
+#         return True
+#     if signals.get('has_quantity_word'):
+#         return True
+#     if signals.get('has_service_word'):
+#         return True
+#     if signals.get('has_superlative'):
+#         return True
+#     if signals.get('all_nouns') and not signals.get('has_question_word'):
+#         return True
+    
+#     return False
+
+
+# def get_detected_entities(discovery_result: Dict[str, Any]) -> List[Dict]:
+#     """Get list of detected entities, sorted by rank."""
+#     signals = get_signals(discovery_result)
+#     return signals.get('detected_entities', [])
+
+
+# def get_temporal_direction(discovery_result: Dict[str, Any]) -> Optional[str]:
+#     """Get temporal direction if present ('oldest' or 'newest')."""
+#     signals = get_signals(discovery_result)
+#     return signals.get('temporal_direction')
+
+
+# # =============================================================================
+# # TESTING
+# # =============================================================================
+
+# if __name__ == "__main__":
+#     # Test with mock data
+    
+#     print("=" * 70)
+#     print("TESTING SIGNAL DETECTION")
+#     print("=" * 70)
+    
+#     # Test 1: Question query
+#     test1 = {
+#         'query': 'who was the first president of morehouse',
+#         'terms': [
+#             {'word': 'who', 'search_word': 'who', 'pos': 'wh_pronoun', 'category': 'stopword', 'rank': 0},
+#             {'word': 'was', 'search_word': 'was', 'pos': 'verb', 'category': 'stopword', 'rank': 0},
+#             {'word': 'the', 'search_word': 'the', 'pos': 'article', 'category': 'stopword', 'rank': 0},
+#             {'word': 'first', 'search_word': 'first', 'pos': 'adjective', 'category': 'keyword', 'rank': 500},
+#             {'word': 'president', 'search_word': 'president', 'pos': 'noun', 'category': 'keyword', 'rank': 600},
+#             {'word': 'of', 'search_word': 'of', 'pos': 'preposition', 'category': 'stopword', 'rank': 0},
+#             {'word': 'morehouse', 'search_word': 'morehouse', 'pos': 'proper_noun', 'category': 'organization', 'rank': 800},
+#         ],
+#         'ngrams': [],
+#         'category_summary': {'has_person': False, 'has_location': False, 'has_business': True},
+#         'sort': {'field': 'time_period_start', 'order': 'asc'}
+#     }
+    
+#     result1 = detect_intent(test1)
+#     print_intent_debug(result1)
+    
+#     # Test 2: Local search
+#     test2 = {
+#         'query': 'restaurants near me',
+#         'terms': [
+#             {'word': 'restaurants', 'search_word': 'restaurants', 'pos': 'noun', 'category': 'service', 'rank': 400},
+#             {'word': 'near', 'search_word': 'near', 'pos': 'preposition', 'category': 'stopword', 'rank': 0},
+#             {'word': 'me', 'search_word': 'me', 'pos': 'pronoun', 'category': 'stopword', 'rank': 0},
+#         ],
+#         'ngrams': [],
+#         'category_summary': {'has_person': False, 'has_location': False},
+#         'sort': None
+#     }
+    
+#     result2 = detect_intent(test2)
+#     print_intent_debug(result2)
+    
+#     # Test 3: Browse query
+#     test3 = {
+#         'query': 'black women leadership',
+#         'terms': [
+#             {'word': 'black', 'search_word': 'black', 'pos': 'adjective', 'category': 'culture', 'rank': 850},
+#             {'word': 'women', 'search_word': 'women', 'pos': 'noun', 'category': 'keyword', 'rank': 400},
+#             {'word': 'leadership', 'search_word': 'leadership', 'pos': 'noun', 'category': 'keyword', 'rank': 600},
+#         ],
+#         'ngrams': [],
+#         'category_summary': {'has_person': False, 'has_location': False, 'has_culture': True},
+#         'sort': None
+#     }
+    
+#     result3 = detect_intent(test3)
+#     print_intent_debug(result3)
+    
+#     # Test 4: Entity lookup
+#     test4 = {
+#         'query': 'billie holiday',
+#         'terms': [
+#             {'word': 'billie', 'search_word': 'billie', 'pos': 'proper_noun', 'category': 'person', 'rank': 700},
+#             {'word': 'holiday', 'search_word': 'holiday', 'pos': 'proper_noun', 'category': 'person', 'rank': 500},
+#         ],
+#         'ngrams': [
+#             {'ngram': 'billie holiday', 'category': 'person', 'rank': 900}
+#         ],
+#         'category_summary': {'has_person': True, 'has_location': False},
+#         'sort': None
+#     }
+    
+#     result4 = detect_intent(test4)
+#     print_intent_debug(result4)
+    
+#     # Test 5: Superlative query
+#     test5 = {
+#         'query': 'best soul food in atlanta',
+#         'terms': [
+#             {'word': 'best', 'search_word': 'best', 'pos': 'adjective', 'category': 'keyword', 'rank': 300},
+#             {'word': 'soul', 'search_word': 'soul', 'pos': 'noun', 'category': 'music', 'rank': 600},
+#             {'word': 'food', 'search_word': 'food', 'pos': 'noun', 'category': 'food', 'rank': 700},
+#             {'word': 'in', 'search_word': 'in', 'pos': 'preposition', 'category': 'stopword', 'rank': 0},
+#             {'word': 'atlanta', 'search_word': 'atlanta', 'pos': 'proper_noun', 'category': 'us city', 'rank': 850},
+#         ],
+#         'ngrams': [
+#             {'ngram': 'soul food', 'category': 'food', 'rank': 920}
+#         ],
+#         'category_summary': {'has_person': False, 'has_location': True, 'has_food': True},
+#         'sort': None
+#     }
+    
+#     result5 = detect_intent(test5)
+#     print_intent_debug(result5)
+    
+#     print("\n✓ All tests completed")
+
+
 """
 intent_detect.py
 Pure fact extraction from word discovery output.
 
 PURPOSE:
     Extract and report ALL linguistic signals from the query.
-    Does NOT make decisions - only presents facts for Typesense to interpret.
+    Does NOT make decisions - only presents facts for the search bridge to interpret.
+
+DESIGN PRINCIPLES:
+    1. DETECT, DON'T DECIDE - Extract signals, let the bridge act on them
+    2. O(1) LOOKUPS - All word checks use frozensets and dicts
+    3. SINGLE PASS - One loop through terms, no redundant iteration
+    4. VERTICAL AGNOSTIC - Works for food, fashion, real estate, travel, etc.
+    5. COMPOSABLE - Signals can be combined by the bridge for complex intents
 
 SIGNALS EXTRACTED:
     - Question signals (who, what, when, where, why, how)
-    - Temporal signals (first, last, oldest, newest)
-    - Proximity signals (near, in, at, around)
-    - Superlative signals (best, top, most, biggest)
+    - Temporal signals (first, last, oldest, newest, historical, upcoming)
+    - Proximity/location signals (near, in, at, around + term-level city/state detection)
+    - Superlative signals (best, top, most, biggest, cheapest)
     - Quantity signals (plural nouns, list requests)
-    - Entity signals (person, place, organization detected)
-    - Service signals (restaurants, designers, doctors)
-    - Action signals (find, show, get, search)
-    - Comparison signals (vs, versus, compare, difference)
+    - Entity signals (person, place, organization from terms AND category_summary)
+    - Service signals (restaurants, designers, doctors, realtors, etc.)
+    - Product signals (shoes, phones, laptops, clothing, etc.)
+    - Action signals (find, show, get, buy, book, compare)
+    - Comparison signals (vs, versus, compare, difference, between)
     - Definition signals (what is, define, meaning)
-
-PERFORMANCE:
-    All lookups are O(1) using frozensets and dicts.
-    No loops over external data.
-    Single pass through terms list.
+    - Negation signals (not, without, no, except, exclude)
+    - Price signals (cheap, expensive, under $X, affordable, luxury)
+    - Rating signals (best, top rated, highest rated, 5 star)
+    - Recency signals (new, latest, 2024, this year, upcoming)
+    - Query mode (browse, answer, explore, compare, shop)
+    - Intent complexity (how many signals are active)
 
 USAGE:
     from intent_detect import detect_intent
-    
+
     result = process_query_optimized(query)
     result = detect_intent(result)
-    
-    # Access signals
+
     signals = result['signals']
-    if signals['has_question_word']:
-        # Query contains who/what/when/where/why/how
-    if signals['has_proximity']:
-        # Query contains near/in/around
+    if signals['is_local_search']:
+        # Apply location filters
+    if signals['query_mode'] == 'answer':
+        # Boost featured result
+    if signals['has_price_signal']:
+        # Apply price sorting
 """
 
-from typing import Dict, Any, List, Optional, Set, Tuple
+from typing import Dict, Any, List, Optional, Tuple
 
 
 # =============================================================================
 # SIGNAL WORD SETS (O(1) lookup)
 # =============================================================================
 
-# Question words - signal user is asking a question
+# ─── QUESTION WORDS ─────────────────────────────────────────────────────────
 QUESTION_WORDS = frozenset({
     'who', "who's", 'whom', 'whose',
     'what', "what's", 'whatever',
@@ -55,7 +1025,6 @@ QUESTION_WORDS = frozenset({
     'which', 'whichever',
 })
 
-# Question starters - verbs that start questions
 QUESTION_STARTERS = frozenset({
     'is', 'are', 'was', 'were',
     'do', 'does', 'did',
@@ -66,33 +1035,35 @@ QUESTION_STARTERS = frozenset({
     'may', 'might', 'must',
 })
 
-# Temporal words - signal time-based filtering/sorting
+# ─── TEMPORAL WORDS ─────────────────────────────────────────────────────────
 TEMPORAL_OLDEST = frozenset({
     'first', 'oldest', 'earliest', 'original', 'initial',
     'founding', 'pioneer', 'pioneering', 'inaugural',
+    'historic', 'historical', 'ancient', 'classic', 'vintage',
 })
 
 TEMPORAL_NEWEST = frozenset({
     'last', 'latest', 'newest', 'recent', 'current',
     'modern', 'contemporary', 'today', 'now',
+    'upcoming', 'trending', 'emerging', 'new',
 })
 
 TEMPORAL_ALL = TEMPORAL_OLDEST | TEMPORAL_NEWEST
 
-# Proximity words - signal location-based search
+# ─── PROXIMITY / LOCATION WORDS ─────────────────────────────────────────────
 PROXIMITY_WORDS = frozenset({
     'near', 'nearby', 'around', 'close',
     'in', 'at', 'on', 'within',
     'local', 'locally',
 })
 
-# Location prepositions - words before location names
 LOCATION_PREPOSITIONS = frozenset({
     'in', 'at', 'near', 'around', 'from', 'to',
-    'within', 'outside', 'inside',
+    'within', 'outside', 'inside', 'across',
+    'throughout', 'between',
 })
 
-# Superlative words - signal ranking/best-of queries
+# ─── SUPERLATIVE WORDS ──────────────────────────────────────────────────────
 SUPERLATIVE_WORDS = frozenset({
     'best', 'top', 'most', 'greatest', 'finest',
     'worst', 'least',
@@ -101,52 +1072,95 @@ SUPERLATIVE_WORDS = frozenset({
     'richest', 'poorest',
     'fastest', 'slowest',
     'strongest', 'weakest',
-    'famous', 'popular', 'renowned',
+    'famous', 'popular', 'renowned', 'leading',
+    'favorite', 'favourite', 'premier', 'premier',
+    'number one', 'no 1',
 })
 
-# Quantity/list words - signal multiple results wanted
+# ─── QUANTITY / LIST WORDS ──────────────────────────────────────────────────
 QUANTITY_WORDS = frozenset({
     'list', 'lists',
     'all', 'every', 'any', 'some',
     'many', 'few', 'several', 'multiple',
-    'examples', 'options', 'choices',
-    'types', 'kinds', 'varieties',
-    'recommendations', 'suggestions',
+    'examples', 'options', 'choices', 'alternatives',
+    'types', 'kinds', 'varieties', 'categories',
+    'recommendations', 'suggestions', 'ideas',
+    'guide', 'directory', 'collection',
 })
 
-# Action words - signal user intent
+# ─── ACTION WORDS ───────────────────────────────────────────────────────────
 ACTION_FIND = frozenset({
     'find', 'search', 'look', 'looking', 'seek', 'seeking',
-    'locate', 'discover',
+    'locate', 'discover', 'explore',
 })
 
 ACTION_SHOW = frozenset({
     'show', 'display', 'give', 'tell', 'list',
-    'get', 'fetch', 'bring',
+    'get', 'fetch', 'bring', 'see',
 })
 
 ACTION_LEARN = frozenset({
     'learn', 'understand', 'explain', 'know',
-    'teach', 'study',
+    'teach', 'study', 'read',
 })
 
-ACTION_ALL = ACTION_FIND | ACTION_SHOW | ACTION_LEARN
+ACTION_BUY = frozenset({
+    'buy', 'purchase', 'order', 'shop', 'shopping',
+    'get', 'rent', 'lease', 'hire', 'book', 'reserve',
+})
 
-# Definition signals - signal user wants explanation
+ACTION_CREATE = frozenset({
+    'make', 'create', 'build', 'design', 'cook',
+    'prepare', 'craft', 'diy',
+})
+
+ACTION_ALL = ACTION_FIND | ACTION_SHOW | ACTION_LEARN | ACTION_BUY | ACTION_CREATE
+
+# ─── DEFINITION SIGNALS ─────────────────────────────────────────────────────
 DEFINITION_PATTERNS = frozenset({
     'define', 'definition', 'meaning',
     'means', 'mean',
 })
 
-# Comparison words - signal comparison query
+# ─── COMPARISON WORDS ───────────────────────────────────────────────────────
 COMPARISON_WORDS = frozenset({
     'vs', 'vs.', 'versus', 'against',
     'compare', 'compared', 'comparing', 'comparison',
     'difference', 'differences', 'different',
-    'between', 'or', 'better',
+    'between', 'better', 'alternative', 'alternatives',
 })
 
-# Service/business types - signal local search
+# ─── NEGATION WORDS ─────────────────────────────────────────────────────────
+NEGATION_WORDS = frozenset({
+    'not', 'no', 'without', 'except', 'exclude', 'excluding',
+    'none', 'never', 'neither', 'nor', 'avoid',
+    'non', 'free',  # as in "gluten-free", "sugar-free"
+})
+
+# ─── PRICE / VALUE SIGNALS ──────────────────────────────────────────────────
+PRICE_CHEAP = frozenset({
+    'cheap', 'affordable', 'budget', 'inexpensive',
+    'free', 'discount', 'discounted', 'deal', 'deals',
+    'bargain', 'value', 'economical', 'low-cost',
+    'under', 'less',
+})
+
+PRICE_EXPENSIVE = frozenset({
+    'expensive', 'luxury', 'luxurious', 'premium', 'high-end',
+    'upscale', 'exclusive', 'designer', 'boutique',
+    'fine', 'gourmet', 'deluxe', 'elite',
+})
+
+PRICE_ALL = PRICE_CHEAP | PRICE_EXPENSIVE
+
+# ─── RATING SIGNALS ─────────────────────────────────────────────────────────
+RATING_WORDS = frozenset({
+    'rated', 'rating', 'ratings', 'review', 'reviews', 'reviewed',
+    'star', 'stars', 'recommended', 'award', 'award-winning',
+    'certified', 'accredited', 'verified', 'trusted',
+})
+
+# ─── SERVICE / BUSINESS TYPES (comprehensive for all verticals) ─────────────
 SERVICE_WORDS = frozenset({
     # Food & Dining
     'restaurant', 'restaurants', 'cafe', 'cafes', 'coffee',
@@ -154,7 +1168,9 @@ SERVICE_WORDS = frozenset({
     'bakery', 'bakeries', 'diner', 'diners',
     'pizzeria', 'pizzerias', 'steakhouse', 'steakhouses',
     'food', 'foods', 'dining', 'eatery', 'eateries',
-    
+    'catering', 'caterer', 'caterers',
+    'brewery', 'breweries', 'winery', 'wineries', 'distillery',
+
     # Professional Services
     'lawyer', 'lawyers', 'attorney', 'attorneys',
     'doctor', 'doctors', 'physician', 'physicians',
@@ -165,39 +1181,124 @@ SERVICE_WORDS = frozenset({
     'photographer', 'photographers', 'videographer', 'videographers',
     'plumber', 'plumbers', 'electrician', 'electricians',
     'mechanic', 'mechanics', 'contractor', 'contractors',
-    
+    'realtor', 'realtors', 'agent', 'agents', 'broker', 'brokers',
+    'advisor', 'advisors', 'planner', 'planners',
+    'veterinarian', 'vet', 'vets',
+
     # Retail & Shopping
     'store', 'stores', 'shop', 'shops', 'boutique', 'boutiques',
-    'market', 'markets', 'mall', 'malls',
+    'market', 'markets', 'mall', 'malls', 'outlet', 'outlets',
     'salon', 'salons', 'spa', 'spas', 'barbershop', 'barbershops',
-    
+    'dealership', 'dealerships', 'showroom', 'showrooms',
+
     # Health & Fitness
     'gym', 'gyms', 'fitness', 'yoga', 'studio', 'studios',
     'clinic', 'clinics', 'hospital', 'hospitals',
-    'pharmacy', 'pharmacies',
-    
+    'pharmacy', 'pharmacies', 'urgent care',
+    'chiropractor', 'chiropractors', 'optometrist',
+
     # Education
     'school', 'schools', 'college', 'colleges',
     'university', 'universities', 'tutor', 'tutors',
-    
+    'academy', 'academies', 'institute', 'institutes',
+    'preschool', 'daycare',
+
     # Entertainment
     'theater', 'theaters', 'theatre', 'theatres',
     'cinema', 'cinemas', 'museum', 'museums',
     'gallery', 'galleries', 'venue', 'venues',
-    
-    # Lodging
+    'arena', 'arenas', 'stadium', 'stadiums',
+    'park', 'parks', 'zoo', 'aquarium',
+
+    # Lodging & Travel
     'hotel', 'hotels', 'motel', 'motels',
     'inn', 'inns', 'resort', 'resorts',
-    'airbnb', 'hostel', 'hostels',
-    
-    # Other Services
-    'bank', 'banks', 'atm', 'atms',
+    'airbnb', 'hostel', 'hostels', 'lodge', 'lodges',
+    'vacation rental', 'bed and breakfast',
+
+    # Real Estate
+    'apartment', 'apartments', 'condo', 'condos', 'condo',
+    'townhouse', 'townhomes', 'house', 'houses', 'home', 'homes',
+    'property', 'properties', 'listing', 'listings',
+    'rental', 'rentals',
+
+    # Financial
+    'bank', 'banks', 'credit union', 'atm', 'atms',
+    'insurance', 'mortgage', 'lender', 'lenders',
+
+    # Auto
     'gas', 'station', 'stations',
     'parking', 'garage', 'garages',
-    'church', 'churches', 'mosque', 'mosques', 'temple', 'temples',
+    'car wash', 'auto shop', 'tire',
+
+    # Religious
+    'church', 'churches', 'mosque', 'mosques',
+    'temple', 'temples', 'synagogue', 'synagogues',
+
+    # Other
+    'laundromat', 'dry cleaner', 'cleaners',
+    'florist', 'florists', 'tailor', 'tailors',
+    'moving company', 'storage',
 })
 
-# Role/title words - signal looking for a specific person by role
+# ─── PRODUCT WORDS ──────────────────────────────────────────────────────────
+PRODUCT_WORDS = frozenset({
+    # Fashion & Apparel
+    'shoes', 'shoe', 'sneakers', 'sneaker', 'boots', 'heels',
+    'dress', 'dresses', 'shirt', 'shirts', 'pants', 'jeans',
+    'jacket', 'jackets', 'coat', 'coats', 'suit', 'suits',
+    'hat', 'hats', 'bag', 'bags', 'purse', 'purses',
+    'jewelry', 'jewellery', 'watch', 'watches', 'sunglasses',
+    'clothing', 'clothes', 'apparel', 'outfit', 'outfits',
+    'hoodie', 'hoodies', 'sweater', 'sweaters',
+
+    # Tech & Electronics
+    'phone', 'phones', 'laptop', 'laptops', 'computer', 'computers',
+    'tablet', 'tablets', 'headphones', 'earbuds', 'speaker', 'speakers',
+    'camera', 'cameras', 'tv', 'television', 'monitor', 'monitors',
+    'keyboard', 'mouse', 'printer', 'printers',
+    'software', 'app', 'apps',
+
+    # Home & Living
+    'furniture', 'sofa', 'couch', 'table', 'chair', 'chairs',
+    'bed', 'beds', 'mattress', 'mattresses', 'pillow', 'pillows',
+    'lamp', 'lamps', 'rug', 'rugs', 'curtains', 'blinds',
+    'appliance', 'appliances',
+
+    # Beauty & Personal Care
+    'skincare', 'makeup', 'cosmetics', 'perfume', 'cologne',
+    'shampoo', 'conditioner', 'lotion', 'serum', 'moisturizer',
+    'lipstick', 'foundation', 'mascara', 'hair products',
+
+    # Automotive
+    'car', 'cars', 'truck', 'trucks', 'suv', 'suvs',
+    'motorcycle', 'motorcycles', 'vehicle', 'vehicles',
+    'tires', 'parts',
+
+    # Books & Media
+    'book', 'books', 'novel', 'novels', 'textbook', 'textbooks',
+    'album', 'albums', 'vinyl', 'game', 'games',
+
+    # Food Products
+    'recipe', 'recipes', 'ingredient', 'ingredients',
+    'supplement', 'supplements', 'vitamin', 'vitamins',
+    'snack', 'snacks', 'drink', 'drinks', 'beverage', 'beverages',
+
+    # Fitness & Sports
+    'equipment', 'gear', 'weights', 'treadmill',
+    'bike', 'bikes', 'bicycle', 'bicycles',
+
+    # Kids & Baby
+    'toy', 'toys', 'stroller', 'crib', 'diaper', 'diapers',
+
+    # Garden & Outdoor
+    'plant', 'plants', 'seeds', 'tools', 'grill', 'grills',
+
+    # Pet
+    'pet food', 'dog food', 'cat food', 'pet supplies',
+})
+
+# ─── ROLE / TITLE WORDS ─────────────────────────────────────────────────────
 ROLE_WORDS = frozenset({
     # Leadership
     'president', 'vice-president', 'vp',
@@ -208,73 +1309,226 @@ ROLE_WORDS = frozenset({
     'leader', 'leaders',
     'head', 'chief',
     'boss', 'executive', 'executives',
-    
+
     # Founders & Creators
     'founder', 'founders', 'co-founder',
     'creator', 'creators',
     'inventor', 'inventors',
     'pioneer', 'pioneers',
     'originator',
-    
+
     # Government
     'mayor', 'governor', 'senator', 'representative',
     'congressman', 'congresswoman',
-    'president', 'minister', 'ambassador',
-    'judge', 'justice',
-    
+    'minister', 'ambassador',
+    'judge', 'justice', 'secretary',
+    'commissioner', 'councilman', 'councilwoman',
+
     # Education
     'principal', 'dean', 'provost', 'chancellor',
     'professor', 'teacher', 'instructor',
     'superintendent',
-    
+
     # Religion
-    'pastor', 'priest', 'minister', 'rabbi', 'imam',
-    'bishop', 'pope', 'reverend',
-    
+    'pastor', 'priest', 'rabbi', 'imam',
+    'bishop', 'pope', 'reverend', 'deacon',
+
     # Arts & Entertainment
     'author', 'writer', 'poet', 'playwright',
     'singer', 'musician', 'artist', 'performer',
-    'actor', 'actress', 'director',
+    'actor', 'actress',
     'producer', 'composer', 'conductor',
-    'chef', 'photographer',
-    
+    'chef', 'influencer', 'blogger',
+
     # Sports
     'coach', 'captain', 'quarterback', 'pitcher',
-    'player', 'athlete', 'champion',
-    
+    'player', 'athlete', 'champion', 'mvp',
+
     # Business
     'owner', 'proprietor',
     'partner', 'associate',
-    'employee', 'worker',
+    'entrepreneur', 'mogul',
 })
 
-# Plural noun endings - signal multiple results expected
-PLURAL_ENDINGS = ('s', 'es', 'ies')
+# ─── LOCATION CATEGORY KEYWORDS (from Word Discovery category field) ────────
+LOCATION_CATEGORIES = frozenset({
+    'us city', 'us_city', 'city',
+    'us state', 'us_state', 'state',
+    'us county', 'us_county', 'county',
+    'country', 'continent',
+    'location', 'region', 'neighborhood',
+    'district', 'borough', 'parish',
+})
 
-# "Me" signals - signal personalized/location-based
+# ─── PERSON CATEGORY KEYWORDS ───────────────────────────────────────────────
+PERSON_CATEGORIES = frozenset({
+    'person', 'historical figure', 'celebrity',
+    'athlete', 'politician', 'artist', 'musician',
+    'author', 'leader', 'activist', 'entrepreneur',
+})
+
+# ─── ORGANIZATION CATEGORY KEYWORDS ─────────────────────────────────────────
+ORGANIZATION_CATEGORIES = frozenset({
+    'organization', 'company', 'business', 'brand',
+    'hbcu', 'university', 'school', 'nonprofit',
+    'agency', 'foundation', 'corporation',
+})
+
+# ─── MEDIA CATEGORY KEYWORDS ────────────────────────────────────────────────
+MEDIA_CATEGORIES = frozenset({
+    'song', 'movie', 'album', 'book', 'tv show',
+    'podcast', 'documentary', 'film', 'series',
+    'magazine', 'newspaper', 'publication',
+})
+
+# ─── "ME" SIGNALS ───────────────────────────────────────────────────────────
 ME_WORDS = frozenset({
-    'me', 'my', 'i', 'mine',
+    'me', 'my', 'i', 'mine', 'myself',
 })
 
-# Category words from your domain
-CULTURE_WORDS = frozenset({
+# ─── DOMAIN / VERTICAL WORDS ────────────────────────────────────────────────
+# These are broad topic indicators, NOT for disambiguation
+# The bridge uses these to understand which vertical the query touches
+
+DOMAIN_CULTURE = frozenset({
     'black', 'african', 'american', 'african-american',
     'culture', 'cultural', 'heritage', 'history', 'historical',
-    'tradition', 'traditional', 'community',
+    'tradition', 'traditional', 'community', 'diaspora',
+    'indigenous', 'native', 'ethnic', 'multicultural',
 })
 
-FOOD_WORDS = frozenset({
+DOMAIN_FOOD = frozenset({
     'food', 'foods', 'recipe', 'recipes', 'cooking',
     'cuisine', 'dish', 'dishes', 'meal', 'meals',
-    'soul', 'southern', 'comfort',
+    'soul food', 'southern', 'comfort food',
+    'vegan', 'vegetarian', 'organic', 'gluten-free',
+    'breakfast', 'lunch', 'dinner', 'brunch',
+    'dessert', 'appetizer', 'entree',
 })
 
-MUSIC_WORDS = frozenset({
+DOMAIN_MUSIC = frozenset({
     'music', 'song', 'songs', 'album', 'albums',
-    'jazz', 'blues', 'gospel', 'soul', 'hip-hop', 'rap',
-    'r&b', 'funk', 'motown',
+    'jazz', 'blues', 'gospel', 'soul music', 'hip-hop', 'rap',
+    'r&b', 'funk', 'motown', 'reggae', 'afrobeat',
+    'concert', 'concerts', 'tour', 'playlist',
     'artist', 'artists', 'singer', 'singers',
     'musician', 'musicians', 'band', 'bands',
+})
+
+DOMAIN_FASHION = frozenset({
+    'fashion', 'style', 'outfit', 'outfits',
+    'clothing', 'clothes', 'apparel', 'wardrobe',
+    'streetwear', 'couture', 'runway', 'collection',
+    'trend', 'trends', 'trending',
+})
+
+DOMAIN_HEALTH = frozenset({
+    'health', 'healthy', 'wellness', 'fitness',
+    'medical', 'medicine', 'healthcare',
+    'mental health', 'therapy', 'nutrition',
+    'exercise', 'workout', 'diet',
+    'disease', 'condition', 'treatment', 'symptom', 'symptoms',
+})
+
+DOMAIN_TRAVEL = frozenset({
+    'travel', 'traveling', 'travelling', 'trip', 'trips',
+    'vacation', 'holiday', 'holidays', 'tourism', 'tourist',
+    'flight', 'flights', 'airline', 'airlines',
+    'destination', 'destinations', 'itinerary',
+    'beach', 'island', 'resort', 'cruise',
+    'passport', 'visa', 'abroad',
+})
+
+DOMAIN_REALESTATE = frozenset({
+    'real estate', 'realestate', 'property', 'properties',
+    'house', 'houses', 'home', 'homes', 'housing',
+    'apartment', 'apartments', 'condo', 'condos',
+    'rent', 'rental', 'lease', 'mortgage',
+    'bedroom', 'bathroom', 'sqft', 'square feet',
+    'foreclosure', 'investment property',
+})
+
+DOMAIN_EDUCATION = frozenset({
+    'education', 'school', 'schools', 'college', 'colleges',
+    'university', 'universities', 'degree', 'degrees',
+    'scholarship', 'scholarships', 'tuition',
+    'student', 'students', 'graduate', 'undergraduate',
+    'hbcu', 'hbcus', 'campus', 'enrollment',
+    'major', 'program', 'programs', 'course', 'courses',
+})
+
+DOMAIN_SPORTS = frozenset({
+    'sports', 'sport', 'athletic', 'athletics',
+    'football', 'basketball', 'baseball', 'soccer',
+    'tennis', 'golf', 'boxing', 'track',
+    'nfl', 'nba', 'mlb', 'nhl', 'ncaa',
+    'team', 'teams', 'league', 'season',
+    'game', 'games', 'match', 'tournament',
+    'championship', 'playoffs', 'draft',
+})
+
+DOMAIN_BUSINESS = frozenset({
+    'business', 'businesses', 'company', 'companies',
+    'startup', 'startups', 'entrepreneur', 'entrepreneurship',
+    'corporation', 'corporate', 'industry',
+    'revenue', 'profit', 'investment', 'investor',
+    'franchise', 'brand', 'brands',
+    'marketing', 'advertising', 'sales',
+    'black-owned', 'black owned', 'minority-owned', 'woman-owned',
+})
+
+DOMAIN_TECHNOLOGY = frozenset({
+    'tech', 'technology', 'digital', 'software',
+    'ai', 'artificial intelligence', 'machine learning',
+    'app', 'apps', 'website', 'platform',
+    'startup', 'innovation', 'cyber', 'blockchain',
+    'coding', 'programming', 'developer',
+})
+
+DOMAIN_BEAUTY = frozenset({
+    'beauty', 'skincare', 'makeup', 'cosmetics',
+    'hair', 'hairstyle', 'hairstyles', 'haircare',
+    'nails', 'fragrance', 'grooming',
+    'natural hair', 'braids', 'locs', 'twists',
+})
+
+# Map domain name to its frozenset for iteration
+ALL_DOMAINS = {
+    'culture': DOMAIN_CULTURE,
+    'food': DOMAIN_FOOD,
+    'music': DOMAIN_MUSIC,
+    'fashion': DOMAIN_FASHION,
+    'health': DOMAIN_HEALTH,
+    'travel': DOMAIN_TRAVEL,
+    'real_estate': DOMAIN_REALESTATE,
+    'education': DOMAIN_EDUCATION,
+    'sports': DOMAIN_SPORTS,
+    'business': DOMAIN_BUSINESS,
+    'technology': DOMAIN_TECHNOLOGY,
+    'beauty': DOMAIN_BEAUTY,
+}
+
+# Plural endings for detection
+PLURAL_ENDINGS = ('s', 'es', 'ies')
+
+# Words that are ambiguous across domains — NOT used for domain signals
+# These need surrounding context to disambiguate
+AMBIGUOUS_WORDS = frozenset({
+    'soul',       # music OR food ("soul food" vs "soul music")
+    'club',       # nightclub OR sports club OR book club
+    'studio',     # art, music, fitness, hair
+    'bar',        # drinking OR legal bar OR gym bar
+    'court',      # legal OR sports
+    'plant',      # factory OR botanical
+    'stock',      # financial OR inventory
+    'pitch',      # sales OR sports
+    'coach',      # sports OR life coach
+    'draft',      # sports OR beer OR writing
+    'foundation', # cosmetics OR nonprofit
+    'press',      # media OR weightlifting
+    'record',     # music OR achievement
+    'set',        # tennis OR collection
+    'match',      # sports OR dating
 })
 
 
@@ -286,72 +1540,204 @@ def _check_definition_pattern(terms: List[Dict]) -> bool:
     """Check for 'what is X' or 'define X' patterns."""
     if len(terms) < 2:
         return False
-    
+
     first = terms[0].get('word', '').lower()
     second = terms[1].get('word', '').lower() if len(terms) > 1 else ''
-    
-    # "what is X" pattern
-    if first == 'what' and second == 'is':
+
+    if first == 'what' and second in ('is', 'are', 'was', 'were'):
         return True
-    
-    # "define X" pattern
+    if first == 'who' and second in ('is', 'was'):
+        return True
     if first in DEFINITION_PATTERNS:
         return True
-    
+
     return False
 
 
 def _check_proximity_pattern(terms: List[Dict]) -> Tuple[bool, Optional[str]]:
-    """
-    Check for 'X near Y' or 'X in Y' patterns.
-    Returns (has_pattern, proximity_word).
-    """
+    """Check for 'X near Y' or 'X in Y' patterns."""
     for i, term in enumerate(terms):
         word = term.get('word', '').lower()
-        
-        if word in PROXIMITY_WORDS:
-            # Check if there's something after the proximity word
-            if i < len(terms) - 1:
-                return True, word
-    
+        if word in PROXIMITY_WORDS and i < len(terms) - 1:
+            return True, word
     return False, None
 
 
 def _check_me_pattern(terms: List[Dict]) -> bool:
     """Check for 'near me', 'for me', 'my area' patterns."""
     words = [t.get('word', '').lower() for t in terms]
-    
-    # Direct "me" reference
+
     if 'me' in words:
         return True
-    
-    # "my" + location word
+
     for i, word in enumerate(words):
         if word == 'my' and i < len(words) - 1:
             next_word = words[i + 1]
-            if next_word in {'area', 'location', 'city', 'neighborhood', 'town'}:
+            if next_word in {'area', 'location', 'city', 'neighborhood',
+                             'town', 'zip', 'zipcode', 'region'}:
                 return True
-    
+
     return False
 
 
-def _check_comparison_pattern(terms: List[Dict]) -> Tuple[bool, List[str]]:
+def _check_comparison_pattern(terms: List[Dict], ngrams: List[Dict]) -> Tuple[bool, List[str]]:
     """
     Check for comparison patterns like 'X vs Y' or 'X or Y'.
-    Returns (has_comparison, items_being_compared).
+    Uses ngrams for multi-word entity awareness.
     """
     words = [t.get('word', '').lower() for t in terms]
+    comparison_markers = {'vs', 'vs.', 'versus', 'or', 'compared'}
+
+    # Build ngram phrases for better entity extraction
+    ngram_phrases = {}
+    for ng in ngrams:
+        positions = ng.get('positions', [])
+        phrase = ng.get('ngram', ng.get('phrase', ''))
+        if positions and phrase:
+            for pos in positions:
+                ngram_phrases[pos] = phrase
+
     items = []
-    
     for i, word in enumerate(words):
-        if word in {'vs', 'vs.', 'versus', 'or', 'and'}:
-            # Get words before and after
-            if i > 0:
+        if word in comparison_markers:
+            # Look backward for entity
+            before_phrase = ngram_phrases.get(i - 1)
+            if before_phrase:
+                items.append(before_phrase)
+            elif i > 0:
                 items.append(words[i - 1])
-            if i < len(words) - 1:
+
+            # Look forward for entity
+            after_phrase = ngram_phrases.get(i + 1)
+            if after_phrase:
+                items.append(after_phrase)
+            elif i < len(words) - 1:
                 items.append(words[i + 1])
-    
+
     return len(items) >= 2, items
+
+
+def _check_negation_context(terms: List[Dict]) -> Tuple[bool, List[str], List[str]]:
+    """
+    Check for negation patterns and what is being negated.
+    Returns: (has_negation, negation_words_found, negated_terms)
+
+    Examples:
+        "restaurants not fast food" → True, ['not'], ['fast food']
+        "vegan without gluten" → True, ['without'], ['gluten']
+    """
+    words = [t.get('word', '').lower() for t in terms]
+    negation_found = []
+    negated_terms = []
+
+    for i, word in enumerate(words):
+        if word in NEGATION_WORDS:
+            negation_found.append(word)
+            # The word(s) after the negation are what's being excluded
+            if i < len(words) - 1:
+                # Take up to 2 words after negation as the negated concept
+                remaining = words[i + 1:i + 3]
+                # Filter out stopwords from negated terms
+                negated = [w for w in remaining
+                          if w not in {'a', 'an', 'the', 'and', 'or'}]
+                if negated:
+                    negated_terms.append(' '.join(negated))
+
+    return len(negation_found) > 0, negation_found, negated_terms
+
+
+def _detect_price_signal(terms: List[Dict]) -> Tuple[bool, Optional[str], Optional[str]]:
+    """
+    Detect price-related signals.
+    Returns: (has_price, direction ('cheap'|'expensive'|None), price_word)
+    """
+    for term in terms:
+        word = term.get('word', '').lower()
+        if word in PRICE_CHEAP:
+            return True, 'cheap', word
+        if word in PRICE_EXPENSIVE:
+            return True, 'expensive', word
+
+    return False, None, None
+
+
+def _disambiguate_domain(word: str, terms: List[Dict], word_index: int) -> Optional[str]:
+    """
+    Attempt to disambiguate an ambiguous word using surrounding context.
+    Returns the likely domain or None if still ambiguous.
+
+    Example: "soul" next to "food" → 'food', next to "music" → 'music'
+    """
+    if word not in AMBIGUOUS_WORDS:
+        return None
+
+    words = [t.get('word', '').lower() for t in terms]
+    # Check 2 words before and after for context
+    context_start = max(0, word_index - 2)
+    context_end = min(len(words), word_index + 3)
+    context_words = set(words[context_start:context_end]) - {word}
+
+    # Score each domain by context overlap
+    best_domain = None
+    best_overlap = 0
+
+    for domain_name, domain_set in ALL_DOMAINS.items():
+        overlap = len(context_words & domain_set)
+        if overlap > best_overlap:
+            best_overlap = overlap
+            best_domain = domain_name
+
+    return best_domain if best_overlap > 0 else None
+
+
+# =============================================================================
+# QUERY MODE CLASSIFICATION
+# =============================================================================
+
+def _classify_query_mode(signals: Dict) -> str:
+    """
+    Classify the overall query mode based on detected signals.
+
+    Modes:
+        'answer'  - User wants a specific fact (who, what, when, where + entity)
+        'browse'  - User wants a list of options (service, product, plural nouns)
+        'shop'    - User wants to buy something (product + buy action or price)
+        'compare' - User wants to compare options (vs, compare, difference)
+        'explore' - User wants to learn about a topic (general, no specific intent)
+        'local'   - User wants nearby services/places (service + location)
+    """
+    # Compare mode
+    if signals.get('is_comparison_query'):
+        return 'compare'
+
+    # Shop mode
+    if signals.get('has_product_word') and (
+        signals.get('action_type') == 'buy' or signals.get('has_price_signal')
+    ):
+        return 'shop'
+
+    # Local mode
+    if signals.get('is_local_search'):
+        return 'local'
+
+    # Answer mode - specific factual question
+    if signals.get('has_question_word'):
+        qw = signals.get('question_word', '')
+        if qw in ('who', 'when', 'where'):
+            return 'answer'
+        if qw == 'what' and signals.get('is_definition_query'):
+            return 'answer'
+        if signals.get('has_temporal') and signals.get('has_role_word'):
+            return 'answer'
+
+    # Browse mode - looking for lists/options
+    if signals.get('has_service_word') or signals.get('has_plural_noun'):
+        return 'browse'
+    if signals.get('has_quantity_word') or signals.get('has_superlative'):
+        return 'browse'
+
+    # Default to explore
+    return 'explore'
 
 
 # =============================================================================
@@ -361,85 +1747,103 @@ def _check_comparison_pattern(terms: List[Dict]) -> Tuple[bool, List[str]]:
 def detect_intent(discovery_result: Dict[str, Any]) -> Dict[str, Any]:
     """
     Extract all linguistic signals from word discovery output.
-    
+
     Does NOT make decisions - only reports facts.
-    Typesense uses these signals to decide how to search.
-    
+    The search bridge uses these signals to decide how to search.
+
     Args:
-        discovery_result: Dict from process_query_optimized()
-    
+        discovery_result: Dict from process_query_optimized() or WordDiscovery.process()
+
     Returns:
         Same dict with 'signals' field added
     """
-    # Get data from discovery result
     query = discovery_result.get('query', '').lower().strip()
     terms = discovery_result.get('terms', [])
     ngrams = discovery_result.get('ngrams', [])
     category_summary = discovery_result.get('category_summary', {})
     sort_info = discovery_result.get('sort')
-    
-    # Initialize signals dict
+
+    # ─── Initialize signals dict ────────────────────────────────────────
     signals = {
         # Question signals
         'has_question_word': False,
         'question_word': None,
-        'question_position': None,  # 'start', 'middle', 'end'
+        'question_position': None,
         'has_question_starter': False,
         'question_starter': None,
-        
+
         # Temporal signals
         'has_temporal': False,
-        'temporal_direction': None,  # 'oldest', 'newest'
+        'temporal_direction': None,  # 'oldest' | 'newest'
         'temporal_word': None,
-        
-        # Proximity/location signals
+
+        # Proximity / Location signals
         'has_proximity': False,
         'proximity_word': None,
         'has_me_reference': False,
         'has_location_preposition': False,
         'location_preposition': None,
-        
+        'has_location': False,
+        'location_terms': [],       # actual city/state terms found
+
         # Superlative signals
         'has_superlative': False,
         'superlative_word': None,
-        
+
         # Quantity signals
         'has_quantity_word': False,
         'quantity_word': None,
         'has_plural_noun': False,
         'plural_nouns': [],
-        
+
         # Action signals
         'has_action_word': False,
-        'action_type': None,  # 'find', 'show', 'learn'
+        'action_type': None,  # 'find' | 'show' | 'learn' | 'buy' | 'create'
         'action_word': None,
-        
+
         # Pattern signals
         'is_definition_query': False,
         'is_comparison_query': False,
         'comparison_items': [],
-        
-        # Service/local signals
+
+        # Negation signals
+        'has_negation': False,
+        'negation_words': [],
+        'negated_terms': [],
+
+        # Price signals
+        'has_price_signal': False,
+        'price_direction': None,  # 'cheap' | 'expensive'
+        'price_word': None,
+
+        # Rating signals
+        'has_rating_signal': False,
+        'rating_word': None,
+
+        # Service signals
         'has_service_word': False,
         'service_words': [],
         'is_local_search': False,
-        
+
+        # Product signals
+        'has_product_word': False,
+        'product_words': [],
+
         # Role signals
         'has_role_word': False,
         'role_word': None,
-        
-        # Domain signals (from your content)
-        'has_culture_word': False,
-        'has_food_word': False,
-        'has_music_word': False,
-        
-        # Entity signals (from category_summary)
+
+        # Domain signals (which verticals are touched)
+        'domains_detected': [],
+        'primary_domain': None,
+
+        # Entity signals (from terms AND category_summary)
         'has_person': category_summary.get('has_person', False),
-        'has_location': category_summary.get('has_location', False),
+        'has_location_entity': category_summary.get('has_location', False),
         'has_organization': category_summary.get('has_business', False),
         'has_media': category_summary.get('has_media', False),
         'has_song_title': category_summary.get('has_song_title', False),
-        
+
         # Query structure signals
         'word_count': len(terms),
         'all_nouns': False,
@@ -447,22 +1851,34 @@ def detect_intent(discovery_result: Dict[str, Any]) -> Dict[str, Any]:
         'ends_with_noun': False,
         'has_adjective': False,
         'has_verb': False,
-        
-        # Detected entities (from ngrams and high-rank terms)
+
+        # Detected entities
         'detected_entities': [],
-        
+
         # Sort signal (from word_discovery)
         'has_sort_signal': sort_info is not None,
         'sort_field': sort_info.get('field') if sort_info else None,
         'sort_order': sort_info.get('order') if sort_info else None,
+
+        # Query mode (set after all signals are detected)
+        'query_mode': 'explore',
+
+        # Intent complexity (count of active signals)
+        'signal_count': 0,
+
+        # Local search strength
+        'local_search_strength': 'none',  # 'none' | 'weak' | 'strong'
     }
-    
-    # Track for aggregate analysis
+
+    # ─── Tracking vars ──────────────────────────────────────────────────
     noun_count = 0
     service_words_found = []
+    product_words_found = []
     plural_nouns_found = []
     entities_found = []
-    
+    location_terms_found = []
+    domain_scores = {name: 0 for name in ALL_DOMAINS}
+
     # =================================================================
     # SINGLE PASS THROUGH TERMS
     # =================================================================
@@ -472,21 +1888,33 @@ def detect_intent(discovery_result: Dict[str, Any]) -> Dict[str, Any]:
         pos = term.get('pos', '').lower()
         category = term.get('category', '').lower()
         rank = term.get('rank', 0)
-        
+        is_stopword = term.get('is_stopword', False) or category == 'stopword'
+
         position = 'start' if i == 0 else ('end' if i == len(terms) - 1 else 'middle')
-        
-        # --- Question word check ---
+
+        # ─── Location detection from term category ──────────────────
+        if category in LOCATION_CATEGORIES:
+            signals['has_location'] = True
+            signals['has_location_entity'] = True
+            location_terms_found.append({
+                'word': search_word or word,
+                'category': category,
+                'rank': rank,
+                'position': i,
+            })
+
+        # ─── Question word check ────────────────────────────────────
         if word in QUESTION_WORDS:
             signals['has_question_word'] = True
             signals['question_word'] = word
             signals['question_position'] = position
-        
-        # --- Question starter check (only at start) ---
+
+        # ─── Question starter check (only at start) ─────────────────
         if i == 0 and word in QUESTION_STARTERS:
             signals['has_question_starter'] = True
             signals['question_starter'] = word
-        
-        # --- Temporal check ---
+
+        # ─── Temporal check ─────────────────────────────────────────
         if word in TEMPORAL_OLDEST:
             signals['has_temporal'] = True
             signals['temporal_direction'] = 'oldest'
@@ -495,284 +1923,244 @@ def detect_intent(discovery_result: Dict[str, Any]) -> Dict[str, Any]:
             signals['has_temporal'] = True
             signals['temporal_direction'] = 'newest'
             signals['temporal_word'] = word
-        
-        # --- Proximity check ---
+
+        # ─── Proximity check ────────────────────────────────────────
         if word in PROXIMITY_WORDS:
             signals['has_proximity'] = True
             signals['proximity_word'] = word
-        
+
         if word in LOCATION_PREPOSITIONS:
             signals['has_location_preposition'] = True
             signals['location_preposition'] = word
-        
-        # --- Me reference check ---
+
+        # ─── Me reference check ─────────────────────────────────────
         if word in ME_WORDS:
             signals['has_me_reference'] = True
-        
-        # --- Superlative check ---
+
+        # ─── Superlative check ──────────────────────────────────────
         if word in SUPERLATIVE_WORDS:
             signals['has_superlative'] = True
             signals['superlative_word'] = word
-        
-        # --- Quantity check ---
+
+        # ─── Quantity check ─────────────────────────────────────────
         if word in QUANTITY_WORDS:
             signals['has_quantity_word'] = True
             signals['quantity_word'] = word
-        
-        # --- Action word check ---
-        if word in ACTION_FIND:
-            signals['has_action_word'] = True
-            signals['action_type'] = 'find'
-            signals['action_word'] = word
-        elif word in ACTION_SHOW:
-            signals['has_action_word'] = True
-            signals['action_type'] = 'show'
-            signals['action_word'] = word
-        elif word in ACTION_LEARN:
-            signals['has_action_word'] = True
-            signals['action_type'] = 'learn'
-            signals['action_word'] = word
-        
-        # --- Service word check ---
+
+        # ─── Action word check ──────────────────────────────────────
+        if not signals['has_action_word']:
+            if word in ACTION_FIND:
+                signals['has_action_word'] = True
+                signals['action_type'] = 'find'
+                signals['action_word'] = word
+            elif word in ACTION_BUY:
+                signals['has_action_word'] = True
+                signals['action_type'] = 'buy'
+                signals['action_word'] = word
+            elif word in ACTION_SHOW:
+                signals['has_action_word'] = True
+                signals['action_type'] = 'show'
+                signals['action_word'] = word
+            elif word in ACTION_LEARN:
+                signals['has_action_word'] = True
+                signals['action_type'] = 'learn'
+                signals['action_word'] = word
+            elif word in ACTION_CREATE:
+                signals['has_action_word'] = True
+                signals['action_type'] = 'create'
+                signals['action_word'] = word
+
+        # ─── Service word check ─────────────────────────────────────
         if word in SERVICE_WORDS or search_word in SERVICE_WORDS:
             signals['has_service_word'] = True
             service_words_found.append(word)
-        
-        # --- Role word check ---
+
+        # ─── Product word check ─────────────────────────────────────
+        if word in PRODUCT_WORDS or search_word in PRODUCT_WORDS:
+            signals['has_product_word'] = True
+            product_words_found.append(word)
+
+        # ─── Role word check ────────────────────────────────────────
         if word in ROLE_WORDS or search_word in ROLE_WORDS:
             signals['has_role_word'] = True
-            signals['role_word'] = word
-        
-        # --- Domain word checks ---
-        if word in CULTURE_WORDS:
-            signals['has_culture_word'] = True
-        if word in FOOD_WORDS:
-            signals['has_food_word'] = True
-        if word in MUSIC_WORDS:
-            signals['has_music_word'] = True
-        
-        # --- Comparison check ---
+            if not signals['role_word']:
+                signals['role_word'] = word
+
+        # ─── Rating signal check ────────────────────────────────────
+        if word in RATING_WORDS:
+            signals['has_rating_signal'] = True
+            signals['rating_word'] = word
+
+        # ─── Comparison check ───────────────────────────────────────
         if word in COMPARISON_WORDS:
             signals['is_comparison_query'] = True
-        
-        # --- POS analysis ---
+
+        # ─── Domain scoring ─────────────────────────────────────────
+        # Skip ambiguous words — they need context
+        if word in AMBIGUOUS_WORDS:
+            resolved_domain = _disambiguate_domain(word, terms, i)
+            if resolved_domain:
+                domain_scores[resolved_domain] += 1
+        elif not is_stopword:
+            for domain_name, domain_set in ALL_DOMAINS.items():
+                if word in domain_set:
+                    domain_scores[domain_name] += 1
+
+        # ─── POS analysis ───────────────────────────────────────────
         if pos in {'noun', 'proper_noun'}:
             noun_count += 1
             if i == 0:
                 signals['starts_with_noun'] = True
             if i == len(terms) - 1:
                 signals['ends_with_noun'] = True
-            
-            # Check for plural
-            if word.endswith(PLURAL_ENDINGS) and len(word) > 2:
+
+            if word.endswith(PLURAL_ENDINGS) and len(word) > 3:
                 signals['has_plural_noun'] = True
                 plural_nouns_found.append(word)
-        
+
         if pos == 'adjective':
             signals['has_adjective'] = True
-        
+
         if pos in {'verb', 'be', 'auxiliary', 'modal'}:
             signals['has_verb'] = True
-        
-        # --- Entity detection (high-rank proper nouns) ---
+
+        # ─── Entity detection (high-rank proper nouns) ──────────────
         if pos == 'proper_noun' and rank > 100 and category != 'stopword':
             entities_found.append({
-                'word': search_word,
+                'word': search_word or word,
                 'category': category,
-                'rank': rank
+                'rank': rank,
             })
-    
+
     # =================================================================
     # POST-LOOP ANALYSIS
     # =================================================================
-    
+
+    # Store collected lists
+    signals['service_words'] = service_words_found
+    signals['product_words'] = product_words_found
+    signals['plural_nouns'] = plural_nouns_found
+    signals['location_terms'] = location_terms_found
+
     # All nouns check
-    non_stopword_terms = [t for t in terms if t.get('category') != 'stopword']
+    non_stopword_terms = [t for t in terms if t.get('category', '').lower() != 'stopword']
     if non_stopword_terms and noun_count == len(non_stopword_terms):
         signals['all_nouns'] = True
-    
-    # Service words list
-    signals['service_words'] = service_words_found
-    
-    # Plural nouns list
-    signals['plural_nouns'] = plural_nouns_found
-    
-    # Definition pattern check
+
+    # ─── Definition pattern ─────────────────────────────────────────
     signals['is_definition_query'] = _check_definition_pattern(terms)
-    
-    # Proximity pattern check
+
+    # ─── Proximity pattern ──────────────────────────────────────────
     has_prox, prox_word = _check_proximity_pattern(terms)
     if has_prox:
         signals['has_proximity'] = True
         signals['proximity_word'] = prox_word
-    
-    # Me pattern check
+
+    # ─── Me pattern ─────────────────────────────────────────────────
     if _check_me_pattern(terms):
         signals['has_me_reference'] = True
-    
-    # Comparison pattern check
-    has_comp, comp_items = _check_comparison_pattern(terms)
+
+    # ─── Comparison pattern (with ngram awareness) ──────────────────
+    has_comp, comp_items = _check_comparison_pattern(terms, ngrams)
     if has_comp:
         signals['is_comparison_query'] = True
         signals['comparison_items'] = comp_items
-    
-    # Local search detection
-    signals['is_local_search'] = (
-        signals['has_service_word'] and 
-        (signals['has_proximity'] or signals['has_me_reference'] or signals['has_location'])
+
+    # ─── Negation detection ─────────────────────────────────────────
+    has_neg, neg_words, negated = _check_negation_context(terms)
+    signals['has_negation'] = has_neg
+    signals['negation_words'] = neg_words
+    signals['negated_terms'] = negated
+
+    # ─── Price signal detection ─────────────────────────────────────
+    has_price, price_dir, price_word = _detect_price_signal(terms)
+    signals['has_price_signal'] = has_price
+    signals['price_direction'] = price_dir
+    signals['price_word'] = price_word
+
+    # ─── Local search detection (FIXED: uses term-level location) ───
+    has_location_signal = (
+        signals['has_location'] or
+        signals['has_location_entity'] or
+        signals['has_me_reference']
     )
-    
-    # =================================================================
-    # NGRAM ENTITY EXTRACTION
-    # =================================================================
+    has_proximity_signal = (
+        signals['has_proximity'] or
+        signals['has_me_reference'] or
+        has_location_signal
+    )
+
+    signals['is_local_search'] = (
+        signals['has_service_word'] and has_proximity_signal
+    )
+
+    # Local search strength
+    if signals['is_local_search']:
+        strength_score = 0
+        if signals['has_service_word']:
+            strength_score += 1
+        if signals['has_location']:
+            strength_score += 1
+        if signals['has_proximity']:
+            strength_score += 1
+        if signals['has_me_reference']:
+            strength_score += 1
+
+        signals['local_search_strength'] = 'strong' if strength_score >= 3 else 'weak'
+
+    # ─── Domain detection ───────────────────────────────────────────
+    active_domains = [
+        (name, score) for name, score in domain_scores.items() if score > 0
+    ]
+    active_domains.sort(key=lambda x: -x[1])
+    signals['domains_detected'] = [d[0] for d in active_domains]
+    signals['primary_domain'] = active_domains[0][0] if active_domains else None
+
+    # ─── Ngram entity extraction ────────────────────────────────────
     for ngram in ngrams:
-        ngram_text = ngram.get('ngram', '')
-        category = ngram.get('category', '').lower()
-        rank = ngram.get('rank', 0)
-        
-        if category and ngram_text:
+        ngram_text = ngram.get('ngram', ngram.get('phrase', ''))
+        ng_category = ngram.get('category', '').lower()
+        ng_rank = ngram.get('rank', 0)
+
+        if ng_category and ngram_text:
             entities_found.append({
                 'phrase': ngram_text,
-                'category': category,
-                'rank': rank,
-                'is_ngram': True
+                'category': ng_category,
+                'rank': ng_rank,
+                'is_ngram': True,
             })
-    
-    # Sort entities by rank (highest first)
+
+            # Check if ngram has location category
+            if ng_category in LOCATION_CATEGORIES:
+                signals['has_location'] = True
+                signals['has_location_entity'] = True
+
+    # Sort entities by rank
     entities_found.sort(key=lambda x: -x.get('rank', 0))
     signals['detected_entities'] = entities_found
-    
-    # =================================================================
-    # ADD SIGNALS TO RESULT
-    # =================================================================
+
+    # ─── Signal count (complexity) ──────────────────────────────────
+    signal_keys = [
+        'has_question_word', 'has_temporal', 'has_proximity',
+        'has_superlative', 'has_quantity_word', 'has_action_word',
+        'has_service_word', 'has_product_word', 'has_role_word',
+        'has_negation', 'has_price_signal', 'has_rating_signal',
+        'has_location', 'has_me_reference', 'is_comparison_query',
+        'has_plural_noun', 'has_adjective',
+    ]
+    signals['signal_count'] = sum(1 for k in signal_keys if signals.get(k))
+
+    # ─── Query mode classification ──────────────────────────────────
+    signals['query_mode'] = _classify_query_mode(signals)
+
+    # ─── Add to result ──────────────────────────────────────────────
     discovery_result['signals'] = signals
-    
+
     return discovery_result
 
 
 # =============================================================================
-# DEBUG PRINT FUNCTION
-# =============================================================================
-
-def print_intent_debug(discovery_result: Dict[str, Any]) -> None:
-    """Print all detected signals for debugging."""
-    signals = discovery_result.get('signals', {})
-    
-    print("\n" + "=" * 70)
-    print("🎯 SIGNAL DETECTION DEBUG")
-    print("=" * 70)
-    
-    print(f"\n📝 Query: '{discovery_result.get('query', '')}'")
-    print(f"📊 Word Count: {signals.get('word_count', 0)}")
-    
-    # Question signals
-    print("\n" + "-" * 70)
-    print("❓ QUESTION SIGNALS")
-    print("-" * 70)
-    print(f"  has_question_word: {signals.get('has_question_word')} → {signals.get('question_word')} ({signals.get('question_position')})")
-    print(f"  has_question_starter: {signals.get('has_question_starter')} → {signals.get('question_starter')}")
-    print(f"  is_definition_query: {signals.get('is_definition_query')}")
-    
-    # Temporal signals
-    print("\n" + "-" * 70)
-    print("⏰ TEMPORAL SIGNALS")
-    print("-" * 70)
-    print(f"  has_temporal: {signals.get('has_temporal')} → {signals.get('temporal_word')}")
-    print(f"  temporal_direction: {signals.get('temporal_direction')}")
-    print(f"  has_sort_signal: {signals.get('has_sort_signal')} → {signals.get('sort_field')} {signals.get('sort_order')}")
-    
-    # Location/Proximity signals
-    print("\n" + "-" * 70)
-    print("📍 LOCATION/PROXIMITY SIGNALS")
-    print("-" * 70)
-    print(f"  has_proximity: {signals.get('has_proximity')} → {signals.get('proximity_word')}")
-    print(f"  has_me_reference: {signals.get('has_me_reference')}")
-    print(f"  has_location_preposition: {signals.get('has_location_preposition')} → {signals.get('location_preposition')}")
-    print(f"  has_location (entity): {signals.get('has_location')}")
-    print(f"  is_local_search: {signals.get('is_local_search')}")
-    
-    # Service signals
-    print("\n" + "-" * 70)
-    print("🏪 SERVICE SIGNALS")
-    print("-" * 70)
-    print(f"  has_service_word: {signals.get('has_service_word')}")
-    print(f"  service_words: {signals.get('service_words')}")
-    
-    # Superlative/Quantity signals
-    print("\n" + "-" * 70)
-    print("📈 SUPERLATIVE/QUANTITY SIGNALS")
-    print("-" * 70)
-    print(f"  has_superlative: {signals.get('has_superlative')} → {signals.get('superlative_word')}")
-    print(f"  has_quantity_word: {signals.get('has_quantity_word')} → {signals.get('quantity_word')}")
-    print(f"  has_plural_noun: {signals.get('has_plural_noun')}")
-    print(f"  plural_nouns: {signals.get('plural_nouns')}")
-    
-    # Action signals
-    print("\n" + "-" * 70)
-    print("🎬 ACTION SIGNALS")
-    print("-" * 70)
-    print(f"  has_action_word: {signals.get('has_action_word')} → {signals.get('action_word')}")
-    print(f"  action_type: {signals.get('action_type')}")
-    
-    # Role signals
-    print("\n" + "-" * 70)
-    print("👔 ROLE SIGNALS")
-    print("-" * 70)
-    print(f"  has_role_word: {signals.get('has_role_word')} → {signals.get('role_word')}")
-    
-    # Comparison signals
-    print("\n" + "-" * 70)
-    print("⚖️ COMPARISON SIGNALS")
-    print("-" * 70)
-    print(f"  is_comparison_query: {signals.get('is_comparison_query')}")
-    print(f"  comparison_items: {signals.get('comparison_items')}")
-    
-    # Domain signals
-    print("\n" + "-" * 70)
-    print("🎨 DOMAIN SIGNALS")
-    print("-" * 70)
-    print(f"  has_culture_word: {signals.get('has_culture_word')}")
-    print(f"  has_food_word: {signals.get('has_food_word')}")
-    print(f"  has_music_word: {signals.get('has_music_word')}")
-    
-    # Entity signals
-    print("\n" + "-" * 70)
-    print("🏷️ ENTITY SIGNALS")
-    print("-" * 70)
-    print(f"  has_person: {signals.get('has_person')}")
-    print(f"  has_organization: {signals.get('has_organization')}")
-    print(f"  has_media: {signals.get('has_media')}")
-    print(f"  has_song_title: {signals.get('has_song_title')}")
-    
-    # Structure signals
-    print("\n" + "-" * 70)
-    print("🔤 STRUCTURE SIGNALS")
-    print("-" * 70)
-    print(f"  all_nouns: {signals.get('all_nouns')}")
-    print(f"  starts_with_noun: {signals.get('starts_with_noun')}")
-    print(f"  ends_with_noun: {signals.get('ends_with_noun')}")
-    print(f"  has_adjective: {signals.get('has_adjective')}")
-    print(f"  has_verb: {signals.get('has_verb')}")
-    
-    # Detected entities
-    print("\n" + "-" * 70)
-    print("🎯 DETECTED ENTITIES")
-    print("-" * 70)
-    entities = signals.get('detected_entities', [])
-    if entities:
-        for ent in entities[:5]:  # Show top 5
-            if ent.get('is_ngram'):
-                print(f"  📎 '{ent.get('phrase')}' → {ent.get('category')} (rank: {ent.get('rank')})")
-            else:
-                print(f"  📌 '{ent.get('word')}' → {ent.get('category')} (rank: {ent.get('rank')})")
-    else:
-        print("  (none detected)")
-    
-    print("\n" + "=" * 70)
-
-
-# =============================================================================
-# CONVENIENCE FUNCTIONS (for Typesense to use)
+# CONVENIENCE FUNCTIONS (for the bridge to use)
 # =============================================================================
 
 def get_signals(discovery_result: Dict[str, Any]) -> Dict[str, Any]:
@@ -795,52 +2183,58 @@ def is_local_search(discovery_result: Dict[str, Any]) -> bool:
 def wants_single_result(discovery_result: Dict[str, Any]) -> bool:
     """
     Heuristic: Does this query likely want a single/specific result?
-    
-    Signals that suggest single result:
-    - Question word (who, what, when, where)
-    - Temporal superlative (first, last)
-    - Role word + organization
-    - Specific entity detected
+
+    Signals:
+    - Question word (who, what, when, where) + temporal or role
+    - Temporal + role is strong signal
+    - Definition query
     """
     signals = get_signals(discovery_result)
-    
-    # Strong single-result signals
+
+    if signals.get('is_definition_query'):
+        return True
+
     if signals.get('has_question_word') and signals.get('question_word') in {'who', 'what', 'when', 'where'}:
         if signals.get('has_temporal') or signals.get('has_role_word'):
             return True
-    
-    # Temporal + role is strong signal
+
     if signals.get('has_temporal') and signals.get('has_role_word'):
         return True
-    
+
     return False
 
 
 def wants_multiple_results(discovery_result: Dict[str, Any]) -> bool:
     """
     Heuristic: Does this query likely want multiple results?
-    
-    Signals that suggest multiple results:
-    - Plural nouns
-    - Quantity words (list, all, many)
-    - Service words (restaurants, designers)
-    - Superlatives (best, top)
-    - No question word, all nouns
+
+    Signals:
+    - Plural nouns, quantity words, service words
+    - Superlatives, product words
+    - All nouns without question word
     """
     signals = get_signals(discovery_result)
-    
+
     if signals.get('has_plural_noun'):
         return True
     if signals.get('has_quantity_word'):
         return True
     if signals.get('has_service_word'):
         return True
+    if signals.get('has_product_word'):
+        return True
     if signals.get('has_superlative'):
         return True
     if signals.get('all_nouns') and not signals.get('has_question_word'):
         return True
-    
+
     return False
+
+
+def get_query_mode(discovery_result: Dict[str, Any]) -> str:
+    """Get the classified query mode."""
+    signals = get_signals(discovery_result)
+    return signals.get('query_mode', 'explore')
 
 
 def get_detected_entities(discovery_result: Dict[str, Any]) -> List[Dict]:
@@ -855,104 +2249,349 @@ def get_temporal_direction(discovery_result: Dict[str, Any]) -> Optional[str]:
     return signals.get('temporal_direction')
 
 
+def get_location_terms(discovery_result: Dict[str, Any]) -> List[Dict]:
+    """Get location terms detected from term categories."""
+    signals = get_signals(discovery_result)
+    return signals.get('location_terms', [])
+
+
+def get_active_domains(discovery_result: Dict[str, Any]) -> List[str]:
+    """Get list of active domain verticals."""
+    signals = get_signals(discovery_result)
+    return signals.get('domains_detected', [])
+
+
+def get_primary_domain(discovery_result: Dict[str, Any]) -> Optional[str]:
+    """Get the primary domain vertical."""
+    signals = get_signals(discovery_result)
+    return signals.get('primary_domain')
+
+
+# =============================================================================
+# DEBUG PRINT FUNCTION
+# =============================================================================
+
+def print_intent_debug(discovery_result: Dict[str, Any]) -> None:
+    """Print all detected signals for debugging."""
+    signals = discovery_result.get('signals', {})
+
+    print("\n" + "=" * 70)
+    print("🎯 SIGNAL DETECTION DEBUG")
+    print("=" * 70)
+
+    print(f"\n📝 Query: '{discovery_result.get('query', '')}'")
+    print(f"📊 Word Count: {signals.get('word_count', 0)}")
+    print(f"🎮 Query Mode: {signals.get('query_mode', 'unknown')}")
+    print(f"🔢 Signal Count: {signals.get('signal_count', 0)}")
+
+    print("\n" + "─" * 70)
+    print("❓ QUESTION SIGNALS")
+    print("─" * 70)
+    print(f"  has_question_word: {signals.get('has_question_word')} → {signals.get('question_word')} ({signals.get('question_position')})")
+    print(f"  has_question_starter: {signals.get('has_question_starter')} → {signals.get('question_starter')}")
+    print(f"  is_definition_query: {signals.get('is_definition_query')}")
+
+    print("\n" + "─" * 70)
+    print("⏰ TEMPORAL SIGNALS")
+    print("─" * 70)
+    print(f"  has_temporal: {signals.get('has_temporal')} → {signals.get('temporal_word')}")
+    print(f"  temporal_direction: {signals.get('temporal_direction')}")
+    print(f"  has_sort_signal: {signals.get('has_sort_signal')} → {signals.get('sort_field')} {signals.get('sort_order')}")
+
+    print("\n" + "─" * 70)
+    print("📍 LOCATION SIGNALS")
+    print("─" * 70)
+    print(f"  has_location: {signals.get('has_location')}")
+    print(f"  has_location_entity: {signals.get('has_location_entity')}")
+    print(f"  location_terms: {signals.get('location_terms')}")
+    print(f"  has_proximity: {signals.get('has_proximity')} → {signals.get('proximity_word')}")
+    print(f"  has_me_reference: {signals.get('has_me_reference')}")
+    print(f"  is_local_search: {signals.get('is_local_search')}")
+    print(f"  local_search_strength: {signals.get('local_search_strength')}")
+
+    print("\n" + "─" * 70)
+    print("🏪 SERVICE / PRODUCT SIGNALS")
+    print("─" * 70)
+    print(f"  has_service_word: {signals.get('has_service_word')} → {signals.get('service_words')}")
+    print(f"  has_product_word: {signals.get('has_product_word')} → {signals.get('product_words')}")
+
+    print("\n" + "─" * 70)
+    print("📈 SUPERLATIVE / QUANTITY / RATING")
+    print("─" * 70)
+    print(f"  has_superlative: {signals.get('has_superlative')} → {signals.get('superlative_word')}")
+    print(f"  has_quantity_word: {signals.get('has_quantity_word')} → {signals.get('quantity_word')}")
+    print(f"  has_plural_noun: {signals.get('has_plural_noun')} → {signals.get('plural_nouns')}")
+    print(f"  has_rating_signal: {signals.get('has_rating_signal')} → {signals.get('rating_word')}")
+
+    print("\n" + "─" * 70)
+    print("💰 PRICE SIGNALS")
+    print("─" * 70)
+    print(f"  has_price_signal: {signals.get('has_price_signal')}")
+    print(f"  price_direction: {signals.get('price_direction')} → {signals.get('price_word')}")
+
+    print("\n" + "─" * 70)
+    print("🚫 NEGATION SIGNALS")
+    print("─" * 70)
+    print(f"  has_negation: {signals.get('has_negation')}")
+    print(f"  negation_words: {signals.get('negation_words')}")
+    print(f"  negated_terms: {signals.get('negated_terms')}")
+
+    print("\n" + "─" * 70)
+    print("🎬 ACTION SIGNALS")
+    print("─" * 70)
+    print(f"  has_action_word: {signals.get('has_action_word')} → {signals.get('action_word')}")
+    print(f"  action_type: {signals.get('action_type')}")
+
+    print("\n" + "─" * 70)
+    print("👔 ROLE SIGNALS")
+    print("─" * 70)
+    print(f"  has_role_word: {signals.get('has_role_word')} → {signals.get('role_word')}")
+
+    print("\n" + "─" * 70)
+    print("⚖️ COMPARISON SIGNALS")
+    print("─" * 70)
+    print(f"  is_comparison_query: {signals.get('is_comparison_query')}")
+    print(f"  comparison_items: {signals.get('comparison_items')}")
+
+    print("\n" + "─" * 70)
+    print("🌐 DOMAIN SIGNALS")
+    print("─" * 70)
+    print(f"  primary_domain: {signals.get('primary_domain')}")
+    print(f"  domains_detected: {signals.get('domains_detected')}")
+
+    print("\n" + "─" * 70)
+    print("🏷️ ENTITY SIGNALS")
+    print("─" * 70)
+    print(f"  has_person: {signals.get('has_person')}")
+    print(f"  has_organization: {signals.get('has_organization')}")
+    print(f"  has_location_entity: {signals.get('has_location_entity')}")
+    print(f"  has_media: {signals.get('has_media')}")
+
+    print("\n" + "─" * 70)
+    print("🔤 STRUCTURE SIGNALS")
+    print("─" * 70)
+    print(f"  all_nouns: {signals.get('all_nouns')}")
+    print(f"  starts_with_noun: {signals.get('starts_with_noun')}")
+    print(f"  ends_with_noun: {signals.get('ends_with_noun')}")
+    print(f"  has_adjective: {signals.get('has_adjective')}")
+    print(f"  has_verb: {signals.get('has_verb')}")
+
+    print("\n" + "─" * 70)
+    print("🎯 DETECTED ENTITIES")
+    print("─" * 70)
+    entities = signals.get('detected_entities', [])
+    if entities:
+        for ent in entities[:8]:
+            label = ent.get('phrase', ent.get('word', '?'))
+            is_ng = "📎" if ent.get('is_ngram') else "📌"
+            print(f"  {is_ng} '{label}' → {ent.get('category')} (rank: {ent.get('rank')})")
+    else:
+        print("  (none detected)")
+
+    print("\n" + "=" * 70)
+
+
 # =============================================================================
 # TESTING
 # =============================================================================
 
 if __name__ == "__main__":
-    # Test with mock data
-    
     print("=" * 70)
-    print("TESTING SIGNAL DETECTION")
+    print("TESTING SIGNAL DETECTION (All Verticals)")
     print("=" * 70)
-    
-    # Test 1: Question query
-    test1 = {
-        'query': 'who was the first president of morehouse',
-        'terms': [
-            {'word': 'who', 'search_word': 'who', 'pos': 'wh_pronoun', 'category': 'stopword', 'rank': 0},
-            {'word': 'was', 'search_word': 'was', 'pos': 'verb', 'category': 'stopword', 'rank': 0},
-            {'word': 'the', 'search_word': 'the', 'pos': 'article', 'category': 'stopword', 'rank': 0},
-            {'word': 'first', 'search_word': 'first', 'pos': 'adjective', 'category': 'keyword', 'rank': 500},
-            {'word': 'president', 'search_word': 'president', 'pos': 'noun', 'category': 'keyword', 'rank': 600},
-            {'word': 'of', 'search_word': 'of', 'pos': 'preposition', 'category': 'stopword', 'rank': 0},
-            {'word': 'morehouse', 'search_word': 'morehouse', 'pos': 'proper_noun', 'category': 'organization', 'rank': 800},
-        ],
-        'ngrams': [],
-        'category_summary': {'has_person': False, 'has_location': False, 'has_business': True},
-        'sort': {'field': 'time_period_start', 'order': 'asc'}
-    }
-    
-    result1 = detect_intent(test1)
-    print_intent_debug(result1)
-    
-    # Test 2: Local search
-    test2 = {
-        'query': 'restaurants near me',
-        'terms': [
-            {'word': 'restaurants', 'search_word': 'restaurants', 'pos': 'noun', 'category': 'service', 'rank': 400},
-            {'word': 'near', 'search_word': 'near', 'pos': 'preposition', 'category': 'stopword', 'rank': 0},
-            {'word': 'me', 'search_word': 'me', 'pos': 'pronoun', 'category': 'stopword', 'rank': 0},
-        ],
-        'ngrams': [],
-        'category_summary': {'has_person': False, 'has_location': False},
-        'sort': None
-    }
-    
-    result2 = detect_intent(test2)
-    print_intent_debug(result2)
-    
-    # Test 3: Browse query
-    test3 = {
-        'query': 'black women leadership',
-        'terms': [
-            {'word': 'black', 'search_word': 'black', 'pos': 'adjective', 'category': 'culture', 'rank': 850},
-            {'word': 'women', 'search_word': 'women', 'pos': 'noun', 'category': 'keyword', 'rank': 400},
-            {'word': 'leadership', 'search_word': 'leadership', 'pos': 'noun', 'category': 'keyword', 'rank': 600},
-        ],
-        'ngrams': [],
-        'category_summary': {'has_person': False, 'has_location': False, 'has_culture': True},
-        'sort': None
-    }
-    
-    result3 = detect_intent(test3)
-    print_intent_debug(result3)
-    
-    # Test 4: Entity lookup
-    test4 = {
-        'query': 'billie holiday',
-        'terms': [
-            {'word': 'billie', 'search_word': 'billie', 'pos': 'proper_noun', 'category': 'person', 'rank': 700},
-            {'word': 'holiday', 'search_word': 'holiday', 'pos': 'proper_noun', 'category': 'person', 'rank': 500},
-        ],
-        'ngrams': [
-            {'ngram': 'billie holiday', 'category': 'person', 'rank': 900}
-        ],
-        'category_summary': {'has_person': True, 'has_location': False},
-        'sort': None
-    }
-    
-    result4 = detect_intent(test4)
-    print_intent_debug(result4)
-    
-    # Test 5: Superlative query
-    test5 = {
-        'query': 'best soul food in atlanta',
-        'terms': [
-            {'word': 'best', 'search_word': 'best', 'pos': 'adjective', 'category': 'keyword', 'rank': 300},
-            {'word': 'soul', 'search_word': 'soul', 'pos': 'noun', 'category': 'music', 'rank': 600},
-            {'word': 'food', 'search_word': 'food', 'pos': 'noun', 'category': 'food', 'rank': 700},
-            {'word': 'in', 'search_word': 'in', 'pos': 'preposition', 'category': 'stopword', 'rank': 0},
-            {'word': 'atlanta', 'search_word': 'atlanta', 'pos': 'proper_noun', 'category': 'us city', 'rank': 850},
-        ],
-        'ngrams': [
-            {'ngram': 'soul food', 'category': 'food', 'rank': 920}
-        ],
-        'category_summary': {'has_person': False, 'has_location': True, 'has_food': True},
-        'sort': None
-    }
-    
-    result5 = detect_intent(test5)
-    print_intent_debug(result5)
-    
-    print("\n✓ All tests completed")
+
+    test_cases = [
+        # Local service search
+        {
+            'name': 'Local restaurant search',
+            'query': 'restaurants in atlanta',
+            'terms': [
+                {'word': 'restaurants', 'search_word': 'restaurants', 'pos': 'noun', 'category': 'Keyword', 'rank': 400, 'is_stopword': False},
+                {'word': 'in', 'search_word': 'in', 'pos': 'preposition', 'category': 'stopword', 'rank': 0, 'is_stopword': True},
+                {'word': 'atlanta', 'search_word': 'atlanta', 'pos': 'proper_noun', 'category': 'US City', 'rank': 850, 'is_stopword': False},
+            ],
+            'ngrams': [],
+            'category_summary': {},
+            'sort': None,
+            'expected': {
+                'is_local_search': True,
+                'has_service_word': True,
+                'has_location': True,
+                'query_mode': 'local',
+            },
+        },
+        # Product search
+        {
+            'name': 'Product shopping',
+            'query': 'best running shoes under 100',
+            'terms': [
+                {'word': 'best', 'search_word': 'best', 'pos': 'adjective', 'category': 'Keyword', 'rank': 300, 'is_stopword': False},
+                {'word': 'running', 'search_word': 'running', 'pos': 'adjective', 'category': 'Keyword', 'rank': 200, 'is_stopword': False},
+                {'word': 'shoes', 'search_word': 'shoes', 'pos': 'noun', 'category': 'Keyword', 'rank': 400, 'is_stopword': False},
+                {'word': 'under', 'search_word': 'under', 'pos': 'preposition', 'category': 'stopword', 'rank': 0, 'is_stopword': True},
+                {'word': '100', 'search_word': '100', 'pos': 'noun', 'category': 'Keyword', 'rank': 0, 'is_stopword': False},
+            ],
+            'ngrams': [],
+            'category_summary': {},
+            'sort': None,
+            'expected': {
+                'has_product_word': True,
+                'has_superlative': True,
+                'has_price_signal': True,
+                'query_mode': 'browse',
+            },
+        },
+        # Question / answer
+        {
+            'name': 'Factual question',
+            'query': 'who was the first president of morehouse',
+            'terms': [
+                {'word': 'who', 'search_word': 'who', 'pos': 'wh_pronoun', 'category': 'stopword', 'rank': 0, 'is_stopword': True},
+                {'word': 'was', 'search_word': 'was', 'pos': 'verb', 'category': 'stopword', 'rank': 0, 'is_stopword': True},
+                {'word': 'the', 'search_word': 'the', 'pos': 'article', 'category': 'stopword', 'rank': 0, 'is_stopword': True},
+                {'word': 'first', 'search_word': 'first', 'pos': 'adjective', 'category': 'Keyword', 'rank': 500, 'is_stopword': False},
+                {'word': 'president', 'search_word': 'president', 'pos': 'noun', 'category': 'Keyword', 'rank': 600, 'is_stopword': False},
+                {'word': 'of', 'search_word': 'of', 'pos': 'preposition', 'category': 'stopword', 'rank': 0, 'is_stopword': True},
+                {'word': 'morehouse', 'search_word': 'morehouse', 'pos': 'proper_noun', 'category': 'Organization', 'rank': 800, 'is_stopword': False},
+            ],
+            'ngrams': [],
+            'category_summary': {'has_business': True},
+            'sort': {'field': 'time_period_start', 'order': 'asc'},
+            'expected': {
+                'has_question_word': True,
+                'has_temporal': True,
+                'has_role_word': True,
+                'query_mode': 'answer',
+            },
+        },
+        # Comparison query
+        {
+            'name': 'Comparison',
+            'query': 'spelman vs morehouse',
+            'terms': [
+                {'word': 'spelman', 'search_word': 'spelman', 'pos': 'proper_noun', 'category': 'Organization', 'rank': 700, 'is_stopword': False},
+                {'word': 'vs', 'search_word': 'vs', 'pos': 'noun', 'category': 'Keyword', 'rank': 0, 'is_stopword': False},
+                {'word': 'morehouse', 'search_word': 'morehouse', 'pos': 'proper_noun', 'category': 'Organization', 'rank': 800, 'is_stopword': False},
+            ],
+            'ngrams': [],
+            'category_summary': {'has_business': True},
+            'sort': None,
+            'expected': {
+                'is_comparison_query': True,
+                'query_mode': 'compare',
+            },
+        },
+        # Real estate search
+        {
+            'name': 'Real estate',
+            'query': 'affordable apartments in atlanta',
+            'terms': [
+                {'word': 'affordable', 'search_word': 'affordable', 'pos': 'adjective', 'category': 'Keyword', 'rank': 200, 'is_stopword': False},
+                {'word': 'apartments', 'search_word': 'apartments', 'pos': 'noun', 'category': 'Keyword', 'rank': 400, 'is_stopword': False},
+                {'word': 'in', 'search_word': 'in', 'pos': 'preposition', 'category': 'stopword', 'rank': 0, 'is_stopword': True},
+                {'word': 'atlanta', 'search_word': 'atlanta', 'pos': 'proper_noun', 'category': 'US City', 'rank': 850, 'is_stopword': False},
+            ],
+            'ngrams': [],
+            'category_summary': {},
+            'sort': None,
+            'expected': {
+                'is_local_search': True,
+                'has_price_signal': True,
+                'price_direction': 'cheap',
+                'query_mode': 'local',
+            },
+        },
+        # Negation query
+        {
+            'name': 'Negation',
+            'query': 'vegan restaurants not fast food',
+            'terms': [
+                {'word': 'vegan', 'search_word': 'vegan', 'pos': 'adjective', 'category': 'Keyword', 'rank': 300, 'is_stopword': False},
+                {'word': 'restaurants', 'search_word': 'restaurants', 'pos': 'noun', 'category': 'Keyword', 'rank': 400, 'is_stopword': False},
+                {'word': 'not', 'search_word': 'not', 'pos': 'negation', 'category': 'stopword', 'rank': 0, 'is_stopword': True},
+                {'word': 'fast', 'search_word': 'fast', 'pos': 'adjective', 'category': 'Keyword', 'rank': 100, 'is_stopword': False},
+                {'word': 'food', 'search_word': 'food', 'pos': 'noun', 'category': 'Keyword', 'rank': 200, 'is_stopword': False},
+            ],
+            'ngrams': [],
+            'category_summary': {},
+            'sort': None,
+            'expected': {
+                'has_negation': True,
+                'has_service_word': True,
+            },
+        },
+        # Travel query
+        {
+            'name': 'Travel browse',
+            'query': 'best beaches to visit',
+            'terms': [
+                {'word': 'best', 'search_word': 'best', 'pos': 'adjective', 'category': 'Keyword', 'rank': 300, 'is_stopword': False},
+                {'word': 'beaches', 'search_word': 'beaches', 'pos': 'noun', 'category': 'Keyword', 'rank': 400, 'is_stopword': False},
+                {'word': 'to', 'search_word': 'to', 'pos': 'preposition', 'category': 'stopword', 'rank': 0, 'is_stopword': True},
+                {'word': 'visit', 'search_word': 'visit', 'pos': 'verb', 'category': 'Keyword', 'rank': 200, 'is_stopword': False},
+            ],
+            'ngrams': [],
+            'category_summary': {},
+            'sort': None,
+            'expected': {
+                'has_superlative': True,
+                'has_plural_noun': True,
+                'query_mode': 'browse',
+            },
+        },
+        # Entity lookup
+        {
+            'name': 'Entity lookup',
+            'query': 'billie holiday',
+            'terms': [
+                {'word': 'billie', 'search_word': 'billie', 'pos': 'proper_noun', 'category': 'Person', 'rank': 700, 'is_stopword': False},
+                {'word': 'holiday', 'search_word': 'holiday', 'pos': 'proper_noun', 'category': 'Person', 'rank': 500, 'is_stopword': False},
+            ],
+            'ngrams': [
+                {'ngram': 'billie holiday', 'category': 'Person', 'rank': 900}
+            ],
+            'category_summary': {'has_person': True},
+            'sort': None,
+            'expected': {
+                'has_person': True,
+                'query_mode': 'explore',
+            },
+        },
+    ]
+
+    passed = 0
+    failed = 0
+
+    for case in test_cases:
+        print(f"\n{'─' * 70}")
+        print(f"TEST: {case['name']}")
+        print(f"Query: '{case['query']}'")
+        print('─' * 70)
+
+        result = detect_intent(case)
+        signals = result.get('signals', {})
+
+        # Check expected values
+        all_match = True
+        for key, expected_value in case.get('expected', {}).items():
+            actual = signals.get(key)
+            match = actual == expected_value
+            icon = "✅" if match else "❌"
+            print(f"  {icon} {key}: expected={expected_value}, got={actual}")
+            if not match:
+                all_match = False
+
+        if all_match:
+            passed += 1
+            print(f"  ✅ PASSED")
+        else:
+            failed += 1
+            print(f"  ❌ FAILED")
+
+        # Print key signals
+        print(f"  Mode: {signals.get('query_mode')} | Signals: {signals.get('signal_count')}")
+        print(f"  Domains: {signals.get('domains_detected', [])}")
+
+    print(f"\n{'═' * 70}")
+    print(f"RESULTS: {passed} passed, {failed} failed out of {len(test_cases)} tests")
+    print(f"{'═' * 70}")

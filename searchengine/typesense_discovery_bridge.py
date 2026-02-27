@@ -998,6 +998,19 @@ except ImportError:
         print("⚠️ word_discovery_v2 not available")
 
 try:
+    from .intent_detect import detect_intent, get_signals
+    INTENT_DETECT_AVAILABLE = True
+    print("✅ intent_detect imported")
+except ImportError:
+    try:
+        from intent_detect import detect_intent, get_signals
+        INTENT_DETECT_AVAILABLE = True
+        print("✅ intent_detect imported from intent_detect")
+    except ImportError:
+        INTENT_DETECT_AVAILABLE = False
+        print("⚠️ intent_detect not available")
+
+try:
     from .embedding_client import get_query_embedding
     print("✅ get_query_embedding imported from .embedding_client")
 except ImportError:
@@ -1008,7 +1021,17 @@ except ImportError:
         def get_query_embedding(query: str) -> Optional[List[float]]:
             print("⚠️ embedding_client not available")
             return None
-
+try:
+    from .cached_embedding_related_search import store_query_embedding
+    print("✅ store_query_embedding imported")
+except ImportError:
+    try:
+        from cached_embedding_related_search import store_query_embedding
+        print("✅ store_query_embedding imported (fallback)")
+    except ImportError:
+        def store_query_embedding(*args, **kwargs):
+            return False
+        print("⚠️ store_query_embedding not available")
 
 # ============================================================================
 # THREAD POOL
@@ -1756,6 +1779,7 @@ def fetch_candidate_ids(
                     'category': doc.get('document_category', ''),
                     'schema': doc.get('document_schema', ''),
                     'authority_score': doc.get('authority_score', 0),
+                    'service_phone': doc.get('service_phone'),
                     'text_match': hit.get('text_match', 0),
                 })
             
@@ -2006,6 +2030,7 @@ def fetch_full_documents(document_ids: List[str], query: str = '') -> List[Dict]
 def format_result(hit: Dict, query: str = '') -> Dict:
     """Transform Typesense hit into response format."""
     doc = hit.get('document', {})
+    print(f"📍 RAW: '{doc.get('document_title', '')[:35]}' geopoint={doc.get('location_geopoint')} coords={doc.get('location_coordinates')} addr={doc.get('location_address', '')[:30]}")
     highlights = hit.get('highlights', [])
     
     highlight_map = {}
@@ -2061,8 +2086,13 @@ def format_result(hit: Dict, query: str = '') -> Dict:
             'city': doc.get('location_city'),
             'state': doc.get('location_state'),
             'country': doc.get('location_country'),
-            'region': doc.get('location_region')
-        },
+            'region': doc.get('location_region'),
+            'geopoint': doc.get('location_geopoint') or doc.get('location_coordinates'),
+            'address': doc.get('location_address'),
+            'lat': (doc.get('location_geopoint') or doc.get('location_coordinates', [None, None]) or [None, None])[0],
+            'lng': (doc.get('location_geopoint') or doc.get('location_coordinates', [None, None]) or [None, None])[1],
+            },
+
         'time_period': {
             'start': doc.get('time_period_start'),
             'end': doc.get('time_period_end'),
@@ -2485,7 +2515,6 @@ def execute_full_search(
         page_ids = [item['id'] for item in page_items]
         results = fetch_full_documents(page_ids, query)
         times['fetch_docs'] = round((time.time() - t2) * 1000, 2)
-        
         times['total'] = round((time.time() - t0) * 1000, 2)
         
         print(f"⏱️ TIMING: {times}")
@@ -2530,6 +2559,9 @@ def execute_full_search(
                 'data_type': active_data_type,
                 'category': active_category,
                 'schema': active_schema,
+                # Added this for the location based search and mapping
+                'is_local_search': False,
+                'local_search_strength': 'none',
             }
         }
     
@@ -2544,6 +2576,21 @@ def execute_full_search(
     discovery, query_embedding = run_parallel_prep(query, skip_embedding=skip_embedding)
     times['parallel_prep'] = round((time.time() - t1) * 1000, 2)
     
+        # Run intent detection (logging only - no behavior changes)
+    if INTENT_DETECT_AVAILABLE:
+        try:
+            discovery = detect_intent(discovery)
+            signals = discovery.get('signals', {})
+            print(f"   🎯 Intent signals: mode={signals.get('query_mode')}, "
+                  f"local={signals.get('is_local_search')}, "
+                  f"location={signals.get('has_location')}, "
+                  f"service={signals.get('service_words')}, "
+                  f"question={signals.get('has_question_word')}, "
+                  f"temporal={signals.get('temporal_direction')}, "
+                  f"domains={signals.get('domains_detected', [])[:3]}")
+        except Exception as e:
+            print(f"   ⚠️ intent_detect error: {e}")
+
     corrected_query = discovery.get('corrected_query', query)
     semantic_enabled = query_embedding is not None
     
@@ -2632,6 +2679,13 @@ def execute_full_search(
     page_ids = [item['id'] for item in page_items]
     results = fetch_full_documents(page_ids, query)
     times['fetch_docs'] = round((time.time() - t5) * 1000, 2)
+
+    # Store query embedding for popular queries
+    if query_embedding:
+        try:
+            store_query_embedding(corrected_query, query_embedding, result_count=facet_total)
+        except Exception as e:
+            print(f"⚠️ store_query_embedding error: {e}")
     
     times['total'] = round((time.time() - t0) * 1000, 2)
     
@@ -2686,6 +2740,12 @@ def execute_full_search(
             'data_type': active_data_type,
             'category': active_category,
             'schema': active_schema,
+
+             # Added this for the location based search and mapping
+
+            'is_local_search': discovery.get('signals', {}).get('is_local_search', False),
+            'local_search_strength': discovery.get('signals', {}).get('local_search_strength', 'none'),
+
             'graph_filters': [],
             'graph_locations': [
                 {'field': 'location_city', 'values': city_names},

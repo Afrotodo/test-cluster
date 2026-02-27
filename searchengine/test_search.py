@@ -1444,183 +1444,590 @@
 
 
 
+# This worls very good!
 
+# """
+# test_word_discovery_intent.py
+# Test that intent detection works inside word_discovery.py
 
+# Run from your Django project directory:
+#     python -c "from search.word_discovery import process_query_optimized; r = process_query_optimized('who was the first president'); print('SIGNALS:', r.get('signals', 'NOT FOUND'))"
+
+# Or run this file directly if word_discovery is importable:
+#     python test_word_discovery_intent.py
+# """
+
+# import sys
+# import os
+
+# print("=" * 70)
+# print("TEST: word_discovery.py with intent_detect integration")
+# print("=" * 70)
+
+# # =============================================================================
+# # Step 1: Try to import word_discovery
+# # =============================================================================
+# print("\n[Step 1] Attempting to import word_discovery...")
+
+# word_discovery = None
+# process_query_optimized = None
+
+# # Try different import paths
+# import_attempts = [
+#     ("from word_discovery import process_query_optimized", "word_discovery"),
+#     ("from .word_discovery import process_query_optimized", ".word_discovery"),
+#     ("from search.word_discovery import process_query_optimized", "search.word_discovery"),
+#     ("from app.search.word_discovery import process_query_optimized", "app.search.word_discovery"),
+# ]
+
+# for import_code, module_name in import_attempts:
+#     try:
+#         print(f"  Trying: {import_code}")
+#         exec(import_code)
+#         print(f"  ✅ Success: imported from {module_name}")
+#         break
+#     except ImportError as e:
+#         print(f"  ❌ Failed: {e}")
+#     except Exception as e:
+#         print(f"  ❌ Error: {type(e).__name__}: {e}")
+# else:
+#     print("\n❌ Could not import word_discovery from any path.")
+#     print("\nPlease run this test from your Django project directory,")
+#     print("or modify the import statement at the top of this file.")
+#     print("\nAlternatively, run this in Django shell:")
+#     print("  python manage.py shell")
+#     print("  >>> from search.word_discovery import process_query_optimized")
+#     print("  >>> result = process_query_optimized('who was the first president')")
+#     print("  >>> print('SIGNALS:', result.get('signals', 'NOT FOUND'))")
+#     sys.exit(1)
+
+# # =============================================================================
+# # Step 2: Test basic query processing
+# # =============================================================================
+# print("\n[Step 2] Testing process_query_optimized()...")
+
+# test_query = "who was the first president of morehouse"
+# print(f"  Query: '{test_query}'")
+
+# try:
+#     result = process_query_optimized(test_query)
+#     print(f"  ✅ process_query_optimized() returned successfully")
+#     print(f"  Keys in result: {list(result.keys())}")
+# except Exception as e:
+#     print(f"  ❌ Error calling process_query_optimized(): {type(e).__name__}: {e}")
+#     import traceback
+#     traceback.print_exc()
+#     sys.exit(1)
+
+# # =============================================================================
+# # Step 3: Check if 'signals' key exists
+# # =============================================================================
+# print("\n[Step 3] Checking for 'signals' key...")
+
+# if 'signals' in result:
+#     print("  ✅ 'signals' key EXISTS in result")
+#     signals = result['signals']
+#     print(f"  Number of signals: {len(signals)}")
+# else:
+#     print("  ❌ 'signals' key NOT FOUND in result")
+#     print("\n  This means detect_intent() is not being called in word_discovery.py")
+#     print("  or it's failing silently.")
+#     print("\n  Check that word_discovery.py has:")
+#     print("    1. Import at top: from .intent_detect import detect_intent")
+#     print("    2. Call at end of process_query_optimized(): output = detect_intent(output)")
+#     sys.exit(1)
+
+# # =============================================================================
+# # Step 4: Display signals
+# # =============================================================================
+# print("\n[Step 4] Displaying detected signals...")
+
+# signals = result['signals']
+
+# print("\n  --- Question Signals ---")
+# print(f"    has_question_word: {signals.get('has_question_word')}")
+# print(f"    question_word: {signals.get('question_word')}")
+# print(f"    question_position: {signals.get('question_position')}")
+
+# print("\n  --- Temporal Signals ---")
+# print(f"    has_temporal: {signals.get('has_temporal')}")
+# print(f"    temporal_direction: {signals.get('temporal_direction')}")
+# print(f"    temporal_word: {signals.get('temporal_word')}")
+
+# print("\n  --- Role Signals ---")
+# print(f"    has_role_word: {signals.get('has_role_word')}")
+# print(f"    role_word: {signals.get('role_word')}")
+
+# print("\n  --- Entity Signals ---")
+# print(f"    has_person: {signals.get('has_person')}")
+# print(f"    has_organization: {signals.get('has_organization')}")
+# print(f"    detected_entities: {signals.get('detected_entities')}")
+
+# print("\n  --- Structure Signals ---")
+# print(f"    word_count: {signals.get('word_count')}")
+# print(f"    has_verb: {signals.get('has_verb')}")
+
+# # =============================================================================
+# # Step 5: Test multiple queries
+# # =============================================================================
+# print("\n[Step 5] Testing multiple query types...")
+
+# test_queries = [
+#     "restaurants near me",
+#     "black women leadership", 
+#     "billie holiday",
+#     "where is africa located",
+#     "best soul food in atlanta",
+# ]
+
+# for query in test_queries:
+#     print(f"\n  Query: '{query}'")
+#     try:
+#         r = process_query_optimized(query)
+#         s = r.get('signals', {})
+        
+#         # Show key signals
+#         key_signals = []
+#         if s.get('has_question_word'):
+#             key_signals.append(f"question:{s.get('question_word')}")
+#         if s.get('has_temporal'):
+#             key_signals.append(f"temporal:{s.get('temporal_direction')}")
+#         if s.get('is_local_search'):
+#             key_signals.append("local_search")
+#         if s.get('has_superlative'):
+#             key_signals.append(f"superlative:{s.get('superlative_word')}")
+#         if s.get('has_service_word'):
+#             key_signals.append(f"service:{s.get('service_words')}")
+#         if s.get('has_culture_word'):
+#             key_signals.append("culture")
+#         if s.get('has_food_word'):
+#             key_signals.append("food")
+#         if s.get('has_person'):
+#             key_signals.append("person")
+#         if s.get('has_location'):
+#             key_signals.append("location")
+        
+#         if key_signals:
+#             print(f"    Signals: {', '.join(key_signals)}")
+#         else:
+#             print(f"    Signals: (none detected)")
+            
+#     except Exception as e:
+#         print(f"    ❌ Error: {e}")
+
+# # =============================================================================
+# # Summary
+# # =============================================================================
+# print("\n" + "=" * 70)
+# print("TEST COMPLETE")
+# print("=" * 70)
+# print("✅ word_discovery.py successfully integrates intent_detect")
+# print("✅ Signals are being added to the output")
+# print("\nThe integration is working correctly.")
 """
-test_word_discovery_intent.py
-Test that intent detection works inside word_discovery.py
+test_search.py
+Test autocomplete, search, and cache lookups.
 
-Run from your Django project directory:
-    python -c "from search.word_discovery import process_query_optimized; r = process_query_optimized('who was the first president'); print('SIGNALS:', r.get('signals', 'NOT FOUND'))"
-
-Or run this file directly if word_discovery is importable:
-    python test_word_discovery_intent.py
+Usage (from searchengine directory):
+    python test_search.py busy
+    python test_search.py "busy bee"
+    python test_search.py --term busy_bee_cafe
+    python test_search.py --all
 """
 
 import sys
 import os
+import json
+
+# Add project root to path
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, project_root)
+
+# Set Django settings
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'afrotodosearch.settings')
+
+import django
+django.setup()
 
 print("=" * 70)
-print("TEST: word_discovery.py with intent_detect integration")
+print("TEST: Search & Autocomplete Debug")
 print("=" * 70)
 
+
 # =============================================================================
-# Step 1: Try to import word_discovery
+# Parse arguments
 # =============================================================================
-print("\n[Step 1] Attempting to import word_discovery...")
 
-word_discovery = None
-process_query_optimized = None
+query = ""
+term = ""
+run_all = False
 
-# Try different import paths
-import_attempts = [
-    ("from word_discovery import process_query_optimized", "word_discovery"),
-    ("from .word_discovery import process_query_optimized", ".word_discovery"),
-    ("from search.word_discovery import process_query_optimized", "search.word_discovery"),
-    ("from app.search.word_discovery import process_query_optimized", "app.search.word_discovery"),
-]
+args = sys.argv[1:]
+if "--all" in args:
+    run_all = True
+elif "--term" in args:
+    idx = args.index("--term")
+    if idx + 1 < len(args):
+        term = args[idx + 1]
+elif args:
+    query = " ".join([a for a in args if not a.startswith("--")])
 
-for import_code, module_name in import_attempts:
+if not query and not term and not run_all:
+    print("\nUsage:")
+    print("  python test_search.py busy")
+    print('  python test_search.py "busy bee cafe"')
+    print("  python test_search.py --term busy_bee_cafe")
+    print("  python test_search.py --all")
+    sys.exit(0)
+
+
+# =============================================================================
+# Test a query through all layers
+# =============================================================================
+
+def test_query(query, limit=10):
+    print(f"\n{'='*70}")
+    print(f"TESTING QUERY: \"{query}\"")
+    print(f"{'='*70}")
+
+    # --- Layer 1: RAM Cache ---
+    print(f"\n--- LAYER 1: RAM CACHE ---")
     try:
-        print(f"  Trying: {import_code}")
-        exec(import_code)
-        print(f"  ✅ Success: imported from {module_name}")
-        break
-    except ImportError as e:
-        print(f"  ❌ Failed: {e}")
-    except Exception as e:
-        print(f"  ❌ Error: {type(e).__name__}: {e}")
-else:
-    print("\n❌ Could not import word_discovery from any path.")
-    print("\nPlease run this test from your Django project directory,")
-    print("or modify the import statement at the top of this file.")
-    print("\nAlternatively, run this in Django shell:")
-    print("  python manage.py shell")
-    print("  >>> from search.word_discovery import process_query_optimized")
-    print("  >>> result = process_query_optimized('who was the first president')")
-    print("  >>> print('SIGNALS:', result.get('signals', 'NOT FOUND'))")
-    sys.exit(1)
+        from searchengine.vocabulary_cache import vocab_cache
+        if vocab_cache.loaded:
+            print(f"  ✅ Cache loaded: {vocab_cache.term_count:,} terms")
 
-# =============================================================================
-# Step 2: Test basic query processing
-# =============================================================================
-print("\n[Step 2] Testing process_query_optimized()...")
+            has = vocab_cache.has_term(query)
+            print(f"  has_term('{query}'): {has}")
 
-test_query = "who was the first president of morehouse"
-print(f"  Query: '{test_query}'")
+            meta = vocab_cache.get_term(query)
+            if meta:
+                print(f"  get_term: {meta.get('display')} | {meta.get('category')}")
+            else:
+                print(f"  get_term: NOT FOUND")
 
-try:
-    result = process_query_optimized(test_query)
-    print(f"  ✅ process_query_optimized() returned successfully")
-    print(f"  Keys in result: {list(result.keys())}")
-except Exception as e:
-    print(f"  ❌ Error calling process_query_optimized(): {type(e).__name__}: {e}")
-    import traceback
-    traceback.print_exc()
-    sys.exit(1)
-
-# =============================================================================
-# Step 3: Check if 'signals' key exists
-# =============================================================================
-print("\n[Step 3] Checking for 'signals' key...")
-
-if 'signals' in result:
-    print("  ✅ 'signals' key EXISTS in result")
-    signals = result['signals']
-    print(f"  Number of signals: {len(signals)}")
-else:
-    print("  ❌ 'signals' key NOT FOUND in result")
-    print("\n  This means detect_intent() is not being called in word_discovery.py")
-    print("  or it's failing silently.")
-    print("\n  Check that word_discovery.py has:")
-    print("    1. Import at top: from .intent_detect import detect_intent")
-    print("    2. Call at end of process_query_optimized(): output = detect_intent(output)")
-    sys.exit(1)
-
-# =============================================================================
-# Step 4: Display signals
-# =============================================================================
-print("\n[Step 4] Displaying detected signals...")
-
-signals = result['signals']
-
-print("\n  --- Question Signals ---")
-print(f"    has_question_word: {signals.get('has_question_word')}")
-print(f"    question_word: {signals.get('question_word')}")
-print(f"    question_position: {signals.get('question_position')}")
-
-print("\n  --- Temporal Signals ---")
-print(f"    has_temporal: {signals.get('has_temporal')}")
-print(f"    temporal_direction: {signals.get('temporal_direction')}")
-print(f"    temporal_word: {signals.get('temporal_word')}")
-
-print("\n  --- Role Signals ---")
-print(f"    has_role_word: {signals.get('has_role_word')}")
-print(f"    role_word: {signals.get('role_word')}")
-
-print("\n  --- Entity Signals ---")
-print(f"    has_person: {signals.get('has_person')}")
-print(f"    has_organization: {signals.get('has_organization')}")
-print(f"    detected_entities: {signals.get('detected_entities')}")
-
-print("\n  --- Structure Signals ---")
-print(f"    word_count: {signals.get('word_count')}")
-print(f"    has_verb: {signals.get('has_verb')}")
-
-# =============================================================================
-# Step 5: Test multiple queries
-# =============================================================================
-print("\n[Step 5] Testing multiple query types...")
-
-test_queries = [
-    "restaurants near me",
-    "black women leadership", 
-    "billie holiday",
-    "where is africa located",
-    "best soul food in atlanta",
-]
-
-for query in test_queries:
-    print(f"\n  Query: '{query}'")
-    try:
-        r = process_query_optimized(query)
-        s = r.get('signals', {})
-        
-        # Show key signals
-        key_signals = []
-        if s.get('has_question_word'):
-            key_signals.append(f"question:{s.get('question_word')}")
-        if s.get('has_temporal'):
-            key_signals.append(f"temporal:{s.get('temporal_direction')}")
-        if s.get('is_local_search'):
-            key_signals.append("local_search")
-        if s.get('has_superlative'):
-            key_signals.append(f"superlative:{s.get('superlative_word')}")
-        if s.get('has_service_word'):
-            key_signals.append(f"service:{s.get('service_words')}")
-        if s.get('has_culture_word'):
-            key_signals.append("culture")
-        if s.get('has_food_word'):
-            key_signals.append("food")
-        if s.get('has_person'):
-            key_signals.append("person")
-        if s.get('has_location'):
-            key_signals.append("location")
-        
-        if key_signals:
-            print(f"    Signals: {', '.join(key_signals)}")
+            classified = vocab_cache.classify_query(query)
+            print(f"  classify_query:")
+            print(f"    locations:  {classified.get('locations', [])}")
+            print(f"    bigrams:    {classified.get('bigrams', [])}")
+            print(f"    trigrams:   {classified.get('trigrams', [])}")
+            print(f"    quadgrams:  {classified.get('quadgrams', [])}")
+            print(f"    terms:      {list(classified.get('terms', {}).keys())}")
+            print(f"    unknown:    {classified.get('unknown', [])}")
+            print(f"    stopwords:  {classified.get('stopwords', [])}")
         else:
-            print(f"    Signals: (none detected)")
-            
+            print(f"  ❌ Cache NOT loaded")
     except Exception as e:
-        print(f"    ❌ Error: {e}")
+        print(f"  ❌ ERROR: {e}")
+
+    # --- Layer 2: Redis Exact Match ---
+    print(f"\n--- LAYER 2: REDIS EXACT MATCH ---")
+    try:
+        from searchengine.searchapi import get_exact_term_matches
+        matches = get_exact_term_matches(query)
+        print(f"  Found {len(matches)} exact matches")
+        for m in matches[:5]:
+            print(f"    {m.get('id')} | {m.get('term')} | {m.get('category')} | rank={m.get('rank')}")
+    except Exception as e:
+        print(f"  ❌ ERROR: {e}")
+
+    # --- Layer 3: Redis Prefix Match ---
+    print(f"\n--- LAYER 3: REDIS PREFIX MATCH ---")
+    try:
+        from searchengine.searchapi import get_prefix_matches
+        matches = get_prefix_matches(query, limit=limit)
+        print(f"  Found {len(matches)} prefix matches")
+        for m in matches[:10]:
+            print(f"    {m.get('term')} | {m.get('category')} | rank={m.get('rank')}")
+    except Exception as e:
+        print(f"  ❌ ERROR: {e}")
+
+    # --- Layer 4: Redis Fuzzy Match ---
+    print(f"\n--- LAYER 4: REDIS FUZZY MATCH ---")
+    try:
+        from searchengine.searchapi import get_fuzzy_matches
+        matches = get_fuzzy_matches(query, limit=limit)
+        print(f"  Found {len(matches)} fuzzy matches")
+        for m in matches[:10]:
+            print(f"    {m.get('term')} | {m.get('category')} | dist={m.get('distance')} | rank={m.get('rank')}")
+    except Exception as e:
+        print(f"  ❌ ERROR: {e}")
+
+    # --- Layer 5: get_suggestions (combined) ---
+    print(f"\n--- LAYER 5: get_suggestions (COMBINED) ---")
+    try:
+        from searchengine.searchapi import get_suggestions
+        result = get_suggestions(query, limit=limit)
+        print(f"  Tier used:    {result.get('tier_used')}")
+        print(f"  Exact match:  {result.get('exact_match')}")
+        print(f"  Suggestions:  {len(result.get('suggestions', []))}")
+        if result.get('error'):
+            print(f"  ❌ ERROR: {result['error']}")
+        for s in result.get('suggestions', [])[:10]:
+            print(f"    {s.get('term')} | {s.get('display')} | {s.get('category')} | rank={s.get('rank')}")
+    except Exception as e:
+        print(f"  ❌ ERROR: {e}")
+
+    # --- Layer 6: get_autocomplete (what the dropdown calls) ---
+    print(f"\n--- LAYER 6: get_autocomplete (DROPDOWN) ---")
+    try:
+        from searchengine.searchapi import get_autocomplete
+        results = get_autocomplete(prefix=query, limit=8)
+        print(f"  Results: {len(results)}")
+        for r in results:
+            print(f"    {r.get('term')} | {r.get('display')} | {r.get('category')} | rank={r.get('rank')}")
+    except Exception as e:
+        print(f"  ❌ ERROR: {e}")
+
+    # --- Layer 7: API endpoint (what the frontend calls) ---
+    print(f"\n--- LAYER 7: API ENDPOINT (search_suggestions view) ---")
+    try:
+        from django.test import RequestFactory
+        from searchengine.views import search_suggestions
+        factory = RequestFactory()
+        request = factory.get(f'/api/search/?q={query}')
+        response = search_suggestions(request)
+        data = json.loads(response.content)
+        suggestions = data.get('suggestions', [])
+        print(f"  Suggestions: {len(suggestions)}")
+        for s in suggestions:
+            print(f"    text={s.get('text')} | display={s.get('display')} | desc={s.get('description', '')[:50]}")
+        if data.get('error'):
+            print(f"  ❌ ERROR: {data['error']}")
+    except Exception as e:
+        print(f"  ❌ ERROR: {e}")
+
+    print(f"\n{'='*70}")
+
 
 # =============================================================================
-# Summary
+# Test a specific term
 # =============================================================================
-print("\n" + "=" * 70)
-print("TEST COMPLETE")
-print("=" * 70)
-print("✅ word_discovery.py successfully integrates intent_detect")
-print("✅ Signals are being added to the output")
-print("\nThe integration is working correctly.")
+
+def test_term(term):
+    print(f"\n{'='*70}")
+    print(f"TESTING TERM: \"{term}\"")
+    print(f"{'='*70}")
+
+    # RAM Cache
+    print(f"\n--- RAM CACHE ---")
+    try:
+        from searchengine.vocabulary_cache import vocab_cache
+        meta = vocab_cache.get_term(term)
+        if meta:
+            print(f"  ✅ FOUND: {json.dumps(meta, indent=4, default=str)}")
+        else:
+            print(f"  ❌ NOT FOUND in RAM cache")
+
+            alt = term.replace('_', ' ')
+            meta2 = vocab_cache.get_term(alt)
+            if meta2:
+                print(f"  💡 BUT FOUND as '{alt}': {meta2.get('display')} | {meta2.get('category')}")
+
+            alt2 = term.replace(' ', '_')
+            meta3 = vocab_cache.get_term(alt2)
+            if meta3:
+                print(f"  💡 BUT FOUND as '{alt2}': {meta3.get('display')} | {meta3.get('category')}")
+    except Exception as e:
+        print(f"  ❌ ERROR: {e}")
+
+    # Redis Direct
+    print(f"\n--- REDIS DIRECT ---")
+    try:
+        from searchengine.searchapi import RedisLookupTable
+        client = RedisLookupTable.get_client()
+        if client:
+            found_any = False
+            for suffix in ['business_location', 'us_city', 'us_state', 'dictionary_word', 'keyword', 'food', 'music', 'education']:
+                key = f"term:{term}:{suffix}"
+                data = client.hgetall(key)
+                if data:
+                    found_any = True
+                    print(f"  ✅ FOUND: {key}")
+                    for k, v in list(data.items())[:8]:
+                        print(f"    {k}: {v}")
+                    break
+
+            if not found_any:
+                keys = client.keys(f"term:{term}:*")
+                if keys:
+                    print(f"  ✅ Found keys: {keys[:5]}")
+                else:
+                    print(f"  ❌ NOT FOUND in Redis")
+
+                    alt = term.replace('_', ' ')
+                    alt_keys = client.keys(f"term:{alt}:*")
+                    if alt_keys:
+                        print(f"  💡 BUT FOUND with spaces: {alt_keys[:5]}")
+
+                    alt2 = term.replace(' ', '_')
+                    alt2_keys = client.keys(f"term:{alt2}:*")
+                    if alt2_keys:
+                        print(f"  💡 BUT FOUND with underscores: {alt2_keys[:5]}")
+        else:
+            print(f"  ❌ Redis not connected")
+    except Exception as e:
+        print(f"  ❌ ERROR: {e}")
+
+    # RediSearch
+    print(f"\n--- REDISEARCH ---")
+    try:
+        from searchengine.searchapi import get_exact_term_matches
+        matches = get_exact_term_matches(term)
+        if matches:
+            print(f"  ✅ FOUND {len(matches)} matches:")
+            for m in matches:
+                print(f"    {m.get('id')} | {m.get('term')} | {m.get('category')} | rank={m.get('rank')}")
+        else:
+            print(f"  ❌ NOT FOUND via RediSearch")
+    except Exception as e:
+        print(f"  ❌ ERROR: {e}")
+
+
+# =============================================================================
+# Run all tests
+# =============================================================================
+
+def test_all():
+    print(f"\n{'='*70}")
+    print(f"RUNNING ALL TESTS")
+    print(f"{'='*70}")
+
+    passed = 0
+    failed = 0
+
+    # Test 1: Cache status
+    print(f"\n--- TEST 1: Cache Status ---")
+    try:
+        from searchengine.vocabulary_cache import vocab_cache
+        if vocab_cache.loaded and vocab_cache.term_count > 0:
+            print(f"  ✅ PASS: {vocab_cache.term_count:,} terms loaded")
+            print(f"     unigrams={len(vocab_cache.unigrams):,}, bigrams={len(vocab_cache.bigrams):,}, trigrams={len(vocab_cache.trigrams):,}, quadgrams={len(vocab_cache.quadgrams):,}")
+            passed += 1
+        else:
+            print(f"  ❌ FAIL: Cache not loaded")
+            failed += 1
+    except Exception as e:
+        print(f"  ❌ FAIL: {e}")
+        failed += 1
+
+    # Test 2: Redis connection
+    print(f"\n--- TEST 2: Redis Connection ---")
+    try:
+        from searchengine.searchapi import RedisLookupTable
+        client = RedisLookupTable.get_client()
+        if client and client.ping():
+            print(f"  ✅ PASS: Redis connected")
+            passed += 1
+        else:
+            print(f"  ❌ FAIL: Redis not connected")
+            failed += 1
+    except Exception as e:
+        print(f"  ❌ FAIL: {e}")
+        failed += 1
+
+    # Test 3: Known terms
+    print(f"\n--- TEST 3: Known Term Lookups ---")
+    test_terms = ["atlanta", "georgia", "hbcus", "jazz"]
+    for t in test_terms:
+        try:
+            from searchengine.searchapi import get_exact_term_matches
+            matches = get_exact_term_matches(t)
+            if matches:
+                print(f"  ✅ PASS: '{t}' found ({len(matches)} matches)")
+                passed += 1
+            else:
+                print(f"  ❌ FAIL: '{t}' not found")
+                failed += 1
+        except Exception as e:
+            print(f"  ❌ FAIL: '{t}' error: {e}")
+            failed += 1
+
+    # Test 4: Business terms
+    print(f"\n--- TEST 4: Business Term Lookups ---")
+    business_terms = ["busy_bee_cafe", "slutty_vegan_edgewood", "portrait_coffee"]
+    for t in business_terms:
+        try:
+            from searchengine.searchapi import get_exact_term_matches, RedisLookupTable
+            matches = get_exact_term_matches(t)
+            if matches:
+                print(f"  ✅ PASS: '{t}' found ({matches[0].get('category')})")
+                passed += 1
+            else:
+                print(f"  ❌ FAIL: '{t}' not found via exact match")
+                client = RedisLookupTable.get_client()
+                if client:
+                    keys = client.keys(f"term:{t}:*")
+                    if keys:
+                        print(f"         💡 But exists in Redis: {keys}")
+                    else:
+                        print(f"         ❌ Not in Redis either")
+                failed += 1
+        except Exception as e:
+            print(f"  ❌ FAIL: '{t}' error: {e}")
+            failed += 1
+
+    # Test 5: Autocomplete
+    print(f"\n--- TEST 5: Autocomplete ---")
+    autocomplete_tests = ["atl", "busy", "jazz", "portrait"]
+    for q in autocomplete_tests:
+        try:
+            from searchengine.searchapi import get_autocomplete
+            results = get_autocomplete(prefix=q, limit=5)
+            if results:
+                terms = [r.get('term', '') for r in results[:3]]
+                print(f"  ✅ PASS: '{q}' -> {len(results)} results: {terms}")
+                passed += 1
+            else:
+                print(f"  ❌ FAIL: '{q}' -> 0 results")
+                failed += 1
+        except Exception as e:
+            print(f"  ❌ FAIL: '{q}' error: {e}")
+            failed += 1
+
+    # Test 6: API endpoint
+    print(f"\n--- TEST 6: API Endpoint ---")
+    try:
+        from django.test import RequestFactory
+        from searchengine.views import search_suggestions
+        factory = RequestFactory()
+
+        for q in ["atlanta", "busy", "jazz"]:
+            request = factory.get(f'/api/search/?q={q}')
+            response = search_suggestions(request)
+            data = json.loads(response.content)
+            suggestions = data.get('suggestions', [])
+            if suggestions:
+                texts = [s.get('text', '') for s in suggestions[:3]]
+                print(f"  ✅ PASS: /api/search/?q={q} -> {len(suggestions)} suggestions: {texts}")
+                passed += 1
+            else:
+                print(f"  ❌ FAIL: /api/search/?q={q} -> 0 suggestions")
+                if data.get('error'):
+                    print(f"         Error: {data['error']}")
+                failed += 1
+    except Exception as e:
+        print(f"  ❌ FAIL: API endpoint error: {e}")
+        failed += 1
+
+    # Summary
+    total = passed + failed
+    print(f"\n{'='*70}")
+    if failed == 0:
+        print(f"✅ ALL TESTS PASSED: {passed}/{total}")
+    else:
+        print(f"❌ {failed} TESTS FAILED: {passed}/{total} passed")
+    print(f"{'='*70}")
+
+
+# =============================================================================
+# Main
+# =============================================================================
+
+if __name__ == '__main__':
+    if run_all:
+        test_all()
+    elif term:
+        test_term(term)
+    elif query:
+        test_query(query)

@@ -606,30 +606,7 @@
                 </svg>
                 <span>Home</span>
             </a>
-            <!-- <a href="" class="mobile-nav-item">
-                <svg viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M12 7V3H2v18h20V7H12zM6 19H4v-2h2v2zm0-4H4v-2h2v2zm0-4H4V9h2v2zm0-4H4V5h2v2zm4 12H8v-2h2v2zm0-4H8v-2h2v2zm0-4H8V9h2v2zm0-4H8V5h2v2zm10 12h-8v-2h2v-2h-2v-2h2v-2h-2V9h8v10zm-2-8h-2v2h2v-2zm0 4h-2v2h2v-2z"/>
-                </svg>
-                <span>Business</span>
-            </a> -->
-            <!-- <a href="" class="mobile-nav-item">
-                <svg viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9c0-.46-.04-.92-.1-1.36-.98 1.37-2.58 2.26-4.4 2.26-3.03 0-5.5-2.47-5.5-5.5 0-1.82.89-3.42 2.26-4.4-.44-.06-.9-.1-1.36-.1z"/>
-                </svg>
-                <span>Culture</span>
-            </a> -->
-            <!-- <a href="" class="mobile-nav-item">
-                <svg viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
-                </svg>
-                <span>Health</span>
-            </a> -->
-            <!-- <a href="" class="mobile-nav-item">
-                <svg viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z"/>
-                </svg>
-                <span>News</span>
-            </a> -->
+
             <a href="{% url 'searchengine:about' %}" class="mobile-nav-item">
                 <svg viewBox="0 0 24 24" fill="currentColor">
                     <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
@@ -675,19 +652,15 @@
         </div>
         
         <nav class="header-nav">
-    <!-- <a href="{% url 'searchengine:category' 'business' %}" class="nav-link active">Business</a>
-                <a href="{% url 'searchengine:category' 'culture' %}" class="nav-link">Culture</a>
-                <a href="{% url 'searchengine:category' 'health' %}" class="nav-link">Health</a>
-                <a href="{% url 'searchengine:category' 'news' %}" class="nav-link">News</a>
-                <a href="{% url 'searchengine:category' 'community' %}" class="nav-link">Community</a> -->
+
         </nav>
 
         <div class="header-right">
             {% if user.is_authenticated %}
-            <a href="" class="auth-link login">Logout</a>
+            <a href="{% url 'accounts:logout' %}" class="auth-link login">Logout</a>
             {% else %}
-            <a href="" class="auth-link login">Login</a>
-            <a href="" class="auth-link signup">Sign Up</a>
+            <a href="{% url 'accounts:login' %}" class="auth-link login">Login</a>
+            <a href="{% url 'accounts:register' %}" class="auth-link signup">Sign Up</a>
             {% endif %}
         </div>
     </header>
@@ -810,13 +783,30 @@
                         <li>We do not guarantee the accuracy, completeness, or reliability of search results</li>
                         <li>Search results do not constitute an endorsement of any business, product, or service</li>
                         <li>Your search queries may be used to improve our services as described in our Privacy Policy</li>
+                        <li>Search results may be influenced by automated ranking systems and AI-driven relevance algorithms</li>
                     </ul>
 
                     <h3>AI-Generated Content</h3>
-                    <p>Some content or search results may be generated or enhanced by artificial intelligence. While we strive for accuracy, AI-generated content may contain errors or inaccuracies. You should independently verify any important information.</p>
+                    <p>Some content or search results may be generated or enhanced by artificial intelligence, including third-party AI models and large language models (LLMs). While we strive for accuracy, you understand and agree that:</p>
+                    <ul>
+                        <li>AI-generated content may contain errors, inaccuracies, or outdated information</li>
+                        <li>AI-generated content may reflect biases present in training data</li>
+                        <li>AI-generated content does not constitute professional advice of any kind, including but not limited to legal, medical, financial, or tax advice</li>
+                        <li>You should independently verify any important information before relying on it</li>
+                        <li>AfroTodo does not guarantee the completeness, reliability, or suitability of AI-generated content for any particular purpose</li>
+                    </ul>
+
+                    <h3>Third-Party AI Services</h3>
+                    <p>Our Platform may utilize third-party artificial intelligence services and models to power search, content generation, and other features. By using the Platform, you acknowledge that:</p>
+                    <ul>
+                        <li>Your search queries and interactions may be processed by third-party AI service providers</li>
+                        <li>These third-party providers are subject to their own terms of service and privacy policies</li>
+                        <li>We select AI providers that align with our data protection standards, but we cannot guarantee the practices of third-party providers</li>
+                        <li>For more information about how your data is handled by third-party AI providers, please refer to our <a href="{% url 'searchengine:privacy' %}">Privacy Policy</a></li>
+                    </ul>
 
                     <div class="highlight-box warning">
-                        <p><strong>Note:</strong> AfroTodo is not responsible for the accuracy of information provided by third parties, including businesses listed in our directory.</p>
+                        <p><strong>Note:</strong> AfroTodo is not responsible for the accuracy of information provided by third parties, including businesses listed in our directory or content generated by third-party AI systems.</p>
                     </div>
                 </section>
 
@@ -851,7 +841,11 @@
                         <li>Verify business information before publishing</li>
                         <li>Remove listings that violate these Terms or our community guidelines</li>
                         <li>Display business listings in any format or order we choose</li>
+                        <li>Use automated systems, including AI, to categorize, rank, and display business listings</li>
                     </ul>
+
+                    <h3>Automated Ranking and Display</h3>
+                    <p>Business listings may be ranked, categorized, or displayed using automated systems, including AI algorithms. These systems consider factors such as relevance to search queries, completeness of listing information, user engagement, and other signals. Inclusion in our directory does not guarantee any specific ranking, visibility, traffic, or business results. If you believe an automated decision has negatively impacted your listing, you may contact us at <a href="mailto:admin@afrotodo.com">admin@afrotodo.com</a> to request a review.</p>
 
                     <h3>No Guarantee</h3>
                     <p>Inclusion in our directory does not guarantee any specific visibility, traffic, or business results. We do not endorse any business listed on our Platform.</p>
@@ -866,6 +860,9 @@
 
                     <h3>License Grant</h3>
                     <p>By submitting User Content, you grant AfroTodo a worldwide, non-exclusive, royalty-free, sublicensable, and transferable license to use, reproduce, modify, adapt, publish, translate, distribute, and display your User Content in connection with operating and promoting the Platform.</p>
+
+                    <h3>AI Training Disclosure</h3>
+                    <p>Your User Content and interactions with the Platform, including search queries, may be used to improve our AI systems and search algorithms. This may include using aggregated and de-identified data to train or fine-tune machine learning models that power our Platform. We do not use your personal information to train third-party AI models. For more details on how your data is used, please see our <a href="{% url 'searchengine:privacy' %}">Privacy Policy</a>.</p>
 
                     <h3>Your Responsibilities</h3>
                     <p>You are solely responsible for your User Content and represent that:</p>
@@ -904,6 +901,7 @@
                         <li>Circumventing any security or access controls</li>
                         <li>Introducing viruses, malware, or other harmful code</li>
                         <li>Reverse engineering or decompiling any part of the Platform</li>
+                        <li>Attempting to extract, scrape, or harvest data from the Platform for use in training AI or machine learning models without our express written consent</li>
                     </ul>
 
                     <h3>Commercial Prohibitions</h3>
@@ -924,8 +922,9 @@
                     <ul>
                         <li>The AfroTodo name, logo, and branding</li>
                         <li>Website and app design, layout, and graphics</li>
-                        <li>Software, algorithms, and underlying technology</li>
+                        <li>Software, algorithms, AI models, and underlying technology</li>
                         <li>Original content created by AfroTodo</li>
+                        <li>AI-generated or AI-enhanced content produced by the Platform</li>
                     </ul>
 
                     <h3>Limited License</h3>
@@ -938,6 +937,7 @@
                         <li>Use our trademarks or branding without written consent</li>
                         <li>Remove any copyright or proprietary notices</li>
                         <li>Create derivative works based on the Platform</li>
+                        <li>Use any content from the Platform, including AI-generated content, to train, develop, or improve any artificial intelligence or machine learning model without our express written consent</li>
                     </ul>
 
                     <h3>Feedback</h3>
@@ -948,15 +948,16 @@
                 <section class="terms-section" id="third-party">
                     <h2>10. Third-Party Links & Services</h2>
                     
-                    <p>The Platform may contain links to third-party websites, services, or content that are not owned or controlled by AfroTodo. We are not responsible for:</p>
+                    <p>The Platform may contain links to third-party websites, services, or content that are not owned or controlled by AfroTodo. Additionally, our Platform utilizes third-party services, including artificial intelligence and machine learning providers, to power certain features. We are not responsible for:</p>
                     <ul>
                         <li>The content, accuracy, or opinions expressed on third-party sites</li>
-                        <li>The privacy practices of third-party sites</li>
+                        <li>The privacy practices of third-party sites or AI service providers</li>
                         <li>Any products, services, or transactions with third parties</li>
                         <li>Any damages or losses caused by third-party sites or services</li>
+                        <li>The accuracy or reliability of outputs generated by third-party AI services</li>
                     </ul>
                     
-                    <p>Your interactions with third parties, including businesses listed in our directory, are solely between you and that third party. We encourage you to review the terms and privacy policies of any third-party sites you visit.</p>
+                    <p>Your interactions with third parties, including businesses listed in our directory, are solely between you and that third party. We encourage you to review the terms and privacy policies of any third-party sites you visit. For information about which third-party AI services we use, please refer to our <a href="{% url 'searchengine:privacy' %}">Privacy Policy</a>.</p>
                 </section>
 
                 <!-- Section 11: Disclaimers -->
@@ -974,13 +975,20 @@
                         <li>Warranties regarding the accuracy, reliability, or completeness of any content</li>
                         <li>Warranties that defects will be corrected</li>
                         <li>Warranties that the Platform is free of viruses or harmful components</li>
+                        <li>Warranties regarding the accuracy, reliability, or appropriateness of any AI-generated or AI-enhanced content</li>
+                        <li>Warranties that AI-generated content is free from bias, errors, or inaccuracies</li>
                     </ul>
 
                     <h3>Business Listings Disclaimer</h3>
-                    <p>AfroTodo does not verify, endorse, or guarantee the accuracy of business listings. We are not responsible for the quality, safety, legality, or any other aspect of products or services offered by businesses listed on our Platform.</p>
+                    <p>AfroTodo does not verify, endorse, or guarantee the accuracy of business listings. We are not responsible for the quality, safety, legality, or any other aspect of products or services offered by businesses listed on our Platform. Business listings may be ranked or displayed using automated systems, and such ranking does not constitute an endorsement.</p>
 
                     <h3>Search Results Disclaimer</h3>
-                    <p>Search results are provided for informational purposes only. We do not guarantee the accuracy, completeness, or usefulness of any search results. You should independently verify any information before relying on it.</p>
+                    <p>Search results are provided for informational purposes only. We do not guarantee the accuracy, completeness, or usefulness of any search results. Search results may be generated or influenced by artificial intelligence systems, which may produce errors, omissions, or biased outputs. You should independently verify any information before relying on it.</p>
+
+                    <h3>AI Content Disclaimer</h3>
+                    <div class="highlight-box important">
+                        <p><strong>AI-GENERATED CONTENT ON THIS PLATFORM IS PROVIDED FOR INFORMATIONAL PURPOSES ONLY AND DOES NOT CONSTITUTE PROFESSIONAL ADVICE. YOU SHOULD NOT RELY ON AI-GENERATED CONTENT AS A SUBSTITUTE FOR PROFESSIONAL LEGAL, MEDICAL, FINANCIAL, TAX, OR OTHER ADVICE. ALWAYS CONSULT A QUALIFIED PROFESSIONAL FOR SPECIFIC GUIDANCE. AFROTODO MAKES NO REPRESENTATIONS OR WARRANTIES ABOUT THE ACCURACY, COMPLETENESS, OR RELIABILITY OF AI-GENERATED CONTENT.</strong></p>
+                    </div>
                 </section>
 
                 <!-- Section 12: Limitation of Liability -->
@@ -997,6 +1005,8 @@
                         <li>Personal injury or property damage</li>
                         <li>Unauthorized access to or alteration of your data</li>
                         <li>Conduct of any third party on the Platform</li>
+                        <li>Errors, inaccuracies, or biases in AI-generated content or search results</li>
+                        <li>Decisions made in reliance on AI-generated content or search results</li>
                         <li>Any other matter relating to the Platform</li>
                     </ul>
 
@@ -1017,6 +1027,7 @@
                         <li>Your violation of any third-party rights</li>
                         <li>Your violation of any applicable law</li>
                         <li>Any dispute between you and a third party</li>
+                        <li>Your reliance on AI-generated content or search results provided by the Platform</li>
                     </ul>
                 </section>
 
@@ -1036,6 +1047,7 @@
                         <li>Your right to use the Platform will immediately cease</li>
                         <li>We may delete your account and any associated data</li>
                         <li>Provisions that by their nature should survive will remain in effect</li>
+                        <li>We may retain de-identified or aggregated data derived from your use of the Platform</li>
                     </ul>
                 </section>
 
@@ -1067,7 +1079,7 @@
                     </ul>
 
                     <h3>Opt-Out</h3>
-                    <p>You may opt out of this arbitration agreement by sending written notice within 30 days of first accepting these Terms. Send your opt-out notice to: support@afrotodo.com with "Arbitration Opt-Out" in the subject line.</p>
+                    <p>You may opt out of this arbitration agreement by sending written notice within 30 days of first accepting these Terms. Send your opt-out notice to: <a href="mailto:admin@afrotodo.com">admin@afrotodo.com</a> with "Arbitration Opt-Out" in the subject line.</p>
                 </section>
 
                 <!-- Section 17: Changes to Terms -->
@@ -1094,7 +1106,7 @@
                     
                     <div class="contact-box">
                         <h3>Questions About These Terms?</h3>
-                        <p><strong>Email:</strong> <a href="mailto:support@afrotodo.com">support@afrotodo.com</a></p>
+                        <p><strong>Email:</strong> <a href="mailto:admin@afrotodo.com">admin@afrotodo.com</a></p>
                         <p style="margin-top: var(--space-md);"><strong>AfroTodo, LLC</strong></p>
                     </div>
                 </section>

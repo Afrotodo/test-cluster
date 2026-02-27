@@ -423,12 +423,60 @@
             cursor: pointer;
         }
 
+        /* Checkbox — Terms & Privacy */
+        .checkbox-group {
+            display: flex;
+            align-items: flex-start;
+            gap: var(--space-sm);
+            margin-top: var(--space-md);
+            cursor: pointer;
+        }
+
+        .checkbox-group input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+            min-width: 20px;
+            accent-color: var(--green);
+            cursor: pointer;
+            margin-top: 2px;
+        }
+
+        .checkbox-group label {
+            font-size: 13px;
+            color: var(--gray-500);
+            line-height: 1.5;
+            cursor: pointer;
+        }
+
+        .checkbox-group label a {
+            color: var(--green);
+            font-weight: 500;
+            transition: color var(--transition-fast);
+        }
+
+        .checkbox-group label a:hover {
+            color: var(--green-light);
+        }
+
         /* Validation errors */
         .validation-error {
             font-size: 13px;
             color: var(--red);
             margin-top: var(--space-xs);
             font-weight: 500;
+        }
+
+        /* ==================== HONEYPOT — hidden from humans ==================== */
+        .ht-field {
+            opacity: 0;
+            position: absolute;
+            top: 0;
+            left: 0;
+            height: 0;
+            width: 0;
+            z-index: -1;
+            overflow: hidden;
+            pointer-events: none;
         }
 
         /* Submit Button */
@@ -447,16 +495,21 @@
             margin-top: var(--space-md);
         }
 
-        .submit-btn:hover {
+        .submit-btn:hover:not(:disabled) {
             background: var(--gray-700);
             transform: translateY(-1px);
+        }
+
+        .submit-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
         }
 
         .submit-btn.business {
             background: var(--green);
         }
 
-        .submit-btn.business:hover {
+        .submit-btn.business:hover:not(:disabled) {
             background: var(--green-light);
         }
 
@@ -723,21 +776,21 @@
                                 <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
                                 <polyline points="22 4 12 14.01 9 11.01"/>
                             </svg>
-                            <span>Discover 12,000+ Black-owned businesses</span>
+                            <span>Save your searches and chat history</span>
                         </div>
                         <div class="value-prop">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
                                 <polyline points="22 4 12 14.01 9 11.01"/>
                             </svg>
-                            <span>Find health providers who understand you</span>
+                            <span>Get a customized feed based on your interests</span>
                         </div>
                         <div class="value-prop">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
                                 <polyline points="22 4 12 14.01 9 11.01"/>
                             </svg>
-                            <span>Connect with your global community</span>
+                            <span>Get exclusive deals & discounts</span>
                         </div>
                     </div>
 
@@ -753,6 +806,15 @@
                         <input type="hidden" id="user_lat" name="user_latitude" value="">
                         <input type="hidden" id="user_lng" name="user_longitude" value="">
                         <input type="hidden" id="user_timezone" name="user_timezone" value="">
+
+                        <!-- Anti-bot: timestamp (set by JS on page load) -->
+                        <input type="hidden" id="user_form_loaded_at" name="form_loaded_at" value="">
+
+                        <!-- Anti-bot: honeypot — bots will fill this, humans won't see it -->
+                        <div class="ht-field" aria-hidden="true">
+                            <label for="user_website_url">Website</label>
+                            <input type="text" id="user_website_url" name="website_url" tabindex="-1" autocomplete="off">
+                        </div>
 
                         <div class="form-group">
                             <label for="user_username" class="form-label">Username</label>
@@ -847,18 +909,22 @@
                             </div>
                         </div>
 
-                        <button type="submit" class="submit-btn">Create My Account</button>
+                        <!-- Terms & Privacy Checkbox -->
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="user_terms" name="agree_terms" required>
+                            <label for="user_terms">
+                                I have read and agree to the <a href="{% url 'searchengine:term' %}" target="_blank">Terms of Service</a> and <a href="{% url 'searchengine:privacy' %}" target="_blank">Privacy Policy</a>
+                            </label>
+                        </div>
 
-                        <p class="terms-text">
-                            By creating an account, you agree to our <a href="#">Terms of Service</a> and <a href="#">Privacy Policy</a>
-                        </p>
+                        <button type="submit" id="userSubmitBtn" class="submit-btn" disabled>Create My Account</button>
                     </form>
 
-                    <div class="divider">
+                    <!-- <div class="divider">
                         <span>or continue with</span>
-                    </div>
+                    </div> -->
 
-                    <button type="button" class="social-btn">
+                    <!-- <button type="button" class="social-btn">
                         <svg viewBox="0 0 24 24" fill="currentColor">
                             <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
                             <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
@@ -866,7 +932,7 @@
                             <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
                         </svg>
                         Continue with Google
-                    </button>
+                    </button> -->
                 </div>
 
                 <!-- ==================== BUSINESS TAB ==================== -->
@@ -878,21 +944,21 @@
                                 <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
                                 <polyline points="22 4 12 14.01 9 11.01"/>
                             </svg>
-                            <span>Reach customers searching for Black-owned businesses</span>
+                            <span>Get discovered — no ads, no algorithms to fight</span>
                         </div>
                         <div class="value-prop">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
                                 <polyline points="22 4 12 14.01 9 11.01"/>
                             </svg>
-                            <span>Free basic listing — upgrade anytime</span>
+                            <span>Get insights on what our community is searching for</span>
                         </div>
                         <div class="value-prop">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
                                 <polyline points="22 4 12 14.01 9 11.01"/>
                             </svg>
-                            <span>Join 12,000+ Black-owned businesses</span>
+                            <span>Own your visibility on a platform built for us, by us</span>
                         </div>
                     </div>
 
@@ -908,6 +974,15 @@
                         <input type="hidden" id="business_user_lat" name="user_latitude" value="">
                         <input type="hidden" id="business_user_lng" name="user_longitude" value="">
                         <input type="hidden" id="business_user_timezone" name="user_timezone" value="">
+
+                        <!-- Anti-bot: timestamp -->
+                        <input type="hidden" id="business_form_loaded_at" name="form_loaded_at" value="">
+
+                        <!-- Anti-bot: honeypot -->
+                        <div class="ht-field" aria-hidden="true">
+                            <label for="business_company_url">Company URL</label>
+                            <input type="text" id="business_company_url" name="company_url" tabindex="-1" autocomplete="off">
+                        </div>
 
                         <!-- Account Info Section -->
                         <div class="section-divider">
@@ -1090,11 +1165,15 @@
                             </div>
                         </div>
 
-                        <button type="submit" class="submit-btn business">Register My Business</button>
+                        <!-- Terms & Privacy Checkbox -->
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="business_terms" name="agree_terms" required>
+                            <label for="business_terms">
+                                I have read and agree to the <a href="{% url 'searchengine:term' %}" target="_blank">Terms of Service</a> and <a href="{% url 'searchengine:privacy' %}" target="_blank">Privacy Policy</a>
+                            </label>
+                        </div>
 
-                        <p class="terms-text">
-                            By registering, you agree to our <a href="#">Terms of Service</a> and <a href="#">Privacy Policy</a>
-                        </p>
+                        <button type="submit" id="businessSubmitBtn" class="submit-btn business" disabled>Register My Business</button>
                     </form>
                 </div>
 
@@ -1108,7 +1187,7 @@
     <!-- Footer -->
     <footer class="footer">
         <p class="footer-text">
-            <a href="#" class="footer-link">Privacy</a> · <a href="#" class="footer-link">Terms</a> · © 2025 AfroTodo
+            <a href="{% url 'searchengine:privacy' %}" class="footer-link">Privacy</a> · <a href="{% url 'searchengine:term' %}" class="footer-link">Terms</a> · © 2025 AfroTodo
         </p>
     </footer>
 
@@ -1170,6 +1249,69 @@
                 option.textContent = year;
                 businessYearSelect.appendChild(option);
             }
+        });
+
+        // ==================== ANTI-BOT: TERMS CHECKBOX → ENABLE SUBMIT ====================
+        document.getElementById('user_terms').addEventListener('change', function() {
+            document.getElementById('userSubmitBtn').disabled = !this.checked;
+        });
+
+        document.getElementById('business_terms').addEventListener('change', function() {
+            document.getElementById('businessSubmitBtn').disabled = !this.checked;
+        });
+
+        // ==================== ANTI-BOT: TIMESTAMP (set on page load) ====================
+        // Bots submit within milliseconds; real humans take at least a few seconds.
+        // Validate this on the backend: reject if (now - form_loaded_at) < 3 seconds.
+        document.addEventListener('DOMContentLoaded', function() {
+            const now = Date.now().toString();
+            document.getElementById('user_form_loaded_at').value = now;
+            document.getElementById('business_form_loaded_at').value = now;
+        });
+
+        // ==================== ANTI-BOT: FORM SUBMIT VALIDATION ====================
+        ['userForm', 'businessForm'].forEach(formId => {
+            const form = document.getElementById(formId);
+            if (!form) return;
+
+            form.addEventListener('submit', async function(e) {
+                // 1) Honeypot check — if filled, silently block
+                const honeypotField = form.querySelector('.ht-field input');
+                if (honeypotField && honeypotField.value) {
+                    e.preventDefault();
+                    // Fake success so the bot thinks it worked
+                    return;
+                }
+
+                // 2) Time-based check — must have spent at least 3 seconds on page
+                const loadedAt = parseInt(form.querySelector('[name="form_loaded_at"]').value, 10);
+                const elapsed = Date.now() - loadedAt;
+                if (elapsed < 3000) {
+                    e.preventDefault();
+                    return;
+                }
+
+                // 3) Location data check (your existing logic)
+                const prefix = formId === 'businessForm' ? 'business_' : '';
+                const ipField = document.getElementById(`${prefix}user_ip`);
+                
+                if (!ipField || !ipField.value) {
+                    e.preventDefault();
+                    locationService.showStatus('Getting location data...', 'loading');
+                    
+                    try {
+                        const locationData = await locationService.getLocationData();
+                        locationService.fillLocationFields(locationData);
+                        setTimeout(() => {
+                            form.submit();
+                        }, 500);
+                    } catch (error) {
+                        setTimeout(() => {
+                            form.submit();
+                        }, 500);
+                    }
+                }
+            });
         });
 
         // ==================== LOCATION DETECTION ====================
@@ -1238,7 +1380,6 @@
             }
 
             fillLocationFields(locationData) {
-                // Fill user form fields
                 const userFields = {
                     'user_ip': locationData.ip_address,
                     'user_city': locationData.city,
@@ -1250,7 +1391,6 @@
                     'user_timezone': locationData.timezone
                 };
 
-                // Fill business form fields
                 const businessFields = {
                     'business_user_ip': locationData.ip_address,
                     'business_user_city': locationData.city,
@@ -1262,7 +1402,6 @@
                     'business_user_timezone': locationData.timezone
                 };
 
-                // Set all fields
                 [...Object.entries(userFields), ...Object.entries(businessFields)].forEach(([id, value]) => {
                     const field = document.getElementById(id);
                     if (field) field.value = value;
@@ -1285,7 +1424,6 @@
             }
         }
 
-        // Initialize location service on page load
         const locationService = new LocationService();
 
         document.addEventListener('DOMContentLoaded', async function() {
@@ -1302,34 +1440,6 @@
                 }
             } catch (error) {
                 document.getElementById('locationStatus').style.display = 'none';
-            }
-        });
-
-        // Form submissions with location check
-        ['userForm', 'businessForm'].forEach(formId => {
-            const form = document.getElementById(formId);
-            if (form) {
-                form.addEventListener('submit', async function(e) {
-                    const prefix = formId === 'businessForm' ? 'business_' : '';
-                    const ipField = document.getElementById(`${prefix}user_ip`);
-                    
-                    if (!ipField || !ipField.value) {
-                        e.preventDefault();
-                        locationService.showStatus('Getting location data...', 'loading');
-                        
-                        try {
-                            const locationData = await locationService.getLocationData();
-                            locationService.fillLocationFields(locationData);
-                            setTimeout(() => {
-                                form.submit();
-                            }, 500);
-                        } catch (error) {
-                            setTimeout(() => {
-                                form.submit();
-                            }, 500);
-                        }
-                    }
-                });
             }
         });
     </script>
