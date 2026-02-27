@@ -978,7 +978,7 @@ from typing import Dict, List, Tuple, Optional, Any, Set
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
 from decouple import config
-
+import requests
 
 # ============================================================================
 # IMPORTS - Word Discovery v2 and Embedding Client
@@ -1032,6 +1032,34 @@ except ImportError:
         def store_query_embedding(*args, **kwargs):
             return False
         print("⚠️ store_query_embedding not available")
+
+
+
+
+import requests
+
+def humanize_key_facts(key_facts: list) -> str:
+    """Summarize key_facts into a readable sentence using Flan-T5."""
+    if not key_facts:
+        return ''
+    
+    facts_text = '. '.join(key_facts[:3])  # Use top 3 facts max
+    
+    try:
+        response = requests.post(
+            'http://localhost:8001/humanize',
+            json={
+                'text': facts_text,
+                'prompt': f'Summarize these facts into one clear sentence: {facts_text}'
+            },
+            timeout=5
+        )
+        if response.status_code == 200:
+            return response.json().get('result', '')
+    except Exception as e:
+        print(f"⚠️ humanize_key_facts error: {e}")
+    
+    return ''
 
 # ============================================================================
 # THREAD POOL
@@ -2080,6 +2108,7 @@ def format_result(hit: Dict, query: str = '') -> Dict:
         'cluster_uuid': doc.get('cluster_uuid'),
         'semantic_uuid': doc.get('semantic_uuid'),
         'key_facts': doc.get('key_facts', []),
+        'humanized_summary': humanize_key_facts(doc.get('key_facts', [])),
         'key_facts_highlighted': highlight_map.get('key_facts', ''),
         'semantic_score': semantic_score,
         'location': {
@@ -2679,6 +2708,10 @@ def execute_full_search(
     page_ids = [item['id'] for item in page_items]
     results = fetch_full_documents(page_ids, query)
     times['fetch_docs'] = round((time.time() - t5) * 1000, 2)
+    
+    # Humanize top result key_facts (semantic path only)
+    if results and results[0].get('key_facts') and page == 1:
+            results[0]['humanized_summary'] = humanize_key_facts(results[0]['key_facts'])
 
     # Store query embedding for popular queries
     if query_embedding:
