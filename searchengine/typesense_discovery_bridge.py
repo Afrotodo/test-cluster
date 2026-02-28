@@ -2730,7 +2730,7 @@ def execute_full_search(
         matches = sum(1 for w in query_words if w in top_title.lower() or w in top_facts.lower())
         confidence = matches / len(query_words) if query_words else 0
         
-        if confidence >= 0.5:  # At least half the meaningful words match
+        if confidence >= 0.75:  # At least half the meaningful words match
             results[0]['humanized_summary'] = humanize_key_facts(results[0]['key_facts'], query)
 
     # Store query embedding for popular queries
