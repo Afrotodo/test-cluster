@@ -100,56 +100,66 @@ except ImportError:
 
 
 
+
+
 import random
 
-def humanize_key_facts(key_facts: list, query: str = '') -> str:
-    """Format key_facts into a readable AfroToDo AI Overview sentence."""
+import random
+
+def humanize_key_facts(key_facts: list, query: str = '', matched_keyword: str = '') -> str:
+    """Format key_facts into a readable AfroToDo AI Overview,
+    only returning facts relevant to the matched keyword."""
     if not key_facts:
         return ''
     
-    facts = key_facts[:3]
+    # Clean up facts
+    facts = [f.rstrip('.').strip() for f in key_facts if f.strip()]
     
-    # Question path — construct an answer
+    if not facts:
+        return ''
+    
+    # Filter: only keep facts that contain the matched keyword
+    if matched_keyword:
+        keyword_lower = matched_keyword.lower()
+        relevant_facts = [f for f in facts if keyword_lower in f.lower()]
+        
+        # If no facts match the keyword, fall back to first fact only
+        if not relevant_facts:
+            relevant_facts = [facts[0]]
+    else:
+        relevant_facts = [facts[0]]
+    
+    # Cap at 2 — keeps it concise
+    relevant_facts = relevant_facts[:2]
+    
     is_question = query and any(
         query.lower().startswith(w) 
         for w in ['who', 'what', 'where', 'when', 'why', 'how', 'is', 'are', 'can', 'do', 'does']
     )
     
     if is_question:
-        # Build answer-style response
-        question_intros = [
-            f"Based on our sources, {facts[0]}",
-            f"According to our data, {facts[0]}",
-            f"From what we know, {facts[0]}",
-            f"Our sources indicate that {facts[0]}",
+        intros = [
+            "Based on our sources,",
+            "According to our data,",
+            "From what we know,",
+            "Our sources indicate that",
         ]
-        intro = random.choice(question_intros)
-        remaining = facts[1:]
-        
-        if not remaining:
-            return f"{intro}."
-        elif len(remaining) == 1:
-            return f"{intro}. Additionally, {remaining[0]}."
-        else:
-            return f"{intro}. Additionally, {remaining[0]}, and {remaining[1]}."
-    
     else:
-        # General lookup — describe the topic
-        topic_intros = [
-            f"{facts[0].capitalize()}",
-            f"Known as {facts[0]}",
-            f"Recognized as {facts[0]}",
-            f"Notable for being {facts[0]}",
+        intros = [
+            "Here's what we know:",
+            "From our sources:",
+            "Based on our data:",
+            "Our sources show that",
         ]
-        intro = random.choice(topic_intros)
-        remaining = facts[1:]
-        
-        if not remaining:
-            return f"{intro}."
-        elif len(remaining) == 1:
-            return f"{intro}, {remaining[0]}."
-        else:
-            return f"{intro}, {remaining[0]}, and {remaining[1]}."
+    
+    intro = random.choice(intros)
+    
+    if len(relevant_facts) == 1:
+        return f"{intro} {relevant_facts[0]}."
+    else:
+        return f"{intro} {relevant_facts[0]}. {relevant_facts[1]}."
+
+
 # ============================================================================
 # THREAD POOL
 # ============================================================================
@@ -1505,8 +1515,7 @@ def execute_full_search(
     times['fetch_docs'] = round((time.time() - t5) * 1000, 2)
 
     # Humanize top result key_facts (semantic path only)
-    # if results and results[0].get('key_facts') and page == 1:
-    #         results[0]['humanized_summary'] = humanize_key_facts(results[0]['key_facts'], query)
+  
     if results and results[0].get('key_facts') and page == 1:
         # Only show AI Overview when top result is highly relevant
         top_facts = ' '.join(results[0].get('key_facts', []))
@@ -1520,8 +1529,9 @@ def execute_full_search(
         matches = sum(1 for w in query_words if w in top_title.lower() or w in top_facts.lower())
         confidence = matches / len(query_words) if query_words else 0
         
-        if confidence >= 0.75:  # At least half the meaningful words match
-            results[0]['humanized_summary'] = humanize_key_facts(results[0]['key_facts'], query)
+        if confidence >= 0.75:
+            matched_keyword = max(query_words, key=lambda w: (w in top_title.lower()) + (w in top_facts.lower())) if query_words else ''
+            results[0]['humanized_summary'] = humanize_key_facts(results[0]['key_facts'], query, matched_keyword=matched_keyword)
 
     # Store query embedding for popular queries
     if query_embedding:
