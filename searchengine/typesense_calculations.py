@@ -2905,3 +2905,1254 @@ def get_cache_stats() -> Dict:
             })
         
         return stats
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# """
+# typesense_discovery_bridge.py
+# =============================
+# Bridge between Word Discovery v2 and Typesense Search.
+
+# PHILOSOPHY:
+#     - Word Discovery provides RICH metadata (category, rank, pos, etc.)
+#     - The bridge uses ALL metadata to paint the picture
+#     - The picture determines: filters, field priorities, document types
+#     - ONE query to Typesense with graph (filters) + semantic (embedding)
+
+# FLOW:
+#     1. RECEIVE: Full Word Discovery output with all metadata
+#     2. PROFILE: Analyze metadata to understand query intent
+#     3. MAP: Convert categories to Typesense fields and filters
+#     4. BUILD: One query with filters + field weights + vector search
+#     5. EXECUTE: Typesense handles graph + semantic fusion
+#     6. RETURN: Ranked results
+
+# QUERY PROFILE:
+#     - Scores from Word Discovery determine PRIMARY INTENT
+#     - Person query (MLK speech) vs Organization query (MLK Foundation)
+#     - Intent determines: field_boosts, preferred_data_types, filters
+# """
+
+# import re
+# import json
+# import typesense
+# from typing import Dict, List, Tuple, Optional, Any, Set
+# from decouple import config
+
+
+# # =============================================================================
+# # CONFIGURATION
+# # =============================================================================
+
+# # Category to Typesense field mapping
+# CATEGORY_TO_FIELD = {
+#     # Locations → filter fields
+#     'US City': 'location_city',
+#     'US State': 'location_state',
+#     'US County': 'location_city',
+#     'City': 'location_city',
+#     'State': 'location_state',
+#     'Country': 'location_country',
+#     'Location': 'location_city',
+    
+#     # Entities → search in entity_names
+#     'Person': 'entity_names',
+#     'Historical Figure': 'entity_names',
+#     'Celebrity': 'entity_names',
+#     'Athlete': 'entity_names',
+#     'Politician': 'entity_names',
+#     'Organization': 'entity_names',
+#     'Company': 'entity_names',
+#     'Business': 'entity_names',
+#     'Brand': 'entity_names',
+#     'HBCU': 'entity_names',
+#     'entity': 'entity_names',
+    
+#     # Keywords → search in primary_keywords
+#     'Keyword': 'primary_keywords',
+#     'Topic': 'primary_keywords',
+#     'Primary Keyword': 'primary_keywords',
+    
+#     # Dictionary words → search in key_facts, document_title
+#     'Dictionary Word': 'key_facts',
+    
+#     # Media → search in semantic_keywords
+#     'Song': 'semantic_keywords',
+#     'Movie': 'semantic_keywords',
+#     'Album': 'semantic_keywords',
+#     'Book': 'semantic_keywords',
+    
+#     # Food → search in primary_keywords
+#     'Food': 'primary_keywords',
+#     'Cuisine': 'primary_keywords',
+#     'Recipe': 'primary_keywords',
+# }
+
+# # Categories that should become FILTERS (not search terms)
+# FILTER_CATEGORIES = frozenset([
+#     'US City', 'US State', 'US County', 'City', 'State', 'Country', 'Location',
+# ])
+
+# # Categories for intent detection
+# PERSON_CATEGORIES = frozenset([
+#     'Person', 'Historical Figure', 'Celebrity', 'Athlete', 'Politician',
+# ])
+
+# ORGANIZATION_CATEGORIES = frozenset([
+#     'Organization', 'Company', 'Business', 'Brand', 'HBCU',
+# ])
+
+# LOCATION_CATEGORIES = frozenset([
+#     'US City', 'US State', 'US County', 'City', 'State', 'Country', 'Location',
+# ])
+
+# KEYWORD_CATEGORIES = frozenset([
+#     'Keyword', 'Topic', 'Primary Keyword',
+# ])
+
+# MEDIA_CATEGORIES = frozenset([
+#     'Song', 'Movie', 'Album', 'Book', 'TV Show',
+# ])
+
+# # US State abbreviations
+# US_STATE_ABBREV = {
+#     'alabama': 'AL', 'alaska': 'AK', 'arizona': 'AZ', 'arkansas': 'AR',
+#     'california': 'CA', 'colorado': 'CO', 'connecticut': 'CT', 'delaware': 'DE',
+#     'florida': 'FL', 'georgia': 'GA', 'hawaii': 'HI', 'idaho': 'ID',
+#     'illinois': 'IL', 'indiana': 'IN', 'iowa': 'IA', 'kansas': 'KS',
+#     'kentucky': 'KY', 'louisiana': 'LA', 'maine': 'ME', 'maryland': 'MD',
+#     'massachusetts': 'MA', 'michigan': 'MI', 'minnesota': 'MN', 'mississippi': 'MS',
+#     'missouri': 'MO', 'montana': 'MT', 'nebraska': 'NE', 'nevada': 'NV',
+#     'new hampshire': 'NH', 'new jersey': 'NJ', 'new mexico': 'NM', 'new york': 'NY',
+#     'north carolina': 'NC', 'north dakota': 'ND', 'ohio': 'OH', 'oklahoma': 'OK',
+#     'oregon': 'OR', 'pennsylvania': 'PA', 'rhode island': 'RI', 'south carolina': 'SC',
+#     'south dakota': 'SD', 'tennessee': 'TN', 'texas': 'TX', 'utah': 'UT',
+#     'vermont': 'VT', 'virginia': 'VA', 'washington': 'WA', 'west virginia': 'WV',
+#     'wisconsin': 'WI', 'wyoming': 'WY', 'district of columbia': 'DC',
+# }
+
+
+# # =============================================================================
+# # HELPER FUNCTIONS
+# # =============================================================================
+
+# def _parse_rank(rank_value: Any) -> int:
+#     """Parse rank to integer."""
+#     if isinstance(rank_value, int):
+#         return rank_value
+#     try:
+#         return int(float(rank_value))
+#     except (ValueError, TypeError):
+#         return 0
+
+
+# def get_state_variants(state_name: str) -> List[str]:
+#     """Get both full name and abbreviation for a state."""
+#     state_lower = state_name.lower().strip()
+#     variants = [state_name.title()]
+    
+#     if state_lower in US_STATE_ABBREV:
+#         variants.append(US_STATE_ABBREV[state_lower])
+    
+#     for full, abbrev in US_STATE_ABBREV.items():
+#         if abbrev.lower() == state_lower:
+#             variants.append(full.title())
+#             break
+    
+#     return list(set(variants))
+
+
+# def is_location_category(category: str) -> bool:
+#     """Check if category is a location type."""
+#     return category in LOCATION_CATEGORIES
+
+
+# def is_state_category(category: str) -> bool:
+#     """Check if category is specifically a state."""
+#     if not category:
+#         return False
+#     cat_lower = category.lower()
+#     return 'state' in cat_lower
+
+
+# def is_city_category(category: str) -> bool:
+#     """Check if category is specifically a city."""
+#     if not category:
+#         return False
+#     cat_lower = category.lower()
+#     return 'city' in cat_lower or 'county' in cat_lower
+
+
+# # =============================================================================
+# # STEP 1: RECEIVE - Parse Word Discovery Output
+# # =============================================================================
+
+# def parse_discovery_output(discovery: Dict) -> Dict:
+#     """
+#     Parse and normalize Word Discovery output.
+#     Extracts all terms and ngrams with their full metadata.
+#     """
+#     parsed = {
+#         'query': discovery.get('query', ''),
+#         'corrected_query': discovery.get('corrected_query', ''),
+#         'terms': [],
+#         'ngrams': [],
+#         'stats': discovery.get('stats', {}),
+#     }
+    
+#     # Parse terms with full metadata
+#     for term in discovery.get('terms', []):
+#         parsed['terms'].append({
+#             'position': term.get('position', 0),
+#             'word': term.get('word', ''),
+#             'display': term.get('display', term.get('word', '')),
+#             'status': term.get('status', 'unknown'),
+#             'is_stopword': term.get('is_stopword', False),
+#             'part_of_ngram': term.get('part_of_ngram', False),
+#             'category': term.get('category', ''),
+#             'pos': term.get('pos', ''),
+#             'rank': _parse_rank(term.get('rank', 0)),
+#             'entity_type': term.get('entity_type', 'unigram'),
+#             'description': term.get('description', ''),
+#             'corrected': term.get('corrected'),
+#             'match_count': term.get('match_count', 0),
+#         })
+    
+#     # Parse ngrams with full metadata
+#     for ngram in discovery.get('ngrams', []):
+#         parsed['ngrams'].append({
+#             'type': ngram.get('type', 'bigram'),
+#             'phrase': ngram.get('phrase', ''),
+#             'display': ngram.get('display', ngram.get('phrase', '')),
+#             'words': ngram.get('words', []),
+#             'positions': ngram.get('positions', []),
+#             'category': ngram.get('category', ''),
+#             'pos': ngram.get('pos', ''),
+#             'rank': _parse_rank(ngram.get('rank', 0)),
+#             'description': ngram.get('description', ''),
+#         })
+    
+#     return parsed
+
+
+# # =============================================================================
+# # STEP 2: PROFILE - Analyze Metadata to Understand Intent
+# # =============================================================================
+
+# def build_query_profile(parsed: Dict) -> Dict:
+#     """
+#     Analyze ALL metadata to understand what the user wants.
+#     This paints the picture.
+    
+#     Uses:
+#     - Categories to identify entity types
+#     - Ranks to weight importance
+#     - POS to understand structure
+#     - N-grams vs terms to understand phrases
+#     """
+#     profile = {
+#         # Entity flags
+#         'has_person': False,
+#         'has_organization': False,
+#         'has_location': False,
+#         'has_keyword': False,
+#         'has_media': False,
+#         'has_dictionary_word': False,
+        
+#         # Cumulative scores by type (from ranks)
+#         'person_score': 0,
+#         'organization_score': 0,
+#         'location_score': 0,
+#         'keyword_score': 0,
+#         'media_score': 0,
+        
+#         # Collected items by type
+#         'persons': [],
+#         'organizations': [],
+#         'locations': [],
+#         'keywords': [],
+#         'media_items': [],
+#         'search_terms': [],
+        
+#         # Location details for filters
+#         'cities': [],
+#         'states': [],
+        
+#         # Primary intent (determined by highest score)
+#         'primary_intent': 'general',
+        
+#         # Preferred document types based on intent
+#         'preferred_data_types': [],
+        
+#         # Field boosts for Typesense query_by_weights
+#         'field_boosts': {
+#             'primary_keywords': 10,
+#             'entity_names': 8,
+#             'semantic_keywords': 6,
+#             'key_facts': 4,
+#             'document_title': 3,
+#         },
+        
+#         # All metadata for debugging
+#         'all_terms': [],
+#         'all_ngrams': [],
+#     }
+    
+#     # Build term lookup by position (for n-gram cross-reference)
+#     term_by_position = {t['position']: t for t in parsed['terms']}
+    
+#     # DEBUG: Show the mapping
+#     print(f"\n   DEBUG term_by_position keys: {list(term_by_position.keys())}")
+#     for pos, t in term_by_position.items():
+#         print(f"   DEBUG pos {pos}: word='{t['word']}', category='{t['category']}', rank={t['rank']}")
+    
+#     # Track positions consumed by n-grams
+#     ngram_positions = set()
+    
+#     # =================================================================
+#     # Process N-grams First
+#     # =================================================================
+    
+#     for ngram in parsed['ngrams']:
+#         phrase = ngram['phrase']
+#         category = ngram['category']
+#         rank = ngram['rank']
+#         positions = ngram['positions']
+#         display = ngram['display']
+        
+#         # DEBUG: Show ngram positions
+#         print(f"\n   DEBUG ngram '{phrase}': positions={positions}, category='{category}'")
+        
+#         ngram_positions.update(positions)
+#         profile['all_ngrams'].append(ngram)
+        
+#         # Check individual term categories (they may be more accurate)
+#         term_categories = []
+#         for pos in positions:
+#             term = term_by_position.get(pos, {})
+#             if term.get('category'):
+#                 term_categories.append({
+#                     'word': term.get('word'),
+#                     'category': term.get('category'),
+#                     'rank': term.get('rank', 0),
+#                 })
+        
+#         # DEBUG: Print what we found
+#         print(f"   DEBUG n-gram '{phrase}': term_categories = {term_categories}")
+        
+#         # Determine if this n-gram contains location terms
+#         has_city_term = any(is_city_category(tc['category']) for tc in term_categories)
+#         has_state_term = any(is_state_category(tc['category']) for tc in term_categories)
+        
+#         print(f"   DEBUG: has_city_term={has_city_term}, has_state_term={has_state_term}")
+        
+#         # If individual terms indicate location, use that info
+#         if has_city_term or has_state_term:
+#             profile['has_location'] = True
+            
+#             for tc in term_categories:
+#                 if is_city_category(tc['category']):
+#                     city_name = tc['word'].title()
+#                     if city_name not in [c['name'] for c in profile['cities']]:
+#                         profile['cities'].append({
+#                             'name': city_name,
+#                             'rank': tc['rank'],
+#                         })
+#                     profile['location_score'] += tc['rank']
+                    
+#                 elif is_state_category(tc['category']):
+#                     state_name = tc['word'].title()
+#                     if state_name not in [s['name'] for s in profile['states']]:
+#                         profile['states'].append({
+#                             'name': state_name,
+#                             'rank': tc['rank'],
+#                             'variants': get_state_variants(tc['word']),
+#                         })
+#                     profile['location_score'] += tc['rank']
+        
+#         # Process based on n-gram's own category (if not location)
+#         elif category in PERSON_CATEGORIES:
+#             profile['has_person'] = True
+#             profile['person_score'] += rank
+#             profile['persons'].append({'phrase': phrase, 'display': display, 'rank': rank})
+#             profile['search_terms'].append(phrase)
+            
+#         elif category in ORGANIZATION_CATEGORIES:
+#             profile['has_organization'] = True
+#             profile['organization_score'] += rank
+#             profile['organizations'].append({'phrase': phrase, 'display': display, 'rank': rank})
+#             profile['search_terms'].append(phrase)
+            
+#         elif category in KEYWORD_CATEGORIES:
+#             profile['has_keyword'] = True
+#             profile['keyword_score'] += rank
+#             profile['keywords'].append({'phrase': phrase, 'display': display, 'rank': rank})
+#             profile['search_terms'].append(phrase)
+            
+#         elif category in MEDIA_CATEGORIES:
+#             profile['has_media'] = True
+#             profile['media_score'] += rank
+#             profile['media_items'].append({'phrase': phrase, 'display': display, 'rank': rank})
+#             profile['search_terms'].append(phrase)
+            
+#         elif category in LOCATION_CATEGORIES:
+#             profile['has_location'] = True
+#             profile['location_score'] += rank
+#             profile['locations'].append({'phrase': phrase, 'display': display, 'rank': rank})
+#             # Don't add to search_terms - will be filter
+            
+#         else:
+#             # Unknown category n-gram - add to search terms
+#             profile['search_terms'].append(phrase)
+    
+#     # =================================================================
+#     # Process Individual Terms (not in n-grams)
+#     # =================================================================
+    
+#     for term in parsed['terms']:
+#         position = term['position']
+#         word = term['word']
+#         display = term['display']
+#         category = term['category']
+#         rank = term['rank']
+#         is_stopword = term['is_stopword']
+#         part_of_ngram = term['part_of_ngram'] or (position in ngram_positions)
+        
+#         profile['all_terms'].append(term)
+        
+#         # Skip stopwords and terms already in n-grams
+#         if is_stopword:
+#             continue
+            
+#         if part_of_ngram:
+#             continue
+        
+#         # Classify by category
+#         if category in PERSON_CATEGORIES:
+#             profile['has_person'] = True
+#             profile['person_score'] += rank
+#             profile['persons'].append({'word': word, 'display': display, 'rank': rank})
+#             profile['search_terms'].append(word)
+            
+#         elif category in ORGANIZATION_CATEGORIES:
+#             profile['has_organization'] = True
+#             profile['organization_score'] += rank
+#             profile['organizations'].append({'word': word, 'display': display, 'rank': rank})
+#             profile['search_terms'].append(word)
+            
+#         elif category in KEYWORD_CATEGORIES:
+#             profile['has_keyword'] = True
+#             profile['keyword_score'] += rank
+#             profile['keywords'].append({'word': word, 'display': display, 'rank': rank})
+#             profile['search_terms'].append(word)
+            
+#         elif category in MEDIA_CATEGORIES:
+#             profile['has_media'] = True
+#             profile['media_score'] += rank
+#             profile['media_items'].append({'word': word, 'display': display, 'rank': rank})
+#             profile['search_terms'].append(word)
+            
+#         elif is_city_category(category):
+#             profile['has_location'] = True
+#             profile['location_score'] += rank
+#             city_name = display or word.title()
+#             if city_name not in [c['name'] for c in profile['cities']]:
+#                 profile['cities'].append({'name': city_name, 'rank': rank})
+            
+#         elif is_state_category(category):
+#             profile['has_location'] = True
+#             profile['location_score'] += rank
+#             state_name = display or word.title()
+#             if state_name not in [s['name'] for s in profile['states']]:
+#                 profile['states'].append({
+#                     'name': state_name,
+#                     'rank': rank,
+#                     'variants': get_state_variants(word),
+#                 })
+            
+#         elif category == 'Dictionary Word':
+#             profile['has_dictionary_word'] = True
+#             profile['search_terms'].append(word)
+            
+#         else:
+#             # Unknown category - add to search terms
+#             if word:
+#                 profile['search_terms'].append(word)
+    
+#     # =================================================================
+#     # Determine Primary Intent from Scores
+#     # =================================================================
+    
+#     scores = {
+#         'person': profile['person_score'],
+#         'organization': profile['organization_score'],
+#         'location': profile['location_score'],
+#         'keyword': profile['keyword_score'],
+#         'media': profile['media_score'],
+#     }
+    
+#     # Find highest non-zero score
+#     max_score = max(scores.values())
+#     if max_score > 0:
+#         profile['primary_intent'] = max(scores, key=scores.get)
+#     else:
+#         profile['primary_intent'] = 'general'
+    
+#     # =================================================================
+#     # Set Preferred Document Types Based on Intent
+#     # =================================================================
+    
+#     if profile['primary_intent'] == 'person':
+#         profile['preferred_data_types'] = ['article', 'person', 'media']
+#         profile['field_boosts'] = {
+#             'entity_names': 15,
+#             'key_facts': 10,
+#             'primary_keywords': 8,
+#             'semantic_keywords': 6,
+#             'document_title': 5,
+#         }
+        
+#     elif profile['primary_intent'] == 'organization':
+#         profile['preferred_data_types'] = ['business', 'article', 'organization']
+#         profile['field_boosts'] = {
+#             'entity_names': 15,
+#             'primary_keywords': 12,
+#             'key_facts': 8,
+#             'semantic_keywords': 6,
+#             'document_title': 5,
+#         }
+        
+#     elif profile['primary_intent'] == 'keyword':
+#         profile['preferred_data_types'] = ['article', 'media']
+#         profile['field_boosts'] = {
+#             'primary_keywords': 15,
+#             'key_facts': 10,
+#             'entity_names': 8,
+#             'semantic_keywords': 8,
+#             'document_title': 5,
+#         }
+        
+#     elif profile['primary_intent'] == 'media':
+#         profile['preferred_data_types'] = ['media', 'article']
+#         profile['field_boosts'] = {
+#             'semantic_keywords': 15,
+#             'primary_keywords': 12,
+#             'document_title': 10,
+#             'entity_names': 8,
+#             'key_facts': 5,
+#         }
+        
+#     elif profile['primary_intent'] == 'location':
+#         profile['preferred_data_types'] = ['place', 'business', 'article']
+#         profile['field_boosts'] = {
+#             'primary_keywords': 12,
+#             'entity_names': 10,
+#             'key_facts': 8,
+#             'semantic_keywords': 6,
+#             'document_title': 5,
+#         }
+    
+#     else:
+#         # General intent - balanced weights
+#         profile['preferred_data_types'] = ['article']
+#         profile['field_boosts'] = {
+#             'primary_keywords': 10,
+#             'entity_names': 8,
+#             'key_facts': 6,
+#             'semantic_keywords': 6,
+#             'document_title': 4,
+#         }
+    
+#     return profile
+
+
+# # =============================================================================
+# # STEP 3: MAP - Convert Profile to Typesense Parameters
+# # =============================================================================
+
+# def build_typesense_params(profile: Dict, ui_filters: Dict = None, page: int = 1, per_page: int = 20) -> Dict:
+#     """
+#     Convert the query profile into Typesense search parameters.
+    
+#     Builds:
+#     - filter_by: from locations
+#     - query_by: from field_boosts
+#     - query_by_weights: from field_boosts values
+#     - q: from search_terms
+#     """
+#     params = {}
+    
+#     # =================================================================
+#     # Build Query String (q)
+#     # =================================================================
+    
+#     search_terms = profile.get('search_terms', [])
+    
+#     # Remove duplicates while preserving order
+#     seen = set()
+#     unique_terms = []
+#     for term in search_terms:
+#         term_lower = term.lower()
+#         if term_lower not in seen:
+#             seen.add(term_lower)
+#             unique_terms.append(term)
+    
+#     params['q'] = ' '.join(unique_terms) if unique_terms else '*'
+    
+#     # =================================================================
+#     # Build Query By Fields and Weights
+#     # =================================================================
+    
+#     field_boosts = profile.get('field_boosts', {})
+    
+#     # Sort by weight descending
+#     sorted_fields = sorted(field_boosts.items(), key=lambda x: x[1], reverse=True)
+    
+#     params['query_by'] = ','.join([f[0] for f in sorted_fields])
+#     params['query_by_weights'] = ','.join([str(f[1]) for f in sorted_fields])
+    
+#     # =================================================================
+#     # Build Filter String
+#     # =================================================================
+    
+#     filter_conditions = []
+    
+#     # Location filters
+#     cities = profile.get('cities', [])
+#     states = profile.get('states', [])
+    
+#     if cities:
+#         city_names = [c['name'] for c in cities]
+#         # Use OR for multiple cities
+#         city_filters = [f"location_city:={name}" for name in city_names]
+#         if len(city_filters) == 1:
+#             filter_conditions.append(city_filters[0])
+#         else:
+#             filter_conditions.append('(' + ' || '.join(city_filters) + ')')
+    
+#     if states:
+#         state_conditions = []
+#         for state in states:
+#             variants = state.get('variants', [state['name']])
+#             for variant in variants:
+#                 state_conditions.append(f"location_state:={variant}")
+        
+#         if len(state_conditions) == 1:
+#             filter_conditions.append(state_conditions[0])
+#         else:
+#             filter_conditions.append('(' + ' || '.join(state_conditions) + ')')
+    
+#     # UI filters (data_type, category, schema)
+#     if ui_filters:
+#         if ui_filters.get('data_type'):
+#             filter_conditions.append(f"document_data_type:={ui_filters['data_type']}")
+#         if ui_filters.get('category'):
+#             filter_conditions.append(f"document_category:={ui_filters['category']}")
+#         if ui_filters.get('schema'):
+#             filter_conditions.append(f"document_schema:={ui_filters['schema']}")
+    
+#     if filter_conditions:
+#         params['filter_by'] = ' && '.join(filter_conditions)
+    
+#     # =================================================================
+#     # Other Parameters
+#     # =================================================================
+    
+#     params['page'] = page
+#     params['per_page'] = per_page
+#     params['sort_by'] = 'authority_score:desc,published_date:desc'
+#     params['num_typos'] = 1
+#     params['drop_tokens_threshold'] = 1  # Allow some flexibility
+    
+#     return params
+
+
+# # =============================================================================
+# # STEP 4 & 5: BUILD AND EXECUTE - Run the Typesense Query
+# # =============================================================================
+
+# def execute_search(
+#     discovery: Dict,
+#     ui_filters: Dict = None,
+#     page: int = 1,
+#     per_page: int = 20,
+#     client = None,
+#     collection_name: str = 'documents',
+#     embedding: List[float] = None,
+#     verbose: bool = False,
+# ) -> Dict:
+#     """
+#     Execute a complete search using Word Discovery output.
+    
+#     Steps:
+#     1. Parse discovery output
+#     2. Build query profile (analyze all metadata)
+#     3. Map profile to Typesense parameters
+#     4. Execute search (with optional vector query)
+#     5. Return results with profile info
+#     """
+    
+#     # Step 1: Parse
+#     parsed = parse_discovery_output(discovery)
+    
+#     # Step 2: Profile
+#     profile = build_query_profile(parsed)
+    
+#     # Step 3: Map to Typesense params
+#     params = build_typesense_params(profile, ui_filters, page, per_page)
+    
+#     # Add vector query if embedding provided
+#     if embedding:
+#         embedding_str = ','.join(str(x) for x in embedding)
+#         params['vector_query'] = f"embedding:([{embedding_str}], k:{per_page * 5}, alpha:0.5)"
+    
+#     # Verbose output
+#     if verbose:
+#         print_profile(profile)
+#         print_params(params)
+    
+#     # Build response
+#     response = {
+#         'query': parsed['query'],
+#         'corrected_query': parsed['corrected_query'],
+#         'profile': profile,
+#         'params': params,
+#         'hits': [],
+#         'found': 0,
+#     }
+    
+#     # Step 4 & 5: Execute if client provided
+#     if client:
+#         try:
+#             result = client.collections[collection_name].documents.search(params)
+#             response['hits'] = result.get('hits', [])
+#             response['found'] = result.get('found', 0)
+#             response['typesense_response'] = result
+#         except Exception as e:
+#             response['error'] = str(e)
+#             print(f"❌ Typesense error: {e}")
+    
+#     return response
+
+
+# # =============================================================================
+# # PRETTY PRINT HELPERS
+# # =============================================================================
+
+# def print_profile(profile: Dict) -> None:
+#     """Pretty print the query profile."""
+#     print("\n" + "=" * 70)
+#     print("📊 QUERY PROFILE")
+#     print("=" * 70)
+    
+#     print(f"\n🎯 Primary Intent: {profile['primary_intent'].upper()}")
+    
+#     print(f"\n📈 Scores:")
+#     print(f"   Person: {profile['person_score']}")
+#     print(f"   Organization: {profile['organization_score']}")
+#     print(f"   Location: {profile['location_score']}")
+#     print(f"   Keyword: {profile['keyword_score']}")
+#     print(f"   Media: {profile['media_score']}")
+    
+#     if profile['persons']:
+#         print(f"\n👤 Persons:")
+#         for p in profile['persons']:
+#             print(f"   • {p.get('phrase') or p.get('word')} (rank: {p['rank']})")
+    
+#     if profile['organizations']:
+#         print(f"\n🏢 Organizations:")
+#         for o in profile['organizations']:
+#             print(f"   • {o.get('phrase') or o.get('word')} (rank: {o['rank']})")
+    
+#     if profile['cities'] or profile['states']:
+#         print(f"\n📍 Locations:")
+#         for c in profile['cities']:
+#             print(f"   • City: {c['name']} (rank: {c['rank']})")
+#         for s in profile['states']:
+#             print(f"   • State: {s['name']} → {s['variants']} (rank: {s['rank']})")
+    
+#     if profile['keywords']:
+#         print(f"\n🏷️ Keywords:")
+#         for k in profile['keywords']:
+#             print(f"   • {k.get('phrase') or k.get('word')} (rank: {k['rank']})")
+    
+#     if profile['search_terms']:
+#         print(f"\n🔍 Search Terms: {profile['search_terms']}")
+    
+#     print(f"\n📁 Preferred Doc Types: {profile['preferred_data_types']}")
+    
+#     print(f"\n⚖️ Field Boosts:")
+#     for field, weight in sorted(profile['field_boosts'].items(), key=lambda x: -x[1]):
+#         print(f"   • {field}: {weight}")
+
+
+# def print_params(params: Dict) -> None:
+#     """Pretty print Typesense params."""
+#     print("\n" + "=" * 70)
+#     print("🔎 TYPESENSE PARAMETERS")
+#     print("=" * 70)
+#     print(json.dumps(params, indent=2))
+
+
+# def print_results(response: Dict) -> None:
+#     """Pretty print search results."""
+#     print("\n" + "=" * 70)
+#     print("📄 SEARCH RESULTS")
+#     print("=" * 70)
+    
+#     found = response.get('found', 0)
+#     hits = response.get('hits', [])
+    
+#     print(f"\n🎯 Found: {found} documents")
+#     print(f"📑 Showing: {len(hits)} results\n")
+    
+#     for i, hit in enumerate(hits, 1):
+#         doc = hit.get('document', {})
+        
+#         title = doc.get('document_title', 'No title')[:60]
+#         url = doc.get('document_url', '')[:50]
+#         category = doc.get('document_category', 'unknown')
+#         data_type = doc.get('document_data_type', 'unknown')
+#         authority = doc.get('authority_score', 0)
+        
+#         vector_dist = hit.get('vector_distance')
+#         text_match = hit.get('text_match', 0)
+        
+#         print(f"  {i}. {title}")
+#         print(f"     📁 {data_type} | {category}")
+#         print(f"     🔗 {url}...")
+#         print(f"     📊 Authority: {authority} | Text Match: {text_match}", end="")
+#         if vector_dist is not None:
+#             print(f" | Vector: {vector_dist:.4f}")
+#         else:
+#             print()
+        
+#         city = doc.get('location_city')
+#         state = doc.get('location_state')
+#         if city or state:
+#             loc_str = ', '.join(filter(None, [city, state]))
+#             print(f"     📍 {loc_str}")
+        
+#         print()
+
+
+# # =============================================================================
+# # LIVE TEST FUNCTION
+# # =============================================================================
+
+# def run_live_test(query: str, verbose: bool = True):
+#     """
+#     Run a LIVE test:
+#     1. Call word_discovery_v2.py
+#     2. Build profile from metadata
+#     3. Execute Typesense search
+#     4. Display results
+#     """
+#     print("\n" + "=" * 70)
+#     print(f"🚀 LIVE TEST: '{query}'")
+#     print("=" * 70)
+    
+#     # Step 1: Run Word Discovery
+#     print("\n📖 STEP 1: Running Word Discovery v2...")
+    
+#     try:
+#         from word_discovery_fulltest import WordDiscovery
+#         wd = WordDiscovery(verbose=verbose)
+#         discovery = wd.process(query)
+#         print(f"   ✅ Word Discovery complete: {discovery['stats']}")
+#     except ImportError as e:
+#         print(f"   ❌ Could not import word_discovery_v2: {e}")
+#         return None
+#     except Exception as e:
+#         print(f"   ❌ Word Discovery error: {e}")
+#         import traceback
+#         traceback.print_exc()
+#         return None
+    
+#     # Step 2: Connect to Typesense
+#     print("\n🔌 STEP 2: Connecting to Typesense...")
+    
+#     try:
+#         client = typesense.Client({
+#             'api_key': config('TYPESENSE_API_KEY'),
+#             'nodes': [{
+#                 'host': config('TYPESENSE_HOST'),
+#                 'port': config('TYPESENSE_PORT'),
+#                 'protocol': config('TYPESENSE_PROTOCOL')
+#             }],
+#             'connection_timeout_seconds': 5
+#         })
+#         client.collections['documents'].retrieve()
+#         print("   ✅ Connected to Typesense")
+#     except Exception as e:
+#         print(f"   ❌ Typesense connection error: {e}")
+#         return None
+    
+#     # Step 3: Execute Search
+#     print("\n🔍 STEP 3: Executing search...")
+    
+#     response = execute_search(
+#         discovery=discovery,
+#         ui_filters=None,
+#         page=1,
+#         per_page=10,
+#         client=client,
+#         collection_name='documents',
+#         embedding=None,  # Add embedding support later
+#         verbose=True,
+#     )
+    
+#     # Step 4: Display Results
+#     print_results(response)
+    
+#     # Summary
+#     print("=" * 70)
+#     print("📊 SUMMARY")
+#     print("=" * 70)
+#     profile = response.get('profile', {})
+#     print(f"  Query: '{query}'")
+#     print(f"  Primary Intent: {profile.get('primary_intent', 'unknown')}")
+#     print(f"  Locations: {len(profile.get('cities', []))} cities, {len(profile.get('states', []))} states")
+#     print(f"  Filter Applied: {response.get('params', {}).get('filter_by', 'none')}")
+#     print(f"  Total Found: {response.get('found', 0)}")
+    
+#     return response
+
+
+# # =============================================================================
+# # MAIN ENTRY POINT
+# # =============================================================================
+
+# if __name__ == "__main__":
+#     import sys
+    
+#     if len(sys.argv) > 1:
+#         query = ' '.join(sys.argv[1:])
+#         run_live_test(query, verbose=True)
+#     else:
+#         print("\n" + "=" * 70)
+#         print("TYPESENSE DISCOVERY BRIDGE - Test Runner")
+#         print("=" * 70)
+#         print("\nUsage:")
+#         print("  python typesense_discovery_bridge.py \"your search query\"")
+#         print("\nExamples:")
+#         print("  python typesense_discovery_bridge.py \"black owned restaurants in atlanta georgia\"")
+#         print("  python typesense_discovery_bridge.py \"martin luther king speech\"")
+#         print("  python typesense_discovery_bridge.py \"martin luther king foundation atlanta\"")
+#         print("  python typesense_discovery_bridge.py \"hbcu football teams in alabama\"")
+#         print("\nThis will:")
+#         print("  1. Call word_discovery_v2.py to process your query")
+#         print("  2. Build a PROFILE from all metadata (scores, categories, etc.)")
+#         print("  3. Map profile to Typesense parameters")
+#         print("  4. Execute search and display ranked results")
+
+
+    
+# ============================================================================
+# MAIN ENTRY POINT: execute_full_search
+# ============================================================================
+
+# def execute_full_search(
+#     query: str,
+#     session_id: str = None,
+#     filters: Dict = None,
+#     page: int = 1,
+#     per_page: int = 20,
+#     user_location: Tuple[float, float] = None,
+#     pos_tags: List[Tuple] = None,
+#     safe_search: bool = True,
+#     alt_mode: str = 'y',
+#     skip_embedding: bool = False,
+#     search_source: str = None
+# ) -> Dict:
+#     """
+#     Main entry point for search.
+    
+#     Returns same structure as old execute_full_search() for views.py compatibility.
+    
+#     alt_mode:
+#         'n' = KEYWORD PATH - no semantic reranking
+#         'y' = SEMANTIC PATH - full staged retrieval
+#     """
+#     times = {}
+#     t0 = time.time()
+    
+#     # Extract active filters
+#     active_data_type = filters.get('data_type') if filters else None
+#     active_category = filters.get('category') if filters else None
+#     active_schema = filters.get('schema') if filters else None
+    
+#     if filters:
+#         active_filters = {k: v for k, v in filters.items() if v}
+#         if active_filters:
+#             print(f"🎛️ Active UI filters: {active_filters}")
+    
+#     # =========================================================================
+#     # KEYWORD PATH (alt_mode='n')
+#     # =========================================================================
+    
+#     is_keyword_path = (alt_mode == 'n') or search_source in ('dropdown', 'keyword', 'suggestion', 'autocomplete')
+    
+#     if is_keyword_path:
+#         print(f"⚡ KEYWORD PATH: '{query}'")
+        
+#         intent = detect_query_intent(query, pos_tags)
+        
+#         # Simple profile for keyword path
+#         profile = {
+#             'search_terms': query.split(),
+#             'cities': [],
+#             'states': [],
+#             'primary_intent': intent,
+#             'field_boosts': {
+#                 'primary_keywords': 10,
+#                 'entity_names': 8,
+#                 'semantic_keywords': 6,
+#                 'key_facts': 4,
+#                 'document_title': 3,
+#             },
+#         }
+        
+#         cache_key = _generate_cache_key(query, 'keyword', [], [])
+#         cached_data = _get_cached_results(cache_key)
+        
+#         if cached_data:
+#             print(f"✅ Cache HIT: {len(cached_data)} candidates")
+#             all_results = cached_data
+#             times['cache'] = 'hit'
+#         else:
+#             print(f"❌ Cache MISS: Running Stage 1...")
+#             t1 = time.time()
+#             all_results = fetch_candidate_ids(query, profile)
+#             times['stage1'] = round((time.time() - t1) * 1000, 2)
+            
+#             if all_results:
+#                 _set_cached_results(cache_key, all_results)
+#             times['cache'] = 'miss'
+        
+#         # Facets from cache
+#         all_facets = count_facets_from_cache(all_results)
+#         facet_total = len(all_results)
+        
+#         # Filter by UI filters
+#         filtered_results = filter_cached_results(
+#             all_results,
+#             data_type=active_data_type,
+#             category=active_category,
+#             schema=active_schema
+#         )
+        
+#         # Paginate
+#         page_items, total_filtered = paginate_cached_results(filtered_results, page, per_page)
+        
+#         # Fetch full documents
+#         t2 = time.time()
+#         page_ids = [item['id'] for item in page_items]
+#         results = fetch_full_documents(page_ids, query)
+#         times['fetch_docs'] = round((time.time() - t2) * 1000, 2)
+        
+#         times['total'] = round((time.time() - t0) * 1000, 2)
+        
+#         print(f"⏱️ TIMING: {times}")
+#         print(f"🔍 KEYWORD PATH | Total: {facet_total} | Filtered: {total_filtered} | Page: {len(results)}")
+        
+#         return {
+#             'query': query,
+#             'corrected_query': query,
+#             'intent': intent,
+#             'results': results,
+#             'total': total_filtered,
+#             'facet_total': facet_total,
+#             'page': page,
+#             'per_page': per_page,
+#             'search_time': round(time.time() - t0, 3),
+#             'session_id': session_id,
+#             'semantic_enabled': False,
+#             'search_strategy': 'keyword_graph_filter',
+#             'alt_mode': alt_mode,
+#             'skip_embedding': True,
+#             'search_source': search_source or 'dropdown',
+#             'valid_terms': query.split(),
+#             'unknown_terms': [],
+#             'data_type_facets': all_facets.get('data_type', []),
+#             'category_facets': all_facets.get('category', []),
+#             'schema_facets': all_facets.get('schema', []),
+#             'related_searches': [],
+#             'facets': all_facets,
+#             'word_discovery': {
+#                 'valid_count': len(query.split()),
+#                 'unknown_count': 0,
+#                 'corrections': [],
+#                 'filters': [],
+#                 'locations': [],
+#                 'sort': None,
+#                 'total_score': 0,
+#                 'average_score': 0,
+#                 'max_score': 0,
+#             },
+#             'timings': times,
+#             'filters_applied': {
+#                 'data_type': active_data_type,
+#                 'category': active_category,
+#                 'schema': active_schema,
+#             }
+#         }
+    
+#     # =========================================================================
+#     # SEMANTIC PATH (alt_mode='y')
+#     # =========================================================================
+    
+#     print(f"🔬 SEMANTIC PATH: '{query}'")
+    
+#     # Run word discovery and embedding in parallel
+#     t1 = time.time()
+#     discovery, query_embedding = run_parallel_prep(query, skip_embedding=skip_embedding)
+#     times['parallel_prep'] = round((time.time() - t1) * 1000, 2)
+    
+#     corrected_query = discovery.get('corrected_query', query)
+#     semantic_enabled = query_embedding is not None
+    
+#     # Build profile from discovery
+#     t2 = time.time()
+#     profile = build_query_profile(discovery)
+#     times['build_profile'] = round((time.time() - t2) * 1000, 2)
+    
+#     intent = profile.get('primary_intent', 'general')
+    
+#     print(f"   Intent: {intent}")
+#     print(f"   Cities: {[c['name'] for c in profile.get('cities', [])]}")
+#     print(f"   States: {[s['name'] for s in profile.get('states', [])]}")
+#     print(f"   Search Terms: {profile.get('search_terms', [])}")
+    
+#     # Generate cache key
+#     city_names = [c['name'] for c in profile.get('cities', [])]
+#     state_names = [s['name'] for s in profile.get('states', [])]
+#     cache_key = _generate_cache_key(corrected_query, 'semantic', city_names, state_names)
+    
+#     # Check cache
+#     cached_data = _get_cached_results(cache_key)
+    
+#     if cached_data:
+#         print(f"✅ Cache HIT: {len(cached_data)} candidates")
+#         all_results = cached_data
+#         times['cache'] = 'hit'
+#     else:
+#         print(f"❌ Cache MISS: Running Stage 1...")
+#         t3 = time.time()
+#         all_results = fetch_candidate_ids(corrected_query, profile)
+#         times['stage1'] = round((time.time() - t3) * 1000, 2)
+        
+#         if all_results:
+#             _set_cached_results(cache_key, all_results)
+#         times['cache'] = 'miss'
+    
+#     # Facets from cache
+#     all_facets = count_facets_from_cache(all_results)
+#     facet_total = len(all_results)
+    
+#     print(f"📊 Facets: {[(f['value'], f['count']) for f in all_facets.get('data_type', [])]}")
+    
+#     # Filter by UI filters
+#     filtered_results = filter_cached_results(
+#         all_results,
+#         data_type=active_data_type,
+#         category=active_category,
+#         schema=active_schema
+#     )
+    
+#     # Stage 2: Semantic Rerank
+#     if semantic_enabled and filtered_results:
+#         t4 = time.time()
+#         candidate_ids = [item['id'] for item in filtered_results]
+#         reranked = semantic_rerank_candidates(candidate_ids, query_embedding, max_to_rerank=500)
+#         filtered_results = apply_semantic_ranking(filtered_results, reranked)
+#         times['stage2'] = round((time.time() - t4) * 1000, 2)
+#     else:
+#         print(f"⚠️ Skipping Stage 2: semantic={semantic_enabled}, filtered={len(filtered_results)}")
+    
+#     # Paginate
+#     page_items, total_filtered = paginate_cached_results(filtered_results, page, per_page)
+    
+#     # Fetch full documents
+#     t5 = time.time()
+#     page_ids = [item['id'] for item in page_items]
+#     results = fetch_full_documents(page_ids, query)
+#     times['fetch_docs'] = round((time.time() - t5) * 1000, 2)
+    
+#     times['total'] = round((time.time() - t0) * 1000, 2)
+    
+#     strategy = 'staged_semantic' if semantic_enabled else 'keyword_fallback'
+    
+#     print(f"⏱️ TIMING: {times}")
+#     print(f"🔍 {strategy.upper()} | Total: {facet_total} | Filtered: {total_filtered} | Page: {len(results)}")
+    
+#     # Extract valid/unknown terms
+#     valid_terms = profile.get('search_terms', [])
+#     unknown_terms = [t['word'] for t in discovery.get('terms', []) if t.get('status') == 'unknown']
+    
+#     return {
+#         'query': query,
+#         'corrected_query': corrected_query,
+#         'intent': intent,
+#         'results': results,
+#         'total': total_filtered,
+#         'facet_total': facet_total,
+#         'page': page,
+#         'per_page': per_page,
+#         'search_time': round(time.time() - t0, 3),
+#         'session_id': session_id,
+#         'semantic_enabled': semantic_enabled,
+#         'search_strategy': strategy,
+#         'alt_mode': alt_mode,
+#         'skip_embedding': skip_embedding,
+#         'search_source': search_source,
+#         'valid_terms': valid_terms,
+#         'unknown_terms': unknown_terms,
+#         'related_searches': [],
+#         'data_type_facets': all_facets.get('data_type', []),
+#         'category_facets': all_facets.get('category', []),
+#         'schema_facets': all_facets.get('schema', []),
+#         'facets': all_facets,
+#         'word_discovery': {
+#             'valid_count': discovery.get('stats', {}).get('valid_words', 0),
+#             'unknown_count': discovery.get('stats', {}).get('unknown_words', 0),
+#             'corrections': discovery.get('corrections', []),
+#             'filters': [],
+#             'locations': [
+#                 {'field': 'location_city', 'values': city_names},
+#                 {'field': 'location_state', 'values': state_names},
+#             ] if city_names or state_names else [],
+#             'sort': None,
+#             'total_score': 0,
+#             'average_score': 0,
+#             'max_score': 0,
+#         },
+#         'timings': times,
+#         'filters_applied': {
+#             'data_type': active_data_type,
+#             'category': active_category,
+#             'schema': active_schema,
+#             'graph_filters': [],
+#             'graph_locations': [
+#                 {'field': 'location_city', 'values': city_names},
+#                 {'field': 'location_state', 'values': state_names},
+#             ] if city_names or state_names else [],
+#             'graph_sort': None,
+#         },
+#         'profile': profile,  # Include profile for debugging
+#     }
