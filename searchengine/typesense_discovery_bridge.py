@@ -2715,7 +2715,22 @@ def execute_full_search(
     times['fetch_docs'] = round((time.time() - t5) * 1000, 2)
 
     # Humanize top result key_facts (semantic path only)
+    # if results and results[0].get('key_facts') and page == 1:
+    #         results[0]['humanized_summary'] = humanize_key_facts(results[0]['key_facts'], query)
     if results and results[0].get('key_facts') and page == 1:
+        # Only show AI Overview when top result is highly relevant
+        top_facts = ' '.join(results[0].get('key_facts', []))
+        top_title = results[0].get('title', '')
+        
+        # Get meaningful words from query (skip stopwords)
+        stopwords = {'who', 'what', 'where', 'when', 'why', 'how', 'is', 'are', 'the', 'a', 'an', 'in', 'of', 'for', 'to', 'do', 'does', 'can', 'was', 'were', 'be', 'been', 'it', 'its', 'this', 'that'}
+        query_words = [w for w in query.lower().split() if w not in stopwords and len(w) > 1]
+        
+        # Count how many query words appear in title or key_facts
+        matches = sum(1 for w in query_words if w in top_title.lower() or w in top_facts.lower())
+        confidence = matches / len(query_words) if query_words else 0
+        
+        if confidence >= 0.5:  # At least half the meaningful words match
             results[0]['humanized_summary'] = humanize_key_facts(results[0]['key_facts'], query)
 
     # Store query embedding for popular queries
