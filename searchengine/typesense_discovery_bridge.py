@@ -1038,19 +1038,24 @@ except ImportError:
 
 
 
-def humanize_key_facts(key_facts: list) -> str:
-    """Summarize key_facts into a readable sentence using Flan-T5."""
+def humanize_key_facts(key_facts: list, query: str = '') -> str:
+    """Summarize key_facts into a readable answer using Flan-T5."""
     if not key_facts:
         return ''
     
-    facts_text = '. '.join(key_facts[:3])  # Use top 3 facts max
+    facts_text = '. '.join(key_facts[:3])
+    
+    if query and any(query.lower().startswith(w) for w in ['who', 'what', 'where', 'when', 'why', 'how', 'is', 'are', 'can', 'do', 'does']):
+        prompt = f"Answer this question using the facts below. Question: {query} Facts: {facts_text}"
+    else:
+        prompt = f"Summarize these facts into one clear sentence: {facts_text}"
     
     try:
         response = requests.post(
             'http://localhost:8001/humanize',
             json={
                 'text': facts_text,
-                'prompt': f'Summarize these facts into one clear sentence: {facts_text}'
+                'prompt': prompt
             },
             timeout=5
         )
@@ -2108,7 +2113,7 @@ def format_result(hit: Dict, query: str = '') -> Dict:
         'cluster_uuid': doc.get('cluster_uuid'),
         'semantic_uuid': doc.get('semantic_uuid'),
         'key_facts': doc.get('key_facts', []),
-        'humanized_summary': humanize_key_facts(doc.get('key_facts', [])),
+        'humanized_summary': '',
         'key_facts_highlighted': highlight_map.get('key_facts', ''),
         'semantic_score': semantic_score,
         'location': {
@@ -2711,7 +2716,7 @@ def execute_full_search(
 
     # Humanize top result key_facts (semantic path only)
     if results and results[0].get('key_facts') and page == 1:
-            results[0]['humanized_summary'] = humanize_key_facts(results[0]['key_facts'])
+            results[0]['humanized_summary'] = humanize_key_facts(results[0]['key_facts'], query)
 
     # Store query embedding for popular queries
     if query_embedding:
