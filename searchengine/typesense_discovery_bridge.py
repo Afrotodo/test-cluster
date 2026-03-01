@@ -1970,6 +1970,32 @@ def execute_full_search(
         reranked = semantic_rerank_candidates(candidate_ids, query_embedding, max_to_rerank=500)
         filtered_results = apply_semantic_ranking(filtered_results, reranked, signals=signals)
         times['stage2'] = round((time.time() - t4) * 1000, 2)
+        
+        # ─── Vector distance hard filter ─────────────────────────────
+        # Remove results that are too far from the query embedding.
+        # Thresholds vary by mode: answer is strictest, browse is most lenient.
+        DISTANCE_THRESHOLDS = {
+            'answer':  0.60,
+            'explore': 0.70,
+            'compare': 0.65,
+            'browse':  0.85,
+            'local':   0.85,
+            'shop':    0.80,
+        }
+        threshold = DISTANCE_THRESHOLDS.get(query_mode, 0.75)
+        
+        before_filter = len(filtered_results)
+        filtered_results = [
+            r for r in filtered_results
+            if r.get('vector_distance', 1.0) <= threshold
+        ]
+        after_filter = len(filtered_results)
+        
+        if before_filter != after_filter:
+            print(f"   🔪 Vector filter ({query_mode}, threshold={threshold}): {before_filter} → {after_filter} ({before_filter - after_filter} removed)")
+        
+        # Update total for display
+        total_filtered = len(filtered_results)
     else:
         print(f"⚠️ Skipping Stage 2: semantic={semantic_enabled}, filtered={len(filtered_results)}")
     
