@@ -954,6 +954,7 @@ def fetch_candidate_ids(
             'page': current_page,
             'include_fields': 'document_uuid,document_data_type,document_category,document_schema,authority_score',
             'num_typos': 0,
+             'prefix': 'no', # added to help find africa and not african
             'drop_tokens_threshold': 0,
             'sort_by': 'authority_score:desc,published_date:desc',
         }
