@@ -325,6 +325,7 @@ ORGANIZATION_CATEGORIES = frozenset([
 
 LOCATION_CATEGORIES = frozenset([
     'US City', 'US State', 'US County', 'City', 'State', 'Country', 'Location',
+    'Continent', 'Region', 'continent', 'region', 'country',
 ])
 
 KEYWORD_CATEGORIES = frozenset([
@@ -650,8 +651,18 @@ def build_query_profile(discovery: Dict, signals: Dict = None) -> Dict:
         if both_terms_are_locations or ngram_is_location:
             profile['has_location'] = True
             
+            # Check if any terms are non-filterable (continent/country/region)
+            has_filterable = any(
+                is_city_category(tc['category']) or is_state_category(tc['category'])
+                for tc in term_categories
+            )
+            is_subject = (
+                query_mode == 'answer' and
+                (signals or {}).get('question_word') == 'where'
+            )
+            
             for tc in term_categories:
-                if is_city_category(tc['category']):
+                if is_city_category(tc['category']) and not is_subject:
                     city_name = tc['word'].title()
                     if city_name not in [c['name'] for c in profile['cities']]:
                         profile['cities'].append({
@@ -659,10 +670,9 @@ def build_query_profile(discovery: Dict, signals: Dict = None) -> Dict:
                             'rank': tc['rank'],
                         })
                     profile['location_score'] += tc['rank']
-                    # Blueprint Step 7: location words go to location_terms, NOT search_terms
                     profile['location_terms'].append(tc['word'])
                     
-                elif is_state_category(tc['category']):
+                elif is_state_category(tc['category']) and not is_subject:
                     state_name = tc['word'].title()
                     if state_name not in [s['name'] for s in profile['states']]:
                         profile['states'].append({
@@ -672,6 +682,14 @@ def build_query_profile(discovery: Dict, signals: Dict = None) -> Dict:
                         })
                     profile['location_score'] += tc['rank']
                     profile['location_terms'].append(tc['word'])
+                else:
+                    # Continent/country/region or subject → keep in search
+                    profile['location_score'] += tc['rank']
+                    profile['location_terms'].append(tc['word'])
+            
+            # If no filterable terms or location is subject, add phrase to search
+            if not has_filterable or is_subject:
+                profile['search_terms'].append(phrase)
         
         elif ngram_category in PERSON_CATEGORIES:
             profile['has_person'] = True
@@ -717,27 +735,44 @@ def build_query_profile(discovery: Dict, signals: Dict = None) -> Dict:
         if is_stopword or part_of_ngram:
             continue
         
-        # ─── Blueprint Step 7: Location terms → filter, NOT search ──
+        # ─── Blueprint Step 7: Location terms → filter OR search ─────
+        # Cities/states → filter_by (strip from q)
+        # Continents/countries/regions → keep in search_terms (not filterable)
+        # Answer mode "where is X" → location IS the subject, keep in search
         if category in LOCATION_CATEGORIES:
             profile['has_location'] = True
             profile['location_score'] += rank
             
-            if is_city_category(category):
-                city_name = display or word.title()
-                if city_name not in [c['name'] for c in profile['cities']]:
-                    profile['cities'].append({'name': city_name, 'rank': rank})
-            elif is_state_category(category):
-                state_name = display or word.title()
-                if state_name not in [s['name'] for s in profile['states']]:
-                    profile['states'].append({
-                        'name': state_name,
-                        'rank': rank,
-                        'variants': get_state_variants(word),
-                    })
+            cat_lower = category.lower()
+            is_filterable = is_city_category(category) or is_state_category(category)
+            is_subject = (
+                query_mode == 'answer' and
+                (signals or {}).get('question_word') == 'where'
+            )
             
-            # Location goes to location_terms, NOT search_terms
-            profile['location_terms'].append(word)
-            continue
+            if is_filterable and not is_subject:
+                # City/state → filter, strip from search
+                if is_city_category(category):
+                    city_name = display or word.title()
+                    if city_name not in [c['name'] for c in profile['cities']]:
+                        profile['cities'].append({'name': city_name, 'rank': rank})
+                elif is_state_category(category):
+                    state_name = display or word.title()
+                    if state_name not in [s['name'] for s in profile['states']]:
+                        profile['states'].append({
+                            'name': state_name,
+                            'rank': rank,
+                            'variants': get_state_variants(word),
+                        })
+                profile['location_terms'].append(word)
+                continue
+            else:
+                # Continent/country/region OR location-as-subject → SEARCH it
+                # These aren't filterable fields, so they go into q
+                if is_noun:
+                    profile['search_terms'].append(word)
+                profile['location_terms'].append(word)
+                continue
         
         # ─── Blueprint Step 1: Only nouns go into search terms ───────
         # Verbs, adjectives, prepositions, wh-pronouns are SIGNALS not SEARCH
