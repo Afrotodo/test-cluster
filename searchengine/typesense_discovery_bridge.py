@@ -1319,9 +1319,9 @@ def apply_semantic_ranking(
     blend = BLEND_RATIOS.get(query_mode, BLEND_RATIOS['explore']).copy()
     
     # Single-result answer mode: text_match dominance
-    # "where is africa" should rank "Africa: Geography..." over "She Leads Africa"
+    # For factual questions, authority of the source doesn't determine correctness
     if query_mode == 'answer' and signals.get('wants_single_result'):
-        blend = {'text_match': 0.55, 'semantic': 0.30, 'authority': 0.15}
+        blend = {'text_match': 0.70, 'semantic': 0.30, 'authority': 0.00}
     
     # Unknown term adjustment: shift +0.15 from text_match to semantic
     if signals.get('has_unknown_terms', False):
@@ -1358,12 +1358,10 @@ def apply_semantic_ranking(
     }
     
     total_candidates = len(cached_results)
-    max_text_rank = total_candidates
     max_sem_rank = len(reranked_results)
     
-    for item in cached_results:
+    for idx, item in enumerate(cached_results):
         item_id = item.get('id')
-        text_rank = item.get('text_match', 0)
         authority = item.get('authority_score', 0)
         
         if item_id in rank_lookup:
@@ -1374,8 +1372,9 @@ def apply_semantic_ranking(
             item['vector_distance'] = 1.0
         
         # Compute blended score
-        # Normalize each component to 0-1 range
-        text_score = 1.0 - (text_rank / max(max_text_rank, 1)) if text_rank else 0.5
+        # text_score: based on POSITION in Stage 1 results (idx), not raw Typesense score
+        # Position 0 = best = score 1.0, last position = score 0.0
+        text_score = 1.0 - (idx / max(total_candidates, 1))
         sem_score = 1.0 - (item['semantic_rank'] / max(max_sem_rank, 1)) if item['semantic_rank'] < 999999 else 0.0
         auth_score = min(authority / 100.0, 1.0)
         
