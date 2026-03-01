@@ -2099,3 +2099,1179 @@ if __name__ == "__main__":
     print(f"  noun/verb: {get_pos_compatibility_score('noun', 'verb')} (expected: 0.0)")
     
     print("\n✓ All basic tests completed")
+
+
+    # """
+# word_discovery_v2.py
+# ==========================
+# Standalone test script for word discovery using DIRECT Redis calls.
+
+# PURPOSE:
+#     - Verify Redis returns ALL metadata fields (including description)
+#     - Test the complete word discovery pipeline
+#     - Confirm data structure before passing to Typesense
+
+# WORKFLOW:
+#     1. Connect to Redis
+#     2. For each word: get full metadata via direct Redis lookup
+#     3. Predict POS for unknown words using grammar rules
+#     4. Correct unknown words using fuzzy search
+#     5. Detect trigrams (check adjacent triplets first)
+#     6. Detect bigrams (check remaining adjacent pairs)
+#     7. Output complete enriched data structure
+
+# USAGE:
+#     python word_discovery_fulltest.py "jazz musicians in new orleans"
+#     python word_discovery_fulltest.py "hbcu in georgia"
+#     python word_discovery_fulltest.py "first black mayor atlanta"
+# """
+
+# import sys
+# import json
+# import time
+# import redis
+# from typing import Dict, Any, List, Optional, Tuple
+# from decouple import config
+
+
+# # =============================================================================
+# # CONFIGURATION
+# # =============================================================================
+
+# REDIS_LOCATION = config('REDIS_LOCATION')
+# REDIS_PORT = config('REDIS_PORT', cast=int)
+# REDIS_DB = config('REDIS_DB', default=0, cast=int)
+# REDIS_PASSWORD = config('REDIS_PASSWORD', default='')
+# REDIS_USERNAME = config('REDIS_USERNAME', default='')
+
+
+# # =============================================================================
+# # REDIS CONNECTION
+# # =============================================================================
+
+# class RedisClient:
+#     """Simple Redis client for testing."""
+    
+#     _client: Optional[redis.Redis] = None
+    
+#     @classmethod
+#     def get_client(cls) -> Optional[redis.Redis]:
+#         """Get or create Redis connection."""
+#         if cls._client is not None:
+#             try:
+#                 cls._client.ping()
+#                 return cls._client
+#             except (redis.ConnectionError, redis.TimeoutError):
+#                 cls._client = None
+        
+#         try:
+#             redis_config = {
+#                 'host': REDIS_LOCATION,
+#                 'port': REDIS_PORT,
+#                 'db': REDIS_DB,
+#                 'decode_responses': True,
+#                 'socket_connect_timeout': 5,
+#                 'socket_timeout': 5,
+#             }
+            
+#             if REDIS_PASSWORD:
+#                 redis_config['password'] = REDIS_PASSWORD
+#             if REDIS_USERNAME:
+#                 redis_config['username'] = REDIS_USERNAME
+            
+#             cls._client = redis.Redis(**redis_config)
+#             cls._client.ping()
+#             print("✅ Redis connection established")
+#             return cls._client
+            
+#         except Exception as e:
+#             print(f"❌ Redis connection error: {e}")
+#             return None
+
+
+# # =============================================================================
+# # CONSTANTS
+# # =============================================================================
+
+# # Grammar rules for predicting POS of unknown words
+# # Format: (left_pos, right_pos) -> predicted_pos
+# LOCAL_CONTEXT_RULES = {
+#     # Both neighbors known
+#     ("determiner", "noun"): "adjective",
+#     ("determiner", "adjective"): "adjective",
+#     ("determiner", "verb"): "noun",
+#     ("article", "noun"): "adjective",
+#     ("article", "verb"): "noun",
+#     ("adjective", "noun"): "adjective",
+#     ("adjective", "verb"): "noun",
+#     ("noun", "noun"): "verb",
+#     ("noun", "adjective"): "verb",
+#     ("noun", "preposition"): "verb",
+#     ("verb", "noun"): "adjective",
+#     ("verb", "adjective"): "adverb",
+#     ("verb", "preposition"): "noun",
+#     ("preposition", "noun"): "adjective",
+#     ("preposition", "verb"): "noun",
+#     ("preposition", "end"): "noun",
+#     ("pronoun", "noun"): "verb",
+#     ("pronoun", "adjective"): "verb",
+#     ("pronoun", "preposition"): "verb",
+    
+#     # Only left neighbor known
+#     ("determiner", None): "noun",
+#     ("article", None): "noun",
+#     ("adjective", None): "noun",
+#     ("pronoun", None): "verb",
+#     ("verb", None): "noun",
+#     ("preposition", None): "noun",
+#     ("noun", None): "verb",
+    
+#     # Only right neighbor known
+#     (None, "noun"): "adjective",
+#     (None, "verb"): "noun",
+#     (None, "adjective"): "adverb",
+#     (None, "preposition"): "noun",
+# }
+
+# # Common stopwords with their POS
+# STOPWORDS = {
+#     "the": "determiner",
+#     "a": "article",
+#     "an": "article",
+#     "in": "preposition",
+#     "on": "preposition",
+#     "at": "preposition",
+#     "to": "preposition",
+#     "for": "preposition",
+#     "of": "preposition",
+#     "with": "preposition",
+#     "by": "preposition",
+#     "from": "preposition",
+#     "about": "preposition",
+#     "and": "conjunction",
+#     "or": "conjunction",
+#     "but": "conjunction",
+#     "is": "verb",
+#     "are": "verb",
+#     "was": "verb",
+#     "were": "verb",
+#     "be": "verb",
+#     "been": "verb",
+#     "being": "verb",
+#     "have": "verb",
+#     "has": "verb",
+#     "had": "verb",
+#     "do": "verb",
+#     "does": "verb",
+#     "did": "verb",
+#     "i": "pronoun",
+#     "you": "pronoun",
+#     "he": "pronoun",
+#     "she": "pronoun",
+#     "it": "pronoun",
+#     "we": "pronoun",
+#     "they": "pronoun",
+#     "who": "pronoun",
+#     "what": "pronoun",
+#     "which": "pronoun",
+#     "that": "pronoun",
+#     "this": "determiner",
+#     "these": "determiner",
+#     "those": "determiner",
+#     "my": "determiner",
+#     "your": "determiner",
+#     "his": "determiner",
+#     "her": "determiner",
+#     "its": "determiner",
+#     "our": "determiner",
+#     "their": "determiner",
+# }
+
+
+# # =============================================================================
+# # HELPER FUNCTIONS
+# # =============================================================================
+
+# def normalize_pos(pos_value: Any) -> str:
+#     """Normalize POS value from various formats."""
+#     if pos_value is None:
+#         return 'unknown'
+    
+#     # Handle JSON string: '["noun"]' -> "noun"
+#     if isinstance(pos_value, str):
+#         if pos_value.startswith('['):
+#             try:
+#                 parsed = json.loads(pos_value)
+#                 if isinstance(parsed, list) and parsed:
+#                     return str(parsed[0]).lower()
+#             except json.JSONDecodeError:
+#                 pass
+#         return pos_value.lower()
+    
+#     # Handle list: ["noun"] -> "noun"
+#     if isinstance(pos_value, list):
+#         return str(pos_value[0]).lower() if pos_value else 'unknown'
+    
+#     return str(pos_value).lower()
+
+
+# def damerau_levenshtein_distance(s1: str, s2: str) -> int:
+#     """Calculate Damerau-Levenshtein distance between two strings."""
+#     len1, len2 = len(s1), len(s2)
+#     d = [[0] * (len2 + 1) for _ in range(len1 + 1)]
+    
+#     for i in range(len1 + 1):
+#         d[i][0] = i
+#     for j in range(len2 + 1):
+#         d[0][j] = j
+    
+#     for i in range(1, len1 + 1):
+#         for j in range(1, len2 + 1):
+#             cost = 0 if s1[i-1] == s2[j-1] else 1
+#             d[i][j] = min(
+#                 d[i-1][j] + 1,
+#                 d[i][j-1] + 1,
+#                 d[i-1][j-1] + cost
+#             )
+#             if i > 1 and j > 1 and s1[i-1] == s2[j-2] and s1[i-2] == s2[j-1]:
+#                 d[i][j] = min(d[i][j], d[i-2][j-2] + cost)
+    
+#     return d[len1][len2]
+
+
+# # =============================================================================
+# # REDIS LOOKUP FUNCTIONS
+# # =============================================================================
+
+# def get_word_metadata(client: redis.Redis, word: str) -> List[Dict[str, Any]]:
+#     """
+#     Get ALL metadata for a word from Redis.
+    
+#     Uses pattern matching: term:{word}:* to find all category variants.
+#     Returns list of all matches with FULL metadata including description.
+#     """
+#     word_lower = word.lower().strip()
+#     pattern = f"term:{word_lower}:*"
+    
+#     try:
+#         # Find all keys matching this word
+#         keys = client.keys(pattern)
+        
+#         if not keys:
+#             return []
+        
+#         matches = []
+#         for key in keys:
+#             # Get ALL fields from the hash
+#             metadata = client.hgetall(key)
+            
+#             if metadata:
+#                 # Parse rank as integer
+#                 rank = metadata.get('rank', 0)
+#                 try:
+#                     rank = int(float(rank))
+#                 except (ValueError, TypeError):
+#                     rank = 0
+                
+#                 matches.append({
+#                     'key': key,
+#                     'term': metadata.get('term', word_lower),
+#                     'display': metadata.get('display', word_lower),
+#                     'category': metadata.get('category', ''),
+#                     'description': metadata.get('description', ''),  # THIS IS KEY!
+#                     'pos': normalize_pos(metadata.get('pos')),
+#                     'entity_type': metadata.get('entity_type', 'unigram'),
+#                     'rank': rank,
+#                     'raw_metadata': metadata  # Keep raw for debugging
+#                 })
+        
+#         # Sort by rank descending
+#         matches.sort(key=lambda x: x['rank'], reverse=True)
+#         return matches
+        
+#     except Exception as e:
+#         print(f"  ❌ Error looking up '{word}': {e}")
+#         return []
+
+
+# def get_bigram_metadata(client: redis.Redis, word1: str, word2: str) -> Optional[Dict[str, Any]]:
+#     """
+#     Check if two words form a known bigram.
+    
+#     Key pattern: term:{word1} {word2}:*
+#     """
+#     bigram = f"{word1.lower()} {word2.lower()}"
+#     pattern = f"term:{bigram}:*"
+    
+#     try:
+#         keys = client.keys(pattern)
+        
+#         if not keys:
+#             return None
+        
+#         # Get the first (highest priority) match
+#         key = keys[0]
+#         metadata = client.hgetall(key)
+        
+#         if metadata:
+#             rank = metadata.get('rank', 0)
+#             try:
+#                 rank = int(float(rank))
+#             except (ValueError, TypeError):
+#                 rank = 0
+            
+#             return {
+#                 'key': key,
+#                 'term': metadata.get('term', bigram),
+#                 'display': metadata.get('display', bigram.title()),
+#                 'category': metadata.get('category', ''),
+#                 'description': metadata.get('description', ''),
+#                 'pos': normalize_pos(metadata.get('pos')),
+#                 'entity_type': metadata.get('entity_type', 'bigram'),
+#                 'rank': rank,
+#                 'words': [word1.lower(), word2.lower()],
+#                 'raw_metadata': metadata
+#             }
+        
+#         return None
+        
+#     except Exception as e:
+#         print(f"  ❌ Error looking up bigram '{bigram}': {e}")
+#         return None
+
+
+# def get_trigram_metadata(client: redis.Redis, word1: str, word2: str, word3: str) -> Optional[Dict[str, Any]]:
+#     """
+#     Check if three words form a known trigram.
+    
+#     Key pattern: term:{word1} {word2} {word3}:*
+#     """
+#     trigram = f"{word1.lower()} {word2.lower()} {word3.lower()}"
+#     pattern = f"term:{trigram}:*"
+    
+#     try:
+#         keys = client.keys(pattern)
+        
+#         if not keys:
+#             return None
+        
+#         key = keys[0]
+#         metadata = client.hgetall(key)
+        
+#         if metadata:
+#             rank = metadata.get('rank', 0)
+#             try:
+#                 rank = int(float(rank))
+#             except (ValueError, TypeError):
+#                 rank = 0
+            
+#             return {
+#                 'key': key,
+#                 'term': metadata.get('term', trigram),
+#                 'display': metadata.get('display', trigram.title()),
+#                 'category': metadata.get('category', ''),
+#                 'description': metadata.get('description', ''),
+#                 'pos': normalize_pos(metadata.get('pos')),
+#                 'entity_type': metadata.get('entity_type', 'trigram'),
+#                 'rank': rank,
+#                 'words': [word1.lower(), word2.lower(), word3.lower()],
+#                 'raw_metadata': metadata
+#             }
+        
+#         return None
+        
+#     except Exception as e:
+#         print(f"  ❌ Error looking up trigram '{trigram}': {e}")
+#         return None
+
+
+# def get_fuzzy_suggestions(client: redis.Redis, word: str, limit: int = 5) -> List[Dict[str, Any]]:
+#     """
+#     Get spelling suggestions for an unknown word using RediSearch fuzzy matching.
+    
+#     Uses FT.SEARCH with fuzzy operators: %word% (1 edit), %%word%% (2 edits)
+#     """
+#     word_lower = word.lower().strip()
+    
+#     if len(word_lower) < 3:
+#         return []
+    
+#     try:
+#         suggestions = []
+        
+#         # Try 1 edit distance first
+#         query = f"%{word_lower}%"
+#         result = client.execute_command(
+#             'FT.SEARCH', 'terms_idx', query,
+#             'SORTBY', 'rank', 'DESC',
+#             'LIMIT', '0', str(limit * 2)
+#         )
+        
+#         if result and len(result) > 1:
+#             # Parse RediSearch results
+#             # Format: [total, key1, [field1, val1, ...], key2, [field2, val2, ...], ...]
+#             i = 1
+#             while i < len(result):
+#                 key = result[i]
+#                 fields = result[i + 1] if i + 1 < len(result) else []
+                
+#                 # Convert field list to dict
+#                 metadata = {}
+#                 for j in range(0, len(fields), 2):
+#                     if j + 1 < len(fields):
+#                         metadata[fields[j]] = fields[j + 1]
+                
+#                 if metadata:
+#                     term = metadata.get('term', '')
+#                     distance = damerau_levenshtein_distance(word_lower, term.lower())
+                    
+#                     if distance <= 2:  # Only include if within 2 edits
+#                         rank = metadata.get('rank', 0)
+#                         try:
+#                             rank = int(float(rank))
+#                         except (ValueError, TypeError):
+#                             rank = 0
+                        
+#                         suggestions.append({
+#                             'key': key,
+#                             'term': term,
+#                             'display': metadata.get('display', term),
+#                             'category': metadata.get('category', ''),
+#                             'description': metadata.get('description', ''),
+#                             'pos': normalize_pos(metadata.get('pos')),
+#                             'entity_type': metadata.get('entity_type', 'unigram'),
+#                             'rank': rank,
+#                             'distance': distance
+#                         })
+                
+#                 i += 2
+        
+#         # Sort by distance first, then rank
+#         suggestions.sort(key=lambda x: (x['distance'], -x['rank']))
+#         return suggestions[:limit]
+        
+#     except Exception as e:
+#         print(f"  ⚠️ Fuzzy search error for '{word}': {e}")
+#         return []
+
+
+# # =============================================================================
+# # WORD DISCOVERY PIPELINE
+# # =============================================================================
+
+# def process_query(query: str, verbose: bool = True) -> Dict[str, Any]:
+#     """
+#     Main word discovery pipeline using direct Redis calls.
+    
+#     STEPS:
+#         1. Connect to Redis
+#         2. Get metadata for each word
+#         3. Predict POS for unknowns
+#         4. Correct unknown words
+#         5. Detect trigrams
+#         6. Detect bigrams
+#         7. Build output
+#     """
+#     start_time = time.perf_counter()
+    
+#     if verbose:
+#         print("\n" + "=" * 70)
+#         print(f"🔍 WORD DISCOVERY TEST: '{query}'")
+#         print("=" * 70)
+    
+#     # Initialize output
+#     output = {
+#         'query': query,
+#         'corrected_query': '',
+#         'terms': [],
+#         'trigrams': [],
+#         'bigrams': [],
+#         'corrections': [],
+#         'processing_time_ms': 0
+#     }
+    
+#     if not query or not query.strip():
+#         return output
+    
+#     # Get Redis client
+#     client = RedisClient.get_client()
+#     if not client:
+#         print("❌ Cannot proceed without Redis connection")
+#         return output
+    
+#     words = query.lower().split()
+    
+#     # =========================================================================
+#     # STEP 1: GET METADATA FOR EACH WORD
+#     # =========================================================================
+#     if verbose:
+#         print("\n" + "-" * 70)
+#         print("📖 STEP 1: WORD LOOKUP (Direct Redis)")
+#         print("-" * 70)
+    
+#     term_results = []
+    
+#     for i, word in enumerate(words):
+#         # Check if stopword first
+#         if word in STOPWORDS:
+#             result = {
+#                 'position': i + 1,
+#                 'word': word,
+#                 'status': 'valid',
+#                 'is_stopword': True,
+#                 'pos': STOPWORDS[word],
+#                 'category': 'stopword',
+#                 'description': '',
+#                 'entity_type': 'stopword',
+#                 'rank': 0,
+#                 'matches': []
+#             }
+#             term_results.append(result)
+            
+#             if verbose:
+#                 print(f"  [{i+1}] '{word}' → STOPWORD (pos: {STOPWORDS[word]})")
+#             continue
+        
+#         # Look up in Redis
+#         matches = get_word_metadata(client, word)
+        
+#         if matches:
+#             best = matches[0]
+#             result = {
+#                 'position': i + 1,
+#                 'word': word,
+#                 'status': 'valid',
+#                 'is_stopword': False,
+#                 'pos': best['pos'],
+#                 'category': best['category'],
+#                 'description': best['description'],
+#                 'entity_type': best['entity_type'],
+#                 'rank': best['rank'],
+#                 'display': best['display'],
+#                 'matches': matches  # All matches for this word
+#             }
+#             term_results.append(result)
+            
+#             if verbose:
+#                 print(f"  [{i+1}] '{word}' → FOUND")
+#                 print(f"       POS: {best['pos']}")
+#                 print(f"       Category: {best['category']}")
+#                 print(f"       Description: {best['description'][:60]}..." if len(best['description']) > 60 else f"       Description: {best['description']}")
+#                 print(f"       Entity Type: {best['entity_type']}")
+#                 print(f"       Rank: {best['rank']}")
+#                 if len(matches) > 1:
+#                     print(f"       (+ {len(matches)-1} more matches)")
+#         else:
+#             result = {
+#                 'position': i + 1,
+#                 'word': word,
+#                 'status': 'unknown',
+#                 'is_stopword': False,
+#                 'pos': 'unknown',
+#                 'category': '',
+#                 'description': '',
+#                 'entity_type': '',
+#                 'rank': 0,
+#                 'matches': []
+#             }
+#             term_results.append(result)
+            
+#             if verbose:
+#                 print(f"  [{i+1}] '{word}' → NOT FOUND")
+    
+#     # =========================================================================
+#     # STEP 2: PREDICT POS FOR UNKNOWNS
+#     # =========================================================================
+#     unknowns = [r for r in term_results if r['status'] == 'unknown']
+    
+#     if unknowns and verbose:
+#         print("\n" + "-" * 70)
+#         print("🧠 STEP 2: POS PREDICTION (Grammar Rules)")
+#         print("-" * 70)
+    
+#     for unknown in unknowns:
+#         position = unknown['position']
+#         word = unknown['word']
+        
+#         # Get left neighbor POS
+#         left_pos = None
+#         if position > 1:
+#             left_result = term_results[position - 2]  # -2 because position is 1-indexed
+#             if left_result['status'] == 'valid':
+#                 left_pos = left_result['pos']
+        
+#         # Get right neighbor POS
+#         right_pos = None
+#         if position < len(term_results):
+#             right_result = term_results[position]  # position is already the next index
+#             if right_result['status'] == 'valid':
+#                 right_pos = right_result['pos']
+#         elif position == len(term_results):
+#             right_pos = 'end'
+        
+#         # Predict using grammar rules
+#         predicted_pos = None
+        
+#         # Try both neighbors
+#         if left_pos and right_pos:
+#             predicted_pos = LOCAL_CONTEXT_RULES.get((left_pos, right_pos))
+        
+#         # Try left only
+#         if not predicted_pos and left_pos:
+#             predicted_pos = LOCAL_CONTEXT_RULES.get((left_pos, None))
+        
+#         # Try right only
+#         if not predicted_pos and right_pos and right_pos != 'end':
+#             predicted_pos = LOCAL_CONTEXT_RULES.get((None, right_pos))
+        
+#         # Default to noun
+#         if not predicted_pos:
+#             predicted_pos = 'noun'
+        
+#         unknown['predicted_pos'] = predicted_pos
+        
+#         if verbose:
+#             context = f"[{left_pos or '???'}] _{word}_ [{right_pos or '???'}]"
+#             print(f"  '{word}' → Predicted: {predicted_pos}")
+#             print(f"       Context: {context}")
+    
+#     # =========================================================================
+#     # STEP 3: CORRECT UNKNOWN WORDS
+#     # =========================================================================
+#     if unknowns and verbose:
+#         print("\n" + "-" * 70)
+#         print("🔧 STEP 3: SPELLING CORRECTION (Redis Fuzzy)")
+#         print("-" * 70)
+    
+#     corrections = []
+    
+#     for unknown in unknowns:
+#         word = unknown['word']
+#         predicted_pos = unknown.get('predicted_pos', 'noun')
+        
+#         suggestions = get_fuzzy_suggestions(client, word, limit=5)
+        
+#         if suggestions:
+#             # Prefer suggestions matching predicted POS
+#             best = None
+#             for s in suggestions:
+#                 if s['pos'] == predicted_pos:
+#                     best = s
+#                     break
+            
+#             if not best:
+#                 best = suggestions[0]
+            
+#             unknown['status'] = 'corrected'
+#             unknown['corrected'] = best['term']
+#             unknown['corrected_pos'] = best['pos']
+#             unknown['corrected_category'] = best['category']
+#             unknown['corrected_description'] = best['description']
+#             unknown['corrected_rank'] = best['rank']
+#             unknown['distance'] = best['distance']
+            
+#             corrections.append({
+#                 'original': word,
+#                 'corrected': best['term'],
+#                 'distance': best['distance'],
+#                 'pos': best['pos']
+#             })
+            
+#             if verbose:
+#                 print(f"  '{word}' → '{best['term']}' (distance: {best['distance']}, pos: {best['pos']})")
+#                 if len(suggestions) > 1:
+#                     print(f"       Other options: {[s['term'] for s in suggestions[1:3]]}")
+#         else:
+#             if verbose:
+#                 print(f"  '{word}' → No suggestions found")
+    
+#     output['corrections'] = corrections
+    
+#     # =========================================================================
+#     # STEP 4: DETECT TRIGRAMS
+#     # =========================================================================
+#     if verbose:
+#         print("\n" + "-" * 70)
+#         print("🔗 STEP 4: TRIGRAM DETECTION")
+#         print("-" * 70)
+    
+#     trigrams_found = []
+#     positions_used = set()
+    
+#     # Get working words (use corrected if available)
+#     working_words = []
+#     for r in term_results:
+#         if r['status'] == 'corrected':
+#             working_words.append(r['corrected'])
+#         else:
+#             working_words.append(r['word'])
+    
+#     # Check all adjacent triplets
+#     for i in range(len(working_words) - 2):
+#         if i in positions_used:
+#             continue
+        
+#         w1, w2, w3 = working_words[i], working_words[i+1], working_words[i+2]
+#         trigram_meta = get_trigram_metadata(client, w1, w2, w3)
+        
+#         if trigram_meta:
+#             trigrams_found.append({
+#                 'type': 'trigram',
+#                 'positions': [i+1, i+2, i+3],
+#                 'words': [w1, w2, w3],
+#                 'phrase': trigram_meta['term'],
+#                 'display': trigram_meta['display'],
+#                 'category': trigram_meta['category'],
+#                 'description': trigram_meta['description'],
+#                 'pos': trigram_meta['pos'],
+#                 'rank': trigram_meta['rank']
+#             })
+#             positions_used.update([i, i+1, i+2])
+            
+#             if verbose:
+#                 print(f"  ✅ TRIGRAM: '{w1} {w2} {w3}'")
+#                 print(f"       Category: {trigram_meta['category']}")
+#                 print(f"       Description: {trigram_meta['description'][:60]}..." if len(trigram_meta['description']) > 60 else f"       Description: {trigram_meta['description']}")
+    
+#     if not trigrams_found and verbose:
+#         print("  (no trigrams found)")
+    
+#     output['trigrams'] = trigrams_found
+    
+#     # =========================================================================
+#     # STEP 5: DETECT BIGRAMS
+#     # =========================================================================
+#     if verbose:
+#         print("\n" + "-" * 70)
+#         print("🔗 STEP 5: BIGRAM DETECTION")
+#         print("-" * 70)
+    
+#     bigrams_found = []
+    
+#     # Check remaining adjacent pairs
+#     for i in range(len(working_words) - 1):
+#         if i in positions_used or i+1 in positions_used:
+#             continue
+        
+#         w1, w2 = working_words[i], working_words[i+1]
+#         bigram_meta = get_bigram_metadata(client, w1, w2)
+        
+#         if bigram_meta:
+#             bigrams_found.append({
+#                 'type': 'bigram',
+#                 'positions': [i+1, i+2],
+#                 'words': [w1, w2],
+#                 'phrase': bigram_meta['term'],
+#                 'display': bigram_meta['display'],
+#                 'category': bigram_meta['category'],
+#                 'description': bigram_meta['description'],
+#                 'pos': bigram_meta['pos'],
+#                 'rank': bigram_meta['rank']
+#             })
+#             positions_used.update([i, i+1])
+            
+#             if verbose:
+#                 print(f"  ✅ BIGRAM: '{w1} {w2}'")
+#                 print(f"       Category: {bigram_meta['category']}")
+#                 print(f"       Description: {bigram_meta['description'][:60]}..." if len(bigram_meta['description']) > 60 else f"       Description: {bigram_meta['description']}")
+    
+#     if not bigrams_found and verbose:
+#         print("  (no bigrams found)")
+    
+#     output['bigrams'] = bigrams_found
+    
+#     # =========================================================================
+#     # STEP 6: BUILD FINAL OUTPUT
+#     # =========================================================================
+    
+#     # Build corrected query
+#     corrected_words = []
+#     for r in term_results:
+#         if r['status'] == 'corrected':
+#             corrected_words.append(r['corrected'])
+#         else:
+#             corrected_words.append(r['word'])
+    
+#     output['corrected_query'] = ' '.join(corrected_words)
+#     output['terms'] = term_results
+    
+#     # Calculate timing
+#     elapsed = (time.perf_counter() - start_time) * 1000
+#     output['processing_time_ms'] = round(elapsed, 2)
+    
+#     # =========================================================================
+#     # PRINT SUMMARY
+#     # =========================================================================
+#     if verbose:
+#         print("\n" + "=" * 70)
+#         print("📊 FINAL SUMMARY")
+#         print("=" * 70)
+#         print(f"  Original Query:  '{query}'")
+#         print(f"  Corrected Query: '{output['corrected_query']}'")
+#         print(f"  Processing Time: {elapsed:.2f}ms")
+#         print()
+#         print(f"  Terms: {len(term_results)}")
+#         print(f"    - Valid: {sum(1 for t in term_results if t['status'] == 'valid')}")
+#         print(f"    - Corrected: {sum(1 for t in term_results if t['status'] == 'corrected')}")
+#         print(f"    - Unknown: {sum(1 for t in term_results if t['status'] == 'unknown')}")
+#         print(f"    - Stopwords: {sum(1 for t in term_results if t.get('is_stopword'))}")
+#         print()
+#         print(f"  Trigrams Found: {len(trigrams_found)}")
+#         print(f"  Bigrams Found: {len(bigrams_found)}")
+#         print(f"  Corrections Made: {len(corrections)}")
+#         print("=" * 70)
+    
+#     return output
+
+
+# def print_full_output(output: Dict[str, Any]) -> None:
+#     """Print the complete output structure as JSON for verification."""
+#     print("\n" + "=" * 70)
+#     print("📄 COMPLETE OUTPUT (JSON)")
+#     print("=" * 70)
+    
+#     # Create a clean copy without raw_metadata for readability
+#     clean_output = {
+#         'query': output['query'],
+#         'corrected_query': output['corrected_query'],
+#         'processing_time_ms': output['processing_time_ms'],
+#         'terms': [],
+#         'trigrams': output['trigrams'],
+#         'bigrams': output['bigrams'],
+#         'corrections': output['corrections']
+#     }
+    
+#     for term in output['terms']:
+#         clean_term = {k: v for k, v in term.items() if k != 'matches'}
+#         clean_output['terms'].append(clean_term)
+    
+#     print(json.dumps(clean_output, indent=2))
+
+
+# # =============================================================================
+# # MAIN
+# # =============================================================================
+
+# def main():
+#     """Main entry point."""
+#     # Default test queries
+#     test_queries = [
+#         "jazz musicians in new orleans",
+#         "hbcu in georgia",
+#         "first black mayor atlanta",
+#         "civil rights movement",
+#         "tuskgee airmen",  # Misspelled to test correction
+#     ]
+    
+#     # Use command line argument if provided
+#     if len(sys.argv) > 1:
+#         query = ' '.join(sys.argv[1:])
+#         test_queries = [query]
+    
+#     print("\n" + "#" * 70)
+#     print("# WORD DISCOVERY FULL TEST - Direct Redis Verification")
+#     print("#" * 70)
+    
+#     for query in test_queries:
+#         output = process_query(query, verbose=True)
+#         print_full_output(output)
+#         print("\n")
+
+
+# if __name__ == "__main__":
+#     main()
+
+
+        # =========================================================================
+    # # STEP 3: Determine POS for ALL Words (including n-gram members)
+    # # =========================================================================
+    
+    # def _step3_determine_pos(
+    #     self, 
+    #     word_data: List[Dict[str, Any]], 
+    #     consumed_positions: Set[int]
+    # ) -> None:
+    #     """
+    #     Determine POS for ALL words using grammar rules.
+        
+    #     IMPORTANT: Run POS on EVERY word, including those in n-grams.
+    #     This ensures "black" gets adjective (not city) even when part of "black owned".
+    #     """
+    #     if self.verbose:
+    #         print("\n" + "-" * 70)
+    #         print("🧠 STEP 3: Determine POS (Grammar Rules)")
+    #         print("-" * 70)
+        
+    #     for i, wd in enumerate(word_data):
+    #         position = wd['position']
+            
+    #         # Mark if part of n-gram (for reference), but DON'T skip
+    #         pos_index = position - 1
+    #         wd['part_of_ngram'] = pos_index in consumed_positions
+            
+    #         # Skip stopwords (already have POS)
+    #         if wd['is_stopword']:
+    #             wd['predicted_pos'] = wd['pos']
+    #             if self.verbose:
+    #                 print(f"  [{position}] '{wd['word']}' → Stopword ({wd['pos']})")
+    #             continue
+            
+    #         # Get left neighbor POS (normalized!)
+    #         left_pos = None
+    #         if i > 0:
+    #             left_wd = word_data[i - 1]
+    #             if left_wd['is_stopword']:
+    #                 left_pos = left_wd['pos']
+    #             elif left_wd.get('predicted_pos'):
+    #                 left_pos = left_wd['predicted_pos']
+    #             elif left_wd['all_matches']:
+    #                 # Use highest-ranked match's POS as hint - NORMALIZE IT!
+    #                 raw_pos = left_wd['all_matches'][0]['pos']
+    #                 left_pos = normalize_pos_string(raw_pos)
+            
+    #         # Get right neighbor POS (normalized!)
+    #         right_pos = None
+    #         if i < len(word_data) - 1:
+    #             right_wd = word_data[i + 1]
+    #             if right_wd['is_stopword']:
+    #                 right_pos = right_wd['pos']
+    #             elif right_wd['all_matches']:
+    #                 # NORMALIZE the POS!
+    #                 raw_pos = right_wd['all_matches'][0]['pos']
+    #                 right_pos = normalize_pos_string(raw_pos)
+    #         else:
+    #             right_pos = 'end'
+            
+    #         # Apply grammar rules
+    #         predicted_pos = None
+            
+    #         # Try both neighbors
+    #         if left_pos and right_pos:
+    #             predicted_pos = GRAMMAR_RULES.get((left_pos, right_pos))
+            
+    #         # Try left only
+    #         if not predicted_pos and left_pos:
+    #             predicted_pos = GRAMMAR_RULES.get((left_pos, None))
+            
+    #         # Try right only
+    #         if not predicted_pos and right_pos:
+    #             predicted_pos = GRAMMAR_RULES.get((None, right_pos))
+            
+    #         # Default to noun
+    #         if not predicted_pos:
+    #             predicted_pos = 'noun'
+            
+    #         wd['predicted_pos'] = predicted_pos
+            
+    #         if self.verbose:
+    #             context = f"[{left_pos or '???'}] _{wd['word']}_ [{right_pos or '???'}]"
+    #             ngram_note = " (in n-gram)" if wd['part_of_ngram'] else ""
+    #             print(f"  [{position}] '{wd['word']}' → Predicted: {predicted_pos}{ngram_note}")
+    #             print(f"       Context: {context}")
+    
+
+    # # =========================================================================
+    # # STEP 3: Determine POS for ALL Words (including n-gram members)
+    # # =========================================================================
+    
+    # def _step3_determine_pos(
+    #     self, 
+    #     word_data: List[Dict[str, Any]], 
+    #     consumed_positions: Set[int]
+    # ) -> None:
+    #     """
+    #     Determine POS for ALL words using grammar rules.
+        
+    #     IMPORTANT: Run POS on EVERY word, including those in n-grams.
+    #     This ensures "black" gets adjective (not city) even when part of "black owned".
+        
+    #     Stores:
+    #     - predicted_pos: string (e.g., 'noun') for Step 4 compatibility
+    #     - predicted_pos_list: list of tuples (e.g., [('noun', 0.95), ('proper_noun', 0.85)]) for Step 5
+    #     """
+    #     if self.verbose:
+    #         print("\n" + "-" * 70)
+    #         print("🧠 STEP 3: Determine POS (Grammar Rules)")
+    #         print("-" * 70)
+        
+    #     for i, wd in enumerate(word_data):
+    #         position = wd['position']
+            
+    #         # Mark if part of n-gram (for reference), but DON'T skip
+    #         pos_index = position - 1
+    #         wd['part_of_ngram'] = pos_index in consumed_positions
+            
+    #         # Skip stopwords (already have POS)
+    #         if wd['is_stopword']:
+    #             wd['predicted_pos'] = wd['pos']
+    #             wd['predicted_pos_list'] = [(wd['pos'], 1.0)]
+    #             if self.verbose:
+    #                 print(f"  [{position}] '{wd['word']}' → Stopword ({wd['pos']})")
+    #             continue
+            
+    #         # Get left neighbor POS (normalized!)
+    #         left_pos = None
+    #         if i > 0:
+    #             left_wd = word_data[i - 1]
+    #             if left_wd['is_stopword']:
+    #                 left_pos = left_wd['pos']
+    #             elif left_wd.get('predicted_pos'):
+    #                 # Handle both string and tuple formats
+    #                 pred = left_wd['predicted_pos']
+    #                 if isinstance(pred, tuple):
+    #                     left_pos = pred[0]
+    #                 else:
+    #                     left_pos = pred
+    #             elif left_wd['all_matches']:
+    #                 # Use highest-ranked match's POS as hint - NORMALIZE IT!
+    #                 raw_pos = left_wd['all_matches'][0]['pos']
+    #                 left_pos = normalize_pos_string(raw_pos)
+    #         else:
+    #             # First word in query - use 'start' marker for LOCAL_CONTEXT_RULES
+    #             left_pos = 'start'
+            
+    #         # Get right neighbor POS (normalized!)
+    #         right_pos = None
+    #         if i < len(word_data) - 1:
+    #             right_wd = word_data[i + 1]
+    #             if right_wd['is_stopword']:
+    #                 right_pos = right_wd['pos']
+    #             elif right_wd['all_matches']:
+    #                 # NORMALIZE the POS!
+    #                 raw_pos = right_wd['all_matches'][0]['pos']
+    #                 right_pos = normalize_pos_string(raw_pos)
+    #         else:
+    #             right_pos = 'end'
+            
+    #         # Apply grammar rules - try LOCAL_CONTEXT_RULES first, then GRAMMAR_RULES
+    #         predicted_pos = None
+            
+    #         # Try both neighbors with LOCAL_CONTEXT_RULES (has confidence scores)
+    #         if left_pos and right_pos:
+    #             predicted_pos = GRAMMAR_RULES.get((left_pos, right_pos))
+    #             if not predicted_pos:
+    #                 # Fall back to GRAMMAR_RULES
+    #                 simple_pos = GRAMMAR_RULES.get((left_pos, right_pos))
+    #                 if simple_pos:
+    #                     predicted_pos = [(simple_pos, 0.90)]
+            
+    #         # Try left only
+    #         if not predicted_pos and left_pos:
+    #             predicted_pos = GRAMMAR_RULES.get((left_pos, None))
+    #             if not predicted_pos:
+    #                 simple_pos = GRAMMAR_RULES.get((left_pos, None))
+    #                 if simple_pos:
+    #                     predicted_pos = [(simple_pos, 0.85)]
+            
+    #         # Try right only
+    #         if not predicted_pos and right_pos:
+    #             predicted_pos = GRAMMAR_RULES.get((None, right_pos))
+    #             if not predicted_pos:
+    #                 simple_pos = GRAMMAR_RULES.get((None, right_pos))
+    #                 if simple_pos:
+    #                     predicted_pos = [(simple_pos, 0.85)]
+            
+    #         # Default to noun
+    #         if not predicted_pos:
+    #             predicted_pos = [('noun', 0.75)]
+            
+    #         # Store both formats for compatibility
+    #         if isinstance(predicted_pos, list):
+    #             # LOCAL_CONTEXT_RULES format: [('noun', 0.95), ('proper_noun', 0.85)]
+    #             wd['predicted_pos_list'] = predicted_pos
+    #             wd['predicted_pos'] = predicted_pos[0][0] if predicted_pos else 'noun'
+    #         else:
+    #             # GRAMMAR_RULES format: 'noun' (shouldn't happen now, but just in case)
+    #             wd['predicted_pos_list'] = [(predicted_pos, 0.90)]
+    #             wd['predicted_pos'] = predicted_pos
+            
+    #         if self.verbose:
+    #             context = f"[{left_pos or '???'}] _{wd['word']}_ [{right_pos or '???'}]"
+    #             ngram_note = " (in n-gram)" if wd['part_of_ngram'] else ""
+    #             print(f"  [{position}] '{wd['word']}' → Predicted: {wd['predicted_pos_list']}{ngram_note}")
+    #             print(f"       Context: {context}")
+   # # =========================================================================
+    # # STEP 5: Correct Unknown Words
+    # # =========================================================================
+    
+    # def _step5_correct_unknowns(self, word_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    #     """
+    #     Correct unknown/misspelled words using fuzzy search.
+    #     Position is preserved.
+    #     """
+    #     unknowns = [wd for wd in word_data if wd['status'] == 'unknown']
+        
+    #     if not unknowns:
+    #         if self.verbose:
+    #             print("\n" + "-" * 70)
+    #             print("🔧 STEP 5: Correct Unknowns")
+    #             print("-" * 70)
+    #             print("  (no unknown words)")
+    #         return []
+        
+    #     if self.verbose:
+    #         print("\n" + "-" * 70)
+    #         print("🔧 STEP 5: Correct Unknowns (Redis Fuzzy)")
+    #         print("-" * 70)
+        
+    #     corrections = []
+        
+    #     for wd in unknowns:
+    #         word = wd['word']
+    #         position = wd['position']
+    #         predicted_pos = wd['predicted_pos'] or 'noun'
+            
+    #         # Get fuzzy suggestions
+    #         suggestions = get_fuzzy_suggestions(word, limit=10, max_distance=2)
+            
+    #         if not suggestions:
+    #             if self.verbose:
+    #                 print(f"  [{position}] '{word}' → No suggestions found")
+    #             continue
+            
+    #         # Filter by POS compatibility
+    #         compatible = [s for s in suggestions if is_pos_compatible(s['pos'], predicted_pos)]
+            
+    #         # Select best correction
+    #         if compatible:
+    #             # Sort by distance, then rank
+    #             compatible.sort(key=lambda x: (x['distance'], -x['rank']))
+    #             best = compatible[0]
+    #         else:
+    #             # No POS match - use closest by distance
+    #             best = suggestions[0]
+            
+    #         # Update word data (position preserved!)
+    #         wd['status'] = 'corrected'
+    #         wd['corrected'] = best['term']
+    #         wd['corrected_display'] = best['display']
+    #         wd['pos'] = best['pos']
+    #         wd['distance'] = best['distance']
+    #         wd['selected_match'] = {
+    #             'term': best['term'],
+    #             'display': best['display'],
+    #             'category': best['category'],
+    #             'description': best['description'],
+    #             'pos': best['pos'],
+    #             'entity_type': best['entity_type'],
+    #             'rank': best['rank'],
+    #         }
+            
+    #         corrections.append({
+    #             'position': position,
+    #             'original': word,
+    #             'corrected': best['term'],
+    #             'distance': best['distance'],
+    #             'pos': best['pos'],
+    #             'category': best['category'],
+    #         })
+            
+    #         if self.verbose:
+    #             print(f"  [{position}] '{word}' → '{best['term']}' (distance={best['distance']}, pos={best['pos']})")
+    #             if len(suggestions) > 1:
+    #                 others = [s['term'] for s in suggestions[1:4] if s['term'] != best['term']]
+    #                 if others:
+    #                     print(f"       Other options: {others}")
+        
+    #     return corrections
+    
