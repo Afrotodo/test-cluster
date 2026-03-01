@@ -6694,7 +6694,6 @@ def debug_search_view(request):
     
     return JsonResponse(debug, json_dumps_params={'indent': 2})
 
-
 """
 Debug Search Views
 ==================
@@ -7125,6 +7124,32 @@ def debug_stage2_view(request):
             doc_lookup.get(did, {}).get('title', '?')[:50]
             for did in stage2_top10_ids if did not in stage1_top10_ids
         ]
+        
+        # ─── Vector distance filter simulation ───────────────────────
+        DISTANCE_THRESHOLDS = {
+            'answer':  0.60,
+            'explore': 0.70,
+            'compare': 0.65,
+            'browse':  0.85,
+            'local':   0.85,
+            'shop':    0.80,
+        }
+        threshold = DISTANCE_THRESHOLDS.get(query_mode, 0.75)
+        
+        total_before = len(all_candidates)
+        total_after = sum(
+            1 for c in all_candidates
+            if rerank_lookup.get(c['id'], {}).get('vector_distance', 1.0) <= threshold
+        )
+        
+        debug['vector_filter'] = {
+            'threshold': threshold,
+            'mode': query_mode,
+            'before': total_before,
+            'after': total_after,
+            'removed': total_before - total_after,
+            'removal_pct': round((total_before - total_after) / max(total_before, 1) * 100, 1),
+        }
     
     debug['timings']['total_ms'] = round((time.time() - t0) * 1000, 2)
     
