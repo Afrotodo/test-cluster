@@ -376,12 +376,45 @@ def is_city_category(category: str) -> bool:
 # WORD DISCOVERY WRAPPER
 # ============================================================================
 
+# def _run_word_discovery(query: str) -> Dict:
+#     """Run Word Discovery v2 on query."""
+#     if WORD_DISCOVERY_AVAILABLE:
+#         try:
+#             wd = WordDiscovery(verbose=False)
+#             return wd.process(query)
+#         except Exception as e:
+#             print(f"⚠️ WordDiscovery error: {e}")
+    
+#     # Fallback
+#     return {
+#         'query': query,
+#         'corrected_query': query,
+#         'terms': [],
+#         'ngrams': [],
+#         'corrections': [],
+#         'stats': {
+#             'total_words': len(query.split()),
+#             'valid_words': 0,
+#             'corrected_words': 0,
+#             'unknown_words': len(query.split()),
+#             'stopwords': 0,
+#             'ngram_count': 0,
+#         }
+#     }
+
 def _run_word_discovery(query: str) -> Dict:
     """Run Word Discovery v2 on query."""
     if WORD_DISCOVERY_AVAILABLE:
         try:
             wd = WordDiscovery(verbose=False)
-            return wd.process(query)
+            result = wd.process(query)
+            if 'africa' in query.lower():
+                print(f"DEBUG_WD_INPUT: {query}")
+                print(f"DEBUG_WD_OUTPUT: {result.get('corrected_query')}")
+                print(f"DEBUG_WD_CORRECTIONS: {result.get('corrections')}")
+                for t in result.get('terms', []):
+                    print(f"DEBUG_WD_TERM: {t.get('word')} status={t.get('status')} cat={t.get('category')}")
+            return result
         except Exception as e:
             print(f"⚠️ WordDiscovery error: {e}")
     
@@ -401,7 +434,6 @@ def _run_word_discovery(query: str) -> Dict:
             'ngram_count': 0,
         }
     }
-
 
 def _run_embedding(query: str) -> Optional[List[float]]:
     """Run embedding generation."""

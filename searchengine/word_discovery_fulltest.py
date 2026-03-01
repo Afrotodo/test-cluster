@@ -1,5 +1,4 @@
-
-
+# word_discovery_fulltest.py
 """
 word_discovery_v2.py
 ====================
