@@ -868,13 +868,14 @@ def _compute_field_boosts(profile: Dict, query_mode: str, signals: Dict = None) 
     if query_mode == 'answer':
         boosts['document_title'] = 20
         boosts['entity_names'] = 15
-        # For single-result answers, heavily favor title-first matching
+        # For single-result answers, restrict to title-focused fields only
+        # Skip key_facts and semantic_keywords — they're noisy and match too broadly
         if signals.get('wants_single_result'):
-            boosts['document_title'] = 50
-            boosts['entity_names'] = 20
-            boosts['primary_keywords'] = 5
-            boosts['key_facts'] = 2
-            boosts['semantic_keywords'] = 1
+            boosts = {
+                'document_title': 20,
+                'entity_names': 15,
+                'primary_keywords': 5,
+            }
     elif query_mode == 'browse':
         boosts['primary_keywords'] = 15
         boosts['semantic_keywords'] = 10

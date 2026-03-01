@@ -6445,3 +6445,249 @@ def debug_business_search(request):
         debug_info['errors'].append(f"Business filter error: {str(e)}")
     
     return JsonResponse(debug_info, json_dumps_params={'indent': 2})
+
+"""
+Debug Search View
+=================
+Add to your urls.py:
+    from searchengine.debug_search import debug_search_view
+    path('debug/search/', debug_search_view, name='debug_search'),
+
+Usage:
+    /debug/search/?q=where+is+africa
+    /debug/search/?q=restaurants+in+atlanta
+    /debug/search/?q=black+owned+barbershops+in+houston
+"""
+
+import os
+import sys
+import time
+import json
+from django.http import JsonResponse
+from django.views.decorators.http import require_GET
+
+# Import bridge components
+from searchengine.typesense_discovery_bridge import (
+    _run_word_discovery,
+    build_query_profile,
+    build_typesense_params,
+    build_filter_string_without_data_type,
+    fetch_full_documents,
+    client,
+    COLLECTION_NAME,
+    BLEND_RATIOS,
+    SEARCHABLE_POS,
+    SIGNAL_POS,
+    LOCATION_CATEGORIES,
+)
+
+from searchengine.intent_detect import detect_intent
+
+
+@require_GET
+def debug_search_view(request):
+    """
+    Debug endpoint that shows every step of the search pipeline.
+    Returns JSON with full diagnostic output.
+    
+    Usage: /debug/search/?q=where+is+africa
+    """
+    query = request.GET.get('q', '').strip()
+    
+    if not query:
+        return JsonResponse({
+            'error': 'No query provided',
+            'usage': '/debug/search/?q=your+search+query',
+            'examples': [
+                '/debug/search/?q=where+is+africa',
+                '/debug/search/?q=restaurants+in+atlanta',
+                '/debug/search/?q=black+owned+barbershops+in+houston',
+                '/debug/search/?q=who+founded+morehouse',
+                '/debug/search/?q=billie+holiday',
+            ]
+        }, json_dumps_params={'indent': 2})
+    
+    debug = {
+        'query': query,
+        'steps': {},
+        'timings': {},
+    }
+    
+    # =========================================================================
+    # STEP 1: WORD DISCOVERY
+    # =========================================================================
+    t0 = time.time()
+    discovery = _run_word_discovery(query)
+    debug['timings']['word_discovery_ms'] = round((time.time() - t0) * 1000, 2)
+    
+    terms_debug = []
+    for t in discovery.get('terms', []):
+        terms_debug.append({
+            'word': t.get('word'),
+            'pos': t.get('pos'),
+            'category': t.get('category'),
+            'rank': t.get('rank', 0),
+            'is_stopword': t.get('is_stopword', False),
+            'display': t.get('display'),
+            'is_searchable_pos': t.get('pos', '').lower() in SEARCHABLE_POS,
+            'is_location_cat': t.get('category', '') in LOCATION_CATEGORIES,
+        })
+    
+    debug['steps']['1_word_discovery'] = {
+        'corrected_query': discovery.get('corrected_query', query),
+        'terms': terms_debug,
+        'ngrams': discovery.get('ngrams', []),
+        'corrections': discovery.get('corrections', []),
+        'stats': discovery.get('stats', {}),
+    }
+    
+    # =========================================================================
+    # STEP 2: INTENT DETECTION
+    # =========================================================================
+    t1 = time.time()
+    discovery = detect_intent(discovery)
+    signals = discovery.get('signals', {})
+    debug['timings']['intent_detect_ms'] = round((time.time() - t1) * 1000, 2)
+    
+    debug['steps']['2_intent_signals'] = {
+        'query_mode': signals.get('query_mode'),
+        'question_word': signals.get('question_word'),
+        'has_question_word': signals.get('has_question_word'),
+        'is_local_search': signals.get('is_local_search'),
+        'has_location': signals.get('has_location'),
+        'has_service_word': signals.get('has_service_word'),
+        'has_black_owned': signals.get('has_black_owned'),
+        'wants_single_result': signals.get('wants_single_result'),
+        'wants_multiple_results': signals.get('wants_multiple_results'),
+        'has_temporal': signals.get('has_temporal'),
+        'temporal_direction': signals.get('temporal_direction'),
+        'has_superlative': signals.get('has_superlative'),
+        'has_negation': signals.get('has_negation'),
+        'has_person': signals.get('has_person'),
+        'has_organization': signals.get('has_organization'),
+        'has_role_word': signals.get('has_role_word'),
+        'has_plural_noun': signals.get('has_plural_noun'),
+        'has_unknown_terms': signals.get('has_unknown_terms'),
+        'unknown_term_count': signals.get('unknown_term_count'),
+        'domains_detected': signals.get('domains_detected', []),
+        'service_words': signals.get('service_words', []),
+        'action_type': signals.get('action_type'),
+    }
+    
+    # =========================================================================
+    # STEP 3: BUILD PROFILE
+    # =========================================================================
+    t2 = time.time()
+    profile = build_query_profile(discovery, signals=signals)
+    debug['timings']['build_profile_ms'] = round((time.time() - t2) * 1000, 2)
+    
+    debug['steps']['3_query_profile'] = {
+        'search_terms': profile.get('search_terms', []),
+        'location_terms': profile.get('location_terms', []),
+        'cities': [c['name'] for c in profile.get('cities', [])],
+        'states': [s['name'] for s in profile.get('states', [])],
+        'primary_intent': profile.get('primary_intent'),
+        'has_person': profile.get('has_person'),
+        'has_organization': profile.get('has_organization'),
+        'has_location': profile.get('has_location'),
+        'has_keyword': profile.get('has_keyword'),
+        'has_media': profile.get('has_media'),
+        'field_boosts': profile.get('field_boosts', {}),
+        'preferred_data_types': profile.get('preferred_data_types', []),
+    }
+    
+    # =========================================================================
+    # STEP 4: BUILD TYPESENSE PARAMS
+    # =========================================================================
+    params = build_typesense_params(profile, signals=signals)
+    filter_str = build_filter_string_without_data_type(profile, signals=signals)
+    
+    debug['steps']['4_typesense_params'] = {
+        'q': params.get('q'),
+        'query_by': params.get('query_by'),
+        'query_by_weights': params.get('query_by_weights'),
+        'filter_by': params.get('filter_by', filter_str or '(none)'),
+        'sort_by': params.get('sort_by'),
+        'num_typos': params.get('num_typos'),
+        'prefix': params.get('prefix'),
+        'drop_tokens_threshold': params.get('drop_tokens_threshold'),
+        'blend_ratios': BLEND_RATIOS.get(signals.get('query_mode', 'explore')),
+    }
+    
+    # =========================================================================
+    # STEP 5: STAGE 1 — TYPESENSE SEARCH (top 10 only)
+    # =========================================================================
+    t3 = time.time()
+    
+    search_params = {
+        'q': params.get('q', '*'),
+        'query_by': params.get('query_by', 'document_title,primary_keywords,entity_names'),
+        'query_by_weights': params.get('query_by_weights', '20,15,5'),
+        'per_page': 10,
+        'page': 1,
+        'num_typos': params.get('num_typos', 0),
+        'prefix': params.get('prefix', 'no'),
+        'drop_tokens_threshold': params.get('drop_tokens_threshold', 0),
+        'sort_by': params.get('sort_by', '_text_match:desc,authority_score:desc'),
+        'include_fields': 'document_uuid,document_title,document_data_type,document_category,authority_score,document_url,primary_keywords,entity_names',
+    }
+    
+    if filter_str:
+        search_params['filter_by'] = filter_str
+    
+    stage1_debug = {
+        'search_params_sent': search_params,
+        'results': [],
+        'found': 0,
+        'error': None,
+    }
+    
+    try:
+        response = client.collections[COLLECTION_NAME].documents.search(search_params)
+        stage1_debug['found'] = response.get('found', 0)
+        
+        for i, hit in enumerate(response.get('hits', []), 1):
+            doc = hit.get('document', {})
+            stage1_debug['results'].append({
+                'rank': i,
+                'title': doc.get('document_title', ''),
+                'data_type': doc.get('document_data_type', ''),
+                'category': doc.get('document_category', ''),
+                'authority_score': doc.get('authority_score', 0),
+                'url': doc.get('document_url', ''),
+                'text_match_score': hit.get('text_match', 0),
+                'text_match_info': hit.get('text_match_info', {}),
+                'primary_keywords': (doc.get('primary_keywords', []) or [])[:5],
+                'entity_names': (doc.get('entity_names', []) or [])[:5],
+                'highlights': [
+                    {
+                        'field': h.get('field'),
+                        'snippet': h.get('snippet') or h.get('value', '')[:100],
+                    }
+                    for h in hit.get('highlights', [])
+                ],
+            })
+    except Exception as e:
+        stage1_debug['error'] = str(e)
+    
+    debug['timings']['stage1_search_ms'] = round((time.time() - t3) * 1000, 2)
+    debug['steps']['5_stage1_results'] = stage1_debug
+    
+    # =========================================================================
+    # SUMMARY
+    # =========================================================================
+    debug['timings']['total_ms'] = round((time.time() - t0) * 1000, 2)
+    
+    debug['summary'] = {
+        'query': query,
+        'corrected_query': discovery.get('corrected_query', query),
+        'query_mode': signals.get('query_mode'),
+        'q_sent_to_typesense': params.get('q'),
+        'fields_searched': params.get('query_by'),
+        'total_found': stage1_debug['found'],
+        'top_result': stage1_debug['results'][0]['title'] if stage1_debug['results'] else '(none)',
+        'wants_single_result': signals.get('wants_single_result'),
+        'wants_multiple_results': signals.get('wants_multiple_results'),
+    }
+    
+    return JsonResponse(debug, json_dumps_params={'indent': 2})
