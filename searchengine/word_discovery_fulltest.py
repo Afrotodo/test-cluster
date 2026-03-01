@@ -3683,6 +3683,17 @@ class WordDiscovery:
         for wd in word_data:
             if wd['status'] == 'unknown':
                 unknowns.append(wd)
+            # elif (
+            #     wd['status'] == 'valid'
+            #     and not wd['is_stopword']
+            #     and wd.get('predicted_pos')
+            #     and wd.get('pos')
+            #     and wd['predicted_pos'] != wd['pos']
+            # ):
+            #     predicted_list = wd.get('predicted_pos_list', [])
+            #     top_confidence = predicted_list[0][1] if predicted_list else 0
+            #     if top_confidence >= 0.90:
+            #         pos_mismatches.append(wd)
             elif (
                 wd['status'] == 'valid'
                 and not wd['is_stopword']
@@ -3692,7 +3703,10 @@ class WordDiscovery:
             ):
                 predicted_list = wd.get('predicted_pos_list', [])
                 top_confidence = predicted_list[0][1] if predicted_list else 0
-                if top_confidence >= 0.90:
+                word_rank = wd.get('selected_match', {}).get('rank', 0) or 0
+                # Only POS-correct low-rank words (likely typos, not real words)
+                # High-rank words are common in our corpus — trust them
+                if top_confidence >= 0.90 and word_rank < 200:
                     pos_mismatches.append(wd)
         
         if not unknowns and not pos_mismatches:
@@ -3776,11 +3790,18 @@ class WordDiscovery:
                     print(f"  [{position}] '{word}' → POS mismatch ({original_pos}→{predicted_pos}), no suggestions found")
                 continue
             
+            # compatible = [
+            #     s for s in suggestions
+            #     if is_pos_compatible(s['pos'], predicted_pos)
+            #     and s['term'] != word
+            #     and s['distance'] <= 2
+            # ]
             compatible = [
                 s for s in suggestions
                 if is_pos_compatible(s['pos'], predicted_pos)
                 and s['term'] != word
-                and s['distance'] <= 2
+                and s['distance'] <= 1
+                and s['rank'] > word_rank * 3
             ]
             
             if not compatible:
