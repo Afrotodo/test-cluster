@@ -86,6 +86,7 @@ urlpatterns = [
     path('debug/business/', views.debug_business_search, name='debug_business'),
     path('debug/schema/', views.debug_schema, name='debug_schema'),
     path('debug/stage2/', views.debug_stage2_view, name='debug_stage2'),
+    path('debug/batch/', views.debug_batch_view, name='debug_batch'),
     # If you want to test the fixed view:
     # path('business-test/', views.business_category_fixed, name='business_test'),
 

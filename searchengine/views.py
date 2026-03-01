@@ -7154,3 +7154,659 @@ def debug_stage2_view(request):
     debug['timings']['total_ms'] = round((time.time() - t0) * 1000, 2)
     
     return JsonResponse(debug, json_dumps_params={'indent': 2})
+
+"""
+Debug Search Views
+==================
+Add to your urls.py:
+    from searchengine.debug_search import debug_search_view, debug_stage2_view, debug_batch_view
+    path('debug/search/', debug_search_view, name='debug_search'),
+    path('debug/stage2/', debug_stage2_view, name='debug_stage2'),
+    path('debug/batch/', debug_batch_view, name='debug_batch'),
+
+Usage:
+    /debug/search/?q=where+is+africa       (Stage 1 only)
+    /debug/stage2/?q=where+is+africa       (Stage 1 vs Stage 2 comparison)
+    /debug/batch/                           (run all 25 test queries at once)
+    /debug/batch/?q=query1&q=query2        (custom batch)
+"""
+
+import time
+import copy
+from django.http import JsonResponse
+from django.views.decorators.http import require_GET
+
+from searchengine.typesense_discovery_bridge import (
+    _run_word_discovery,
+    run_parallel_prep,
+    build_query_profile,
+    build_typesense_params,
+    build_filter_string_without_data_type,
+    fetch_candidate_ids,
+    semantic_rerank_candidates,
+    apply_semantic_ranking,
+    fetch_full_documents,
+    client,
+    COLLECTION_NAME,
+    BLEND_RATIOS,
+    SEARCHABLE_POS,
+    LOCATION_CATEGORIES,
+)
+
+from searchengine.intent_detect import detect_intent
+
+
+# =============================================================================
+# DEBUG STAGE 1 (same as before)
+# =============================================================================
+
+@require_GET
+def debug_search_view(request):
+    query = request.GET.get('q', '').strip()
+    
+    if not query:
+        return JsonResponse({
+            'error': 'No query provided',
+            'usage': '/debug/search/?q=your+search+query',
+            'examples': [
+                '/debug/search/?q=where+is+africa',
+                '/debug/search/?q=restaurants+in+atlanta',
+                '/debug/search/?q=black+owned+barbershops+in+houston',
+            ]
+        }, json_dumps_params={'indent': 2})
+    
+    debug = {'query': query, 'steps': {}, 'timings': {}}
+    
+    # Step 1: Word Discovery
+    t0 = time.time()
+    discovery = _run_word_discovery(query)
+    debug['timings']['word_discovery_ms'] = round((time.time() - t0) * 1000, 2)
+    
+    terms_debug = []
+    for t in discovery.get('terms', []):
+        terms_debug.append({
+            'word': t.get('word'),
+            'pos': t.get('pos'),
+            'category': t.get('category'),
+            'rank': t.get('rank', 0),
+            'is_stopword': t.get('is_stopword', False),
+            'display': t.get('display'),
+            'is_searchable_pos': t.get('pos', '').lower() in SEARCHABLE_POS,
+            'is_location_cat': t.get('category', '') in LOCATION_CATEGORIES,
+        })
+    
+    debug['steps']['1_word_discovery'] = {
+        'corrected_query': discovery.get('corrected_query', query),
+        'terms': terms_debug,
+        'ngrams': discovery.get('ngrams', []),
+        'corrections': discovery.get('corrections', []),
+        'stats': discovery.get('stats', {}),
+    }
+    
+    # Step 2: Intent Detection
+    t1 = time.time()
+    discovery = detect_intent(discovery)
+    signals = discovery.get('signals', {})
+    debug['timings']['intent_detect_ms'] = round((time.time() - t1) * 1000, 2)
+    
+    debug['steps']['2_intent_signals'] = {
+        'query_mode': signals.get('query_mode'),
+        'question_word': signals.get('question_word'),
+        'has_question_word': signals.get('has_question_word'),
+        'is_local_search': signals.get('is_local_search'),
+        'has_location': signals.get('has_location'),
+        'has_service_word': signals.get('has_service_word'),
+        'has_black_owned': signals.get('has_black_owned'),
+        'wants_single_result': signals.get('wants_single_result'),
+        'wants_multiple_results': signals.get('wants_multiple_results'),
+        'has_temporal': signals.get('has_temporal'),
+        'temporal_direction': signals.get('temporal_direction'),
+        'has_superlative': signals.get('has_superlative'),
+        'has_negation': signals.get('has_negation'),
+        'has_person': signals.get('has_person'),
+        'has_organization': signals.get('has_organization'),
+        'has_role_word': signals.get('has_role_word'),
+        'has_plural_noun': signals.get('has_plural_noun'),
+        'has_unknown_terms': signals.get('has_unknown_terms'),
+        'unknown_term_count': signals.get('unknown_term_count'),
+        'domains_detected': signals.get('domains_detected', []),
+        'service_words': signals.get('service_words', []),
+        'action_type': signals.get('action_type'),
+    }
+    
+    # Step 3: Build Profile
+    t2 = time.time()
+    profile = build_query_profile(discovery, signals=signals)
+    debug['timings']['build_profile_ms'] = round((time.time() - t2) * 1000, 2)
+    
+    debug['steps']['3_query_profile'] = {
+        'search_terms': profile.get('search_terms', []),
+        'location_terms': profile.get('location_terms', []),
+        'cities': [c['name'] for c in profile.get('cities', [])],
+        'states': [s['name'] for s in profile.get('states', [])],
+        'primary_intent': profile.get('primary_intent'),
+        'has_person': profile.get('has_person'),
+        'has_organization': profile.get('has_organization'),
+        'has_location': profile.get('has_location'),
+        'has_keyword': profile.get('has_keyword'),
+        'has_media': profile.get('has_media'),
+        'field_boosts': profile.get('field_boosts', {}),
+        'preferred_data_types': profile.get('preferred_data_types', []),
+    }
+    
+    # Step 4: Build Typesense Params
+    params = build_typesense_params(profile, signals=signals)
+    filter_str = build_filter_string_without_data_type(profile, signals=signals)
+    
+    debug['steps']['4_typesense_params'] = {
+        'q': params.get('q'),
+        'query_by': params.get('query_by'),
+        'query_by_weights': params.get('query_by_weights'),
+        'filter_by': params.get('filter_by', filter_str or '(none)'),
+        'sort_by': params.get('sort_by'),
+        'num_typos': params.get('num_typos'),
+        'prefix': params.get('prefix'),
+        'drop_tokens_threshold': params.get('drop_tokens_threshold'),
+        'blend_ratios': BLEND_RATIOS.get(signals.get('query_mode', 'explore')),
+    }
+    
+    # Step 5: Stage 1 search (top 10)
+    t3 = time.time()
+    search_params = {
+        'q': params.get('q', '*'),
+        'query_by': params.get('query_by', 'document_title,primary_keywords,entity_names'),
+        'query_by_weights': params.get('query_by_weights', '20,15,5'),
+        'per_page': 10,
+        'page': 1,
+        'num_typos': params.get('num_typos', 0),
+        'prefix': params.get('prefix', 'no'),
+        'drop_tokens_threshold': params.get('drop_tokens_threshold', 0),
+        'sort_by': params.get('sort_by', '_text_match:desc,authority_score:desc'),
+        'include_fields': 'document_uuid,document_title,document_data_type,document_category,authority_score,document_url,primary_keywords,entity_names',
+    }
+    if filter_str:
+        search_params['filter_by'] = filter_str
+    
+    stage1_debug = {'search_params_sent': search_params, 'results': [], 'found': 0, 'error': None}
+    
+    try:
+        response = client.collections[COLLECTION_NAME].documents.search(search_params)
+        stage1_debug['found'] = response.get('found', 0)
+        for i, hit in enumerate(response.get('hits', []), 1):
+            doc = hit.get('document', {})
+            stage1_debug['results'].append({
+                'rank': i,
+                'title': doc.get('document_title', ''),
+                'data_type': doc.get('document_data_type', ''),
+                'category': doc.get('document_category', ''),
+                'authority_score': doc.get('authority_score', 0),
+                'url': doc.get('document_url', ''),
+                'text_match_score': hit.get('text_match', 0),
+                'text_match_info': hit.get('text_match_info', {}),
+                'primary_keywords': (doc.get('primary_keywords', []) or [])[:5],
+                'entity_names': (doc.get('entity_names', []) or [])[:5],
+                'highlights': [
+                    {'field': h.get('field'), 'snippet': h.get('snippet') or h.get('value', '')[:100]}
+                    for h in hit.get('highlights', [])
+                ],
+            })
+    except Exception as e:
+        stage1_debug['error'] = str(e)
+    
+    debug['timings']['stage1_search_ms'] = round((time.time() - t3) * 1000, 2)
+    debug['steps']['5_stage1_results'] = stage1_debug
+    debug['timings']['total_ms'] = round((time.time() - t0) * 1000, 2)
+    
+    debug['summary'] = {
+        'query': query,
+        'corrected_query': discovery.get('corrected_query', query),
+        'query_mode': signals.get('query_mode'),
+        'q_sent_to_typesense': params.get('q'),
+        'fields_searched': params.get('query_by'),
+        'total_found': stage1_debug['found'],
+        'top_result': stage1_debug['results'][0]['title'] if stage1_debug['results'] else '(none)',
+        'wants_single_result': signals.get('wants_single_result'),
+        'wants_multiple_results': signals.get('wants_multiple_results'),
+    }
+    
+    return JsonResponse(debug, json_dumps_params={'indent': 2})
+
+
+# =============================================================================
+# DEBUG STAGE 2 — Compare Stage 1 vs Stage 2
+# =============================================================================
+
+@require_GET
+def debug_stage2_view(request):
+    """
+    Shows Stage 1 top 10 vs Stage 2 top 10 side by side.
+    Shows vector_distance, blended_score, and rank changes.
+    
+    Usage: /debug/stage2/?q=where+is+africa
+    """
+    query = request.GET.get('q', '').strip()
+    
+    if not query:
+        return JsonResponse({
+            'error': 'No query provided',
+            'usage': '/debug/stage2/?q=your+search+query',
+        }, json_dumps_params={'indent': 2})
+    
+    debug = {'query': query, 'timings': {}}
+    
+    # ─── Parallel prep (WD + embedding) ──────────────────────────────
+    t0 = time.time()
+    discovery, query_embedding = run_parallel_prep(query, skip_embedding=False)
+    debug['timings']['parallel_prep_ms'] = round((time.time() - t0) * 1000, 2)
+    debug['has_embedding'] = query_embedding is not None
+    debug['embedding_dimensions'] = len(query_embedding) if query_embedding else 0
+    
+    # ─── Intent ──────────────────────────────────────────────────────
+    discovery = detect_intent(discovery)
+    signals = discovery.get('signals', {})
+    query_mode = signals.get('query_mode', 'explore')
+    
+    debug['signals'] = {
+        'query_mode': query_mode,
+        'question_word': signals.get('question_word'),
+        'wants_single_result': signals.get('wants_single_result'),
+        'wants_multiple_results': signals.get('wants_multiple_results'),
+        'is_local_search': signals.get('is_local_search'),
+        'has_unknown_terms': signals.get('has_unknown_terms'),
+        'has_superlative': signals.get('has_superlative'),
+    }
+    
+    # ─── Profile + params ────────────────────────────────────────────
+    profile = build_query_profile(discovery, signals=signals)
+    params = build_typesense_params(profile, signals=signals)
+    
+    debug['typesense_params'] = {
+        'q': params.get('q'),
+        'query_by': params.get('query_by'),
+        'query_by_weights': params.get('query_by_weights'),
+        'sort_by': params.get('sort_by'),
+        'num_typos': params.get('num_typos'),
+    }
+    
+    # ─── Compute effective blend ratios ──────────────────────────────
+    blend = BLEND_RATIOS.get(query_mode, BLEND_RATIOS['explore']).copy()
+    blend_adjustments = []
+    
+    if query_mode == 'answer' and signals.get('wants_single_result'):
+        blend = {'text_match': 0.55, 'semantic': 0.30, 'authority': 0.15}
+        blend_adjustments.append('answer+single: text=0.55, sem=0.30, auth=0.15')
+    
+    if signals.get('has_unknown_terms', False):
+        shift = min(0.15, blend['text_match'])
+        blend['text_match'] -= shift
+        blend['semantic'] += shift
+        blend_adjustments.append(f'unknown_terms: text-{shift:.2f}, sem+{shift:.2f}')
+    
+    if signals.get('has_superlative', False):
+        shift = min(0.10, blend['semantic'])
+        blend['semantic'] -= shift
+        blend['authority'] += shift
+        blend_adjustments.append(f'superlative: sem-{shift:.2f}, auth+{shift:.2f}')
+    
+    debug['blend_ratios'] = {
+        'text_match': round(blend['text_match'], 2),
+        'semantic': round(blend['semantic'], 2),
+        'authority': round(blend['authority'], 2),
+    }
+    debug['blend_adjustments'] = blend_adjustments if blend_adjustments else ['none — using default for mode']
+    
+    # =========================================================================
+    # STAGE 1: FETCH CANDIDATES
+    # =========================================================================
+    t1 = time.time()
+    all_candidates = fetch_candidate_ids(query, profile, signals=signals)
+    debug['timings']['stage1_ms'] = round((time.time() - t1) * 1000, 2)
+    debug['stage1_total_candidates'] = len(all_candidates)
+    
+    # Save Stage 1 order
+    stage1_order = {c['id']: i + 1 for i, c in enumerate(all_candidates[:50])}
+    stage1_top10_ids = [c['id'] for c in all_candidates[:10]]
+    stage1_info = {
+        c['id']: {
+            'text_match': c.get('text_match', 0),
+            'authority_score': c.get('authority_score', 0),
+            'data_type': c.get('data_type', ''),
+        }
+        for c in all_candidates[:50]
+    }
+    
+    # =========================================================================
+    # STAGE 2: SEMANTIC RERANK
+    # =========================================================================
+    stage2_applied = False
+    stage2_top10_ids = []
+    rerank_lookup = {}
+    stage2_order = {}
+    
+    if query_embedding and all_candidates:
+        t2 = time.time()
+        candidate_ids = [c['id'] for c in all_candidates]
+        reranked = semantic_rerank_candidates(candidate_ids, query_embedding, max_to_rerank=500)
+        
+        # Save raw rerank data
+        for r in reranked:
+            rerank_lookup[r['id']] = {
+                'vector_distance': round(r.get('vector_distance', 1.0), 4),
+                'semantic_rank': r.get('semantic_rank', 999),
+            }
+        
+        # Apply blended ranking
+        candidates_copy = copy.deepcopy(all_candidates)
+        candidates_copy = apply_semantic_ranking(candidates_copy, reranked, signals=signals)
+        
+        debug['timings']['stage2_ms'] = round((time.time() - t2) * 1000, 2)
+        stage2_applied = True
+        
+        stage2_top10_ids = [c['id'] for c in candidates_copy[:10]]
+        stage2_order = {c['id']: i + 1 for i, c in enumerate(candidates_copy[:50])}
+        stage2_scores = {
+            c['id']: round(c.get('blended_score', 0), 4)
+            for c in candidates_copy[:50]
+        }
+    else:
+        stage2_scores = {}
+        debug['stage2_skipped'] = 'No embedding' if not query_embedding else 'No candidates'
+    
+    debug['stage2_applied'] = stage2_applied
+    
+    # =========================================================================
+    # FETCH FULL DOCS
+    # =========================================================================
+    all_ids = list(set(stage1_top10_ids + stage2_top10_ids))
+    t3 = time.time()
+    full_docs = fetch_full_documents(all_ids, query)
+    debug['timings']['fetch_docs_ms'] = round((time.time() - t3) * 1000, 2)
+    doc_lookup = {d['id']: d for d in full_docs}
+    
+    # =========================================================================
+    # STAGE 1 TOP 10
+    # =========================================================================
+    debug['stage1_top10'] = []
+    for i, doc_id in enumerate(stage1_top10_ids, 1):
+        doc = doc_lookup.get(doc_id, {})
+        rr = rerank_lookup.get(doc_id, {})
+        s2_rank = stage2_order.get(doc_id, '50+')
+        
+        debug['stage1_top10'].append({
+            'stage1_rank': i,
+            'stage2_rank': s2_rank,
+            'rank_change': (i - s2_rank) if isinstance(s2_rank, int) else 'N/A',
+            'title': doc.get('title', '?')[:80],
+            'data_type': doc.get('data_type', ''),
+            'authority_score': doc.get('authority_score', 0),
+            'text_match': stage1_info.get(doc_id, {}).get('text_match', 0),
+            'vector_distance': rr.get('vector_distance', 'N/A'),
+            'semantic_rank': rr.get('semantic_rank', 'N/A'),
+            'blended_score': stage2_scores.get(doc_id, 'N/A'),
+            'url': doc.get('url', '')[:80],
+        })
+    
+    # =========================================================================
+    # STAGE 2 TOP 10
+    # =========================================================================
+    if stage2_applied:
+        debug['stage2_top10'] = []
+        for i, doc_id in enumerate(stage2_top10_ids, 1):
+            doc = doc_lookup.get(doc_id, {})
+            rr = rerank_lookup.get(doc_id, {})
+            s1_rank = stage1_order.get(doc_id, '50+')
+            
+            debug['stage2_top10'].append({
+                'stage2_rank': i,
+                'stage1_rank': s1_rank,
+                'rank_change': (s1_rank - i) if isinstance(s1_rank, int) else 'NEW',
+                'title': doc.get('title', '?')[:80],
+                'data_type': doc.get('data_type', ''),
+                'authority_score': doc.get('authority_score', 0),
+                'text_match': stage1_info.get(doc_id, {}).get('text_match', 0),
+                'vector_distance': rr.get('vector_distance', 'N/A'),
+                'semantic_rank': rr.get('semantic_rank', 'N/A'),
+                'blended_score': stage2_scores.get(doc_id, 'N/A'),
+                'url': doc.get('url', '')[:80],
+            })
+        
+        # ─── Summary ────────────────────────────────────────────────
+        debug['comparison'] = {
+            'top_result_changed': stage1_top10_ids[0] != stage2_top10_ids[0] if stage2_top10_ids else False,
+            'stage1_winner': doc_lookup.get(stage1_top10_ids[0], {}).get('title', '?')[:60],
+            'stage2_winner': doc_lookup.get(stage2_top10_ids[0], {}).get('title', '?')[:60] if stage2_top10_ids else None,
+        }
+        
+        # How many of stage1 top10 stayed in stage2 top10?
+        overlap = set(stage1_top10_ids) & set(stage2_top10_ids)
+        debug['comparison']['overlap_count'] = len(overlap)
+        debug['comparison']['dropped_from_top10'] = [
+            doc_lookup.get(did, {}).get('title', '?')[:50]
+            for did in stage1_top10_ids if did not in stage2_top10_ids
+        ]
+        debug['comparison']['new_in_top10'] = [
+            doc_lookup.get(did, {}).get('title', '?')[:50]
+            for did in stage2_top10_ids if did not in stage1_top10_ids
+        ]
+        
+        # ─── Vector distance filter simulation ───────────────────────
+        DISTANCE_THRESHOLDS = {
+            'answer':  0.60,
+            'explore': 0.70,
+            'compare': 0.65,
+            'browse':  0.85,
+            'local':   0.85,
+            'shop':    0.80,
+        }
+        threshold = DISTANCE_THRESHOLDS.get(query_mode, 0.75)
+        
+        total_before = len(all_candidates)
+        total_after = sum(
+            1 for c in all_candidates
+            if rerank_lookup.get(c['id'], {}).get('vector_distance', 1.0) <= threshold
+        )
+        
+        debug['vector_filter'] = {
+            'threshold': threshold,
+            'mode': query_mode,
+            'before': total_before,
+            'after': total_after,
+            'removed': total_before - total_after,
+            'removal_pct': round((total_before - total_after) / max(total_before, 1) * 100, 1),
+        }
+    
+    debug['timings']['total_ms'] = round((time.time() - t0) * 1000, 2)
+    
+    return JsonResponse(debug, json_dumps_params={'indent': 2})
+
+
+# =============================================================================
+# DEBUG BATCH — Run multiple queries at once
+# =============================================================================
+
+DEFAULT_TEST_QUERIES = [
+    # Location/Answer
+    "where is south afirca located on the map",
+    "what contry is nigeria in",
+    "how far is atlanta from savanah georgia",
+    "where can i find ethopian food near me",
+    "what states are in the southern united states",
+    # Person/Who
+    "who founded the naacp and when was it",
+    "who was the fisrt black president of harvard",
+    "who is the ceo of black entertianment television",
+    "tell me about harriet tubmans life story",
+    "who invented peanut butter gorge washington carver",
+    # Service/Local
+    "black owend barbershops in houston texas",
+    "best african american resturants in new york city",
+    "where can i find black owned bookstores near atlanta",
+    "affordable hair braiding salons in charlotte north carolina",
+    "black owned coffee shops in washingon dc area",
+    # Explore/Browse
+    "historicaly black colleges and universitys in alabama",
+    "what are the best hbcu football tems in the south",
+    "african amercian history museums in washington dc",
+    "how to suport black owned busnesses in my area",
+    "important black invetnors and there contributions to science",
+    # Compare/Shop
+    "black owned skin care products for sensitive skin",
+    "compair natural hair products for type 4c hair",
+    "which black owned restuarant has the best soul food in atlanta",
+    "top rated african american authers books to read",
+    "black owned clothing brands simlar to fashion nova",
+]
+
+
+@require_GET
+def debug_batch_view(request):
+    """
+    Run multiple queries at once. Shows summary for each query.
+    
+    Usage:
+        /debug/batch/                              (runs default test queries)
+        /debug/batch/?q=query1&q=query2&q=query3   (custom queries)
+    """
+    queries = request.GET.getlist('q')
+    if not queries:
+        queries = DEFAULT_TEST_QUERIES
+    
+    results = []
+    total_start = time.time()
+    
+    for query in queries:
+        t0 = time.time()
+        
+        try:
+            # Word Discovery
+            discovery = _run_word_discovery(query)
+            
+            # Intent
+            discovery = detect_intent(discovery)
+            signals = discovery.get('signals', {})
+            
+            # Profile
+            profile = build_query_profile(discovery, signals=signals)
+            params = build_typesense_params(profile, signals=signals)
+            filter_str = build_filter_string_without_data_type(profile, signals=signals)
+            
+            # Corrections
+            corrections = discovery.get('corrections', [])
+            corrected_query = discovery.get('corrected_query', query)
+            was_corrected = corrected_query.lower() != query.lower()
+            
+            # Stage 1 (top 5 only for batch speed)
+            search_params = {
+                'q': params.get('q', '*'),
+                'query_by': params.get('query_by', 'document_title,primary_keywords,entity_names'),
+                'query_by_weights': params.get('query_by_weights', '10,8,6'),
+                'per_page': 5,
+                'page': 1,
+                'num_typos': params.get('num_typos', 0),
+                'prefix': params.get('prefix', 'no'),
+                'drop_tokens_threshold': params.get('drop_tokens_threshold', 0),
+                'sort_by': params.get('sort_by', '_text_match:desc,authority_score:desc'),
+                'include_fields': 'document_uuid,document_title,document_data_type,authority_score',
+            }
+            if filter_str:
+                search_params['filter_by'] = filter_str
+            
+            response = client.collections[COLLECTION_NAME].documents.search(search_params)
+            found = response.get('found', 0)
+            hits = response.get('hits', [])
+            
+            top5 = []
+            for i, hit in enumerate(hits[:5], 1):
+                doc = hit.get('document', {})
+                top5.append({
+                    'rank': i,
+                    'title': doc.get('document_title', '?')[:70],
+                    'type': doc.get('document_data_type', ''),
+                })
+            
+            # Unknown terms
+            unknown = [t['word'] for t in discovery.get('terms', []) 
+                       if t.get('status') == 'unknown' and not t.get('is_stopword')]
+            
+            # Terms summary
+            terms = [
+                {
+                    'word': t.get('word'),
+                    'pos': t.get('pos'),
+                    'cat': t.get('category'),
+                    'stop': t.get('is_stopword', False),
+                }
+                for t in discovery.get('terms', [])
+                if not t.get('is_stopword')
+            ]
+            
+            query_result = {
+                'query': query,
+                'corrected_query': corrected_query,
+                'was_corrected': was_corrected,
+                'corrections': corrections,
+                'query_mode': signals.get('query_mode'),
+                'q_sent': params.get('q'),
+                'fields': params.get('query_by'),
+                'filter_by': filter_str or None,
+                'found': found,
+                'top5': top5,
+                'unknown_terms': unknown,
+                'terms': terms,
+                'search_terms': profile.get('search_terms', []),
+                'location_terms': profile.get('location_terms', []),
+                'cities': [c['name'] for c in profile.get('cities', [])],
+                'states': [s['name'] for s in profile.get('states', [])],
+                'time_ms': round((time.time() - t0) * 1000, 2),
+                'status': 'OK',
+            }
+            
+            # Flag potential issues
+            issues = []
+            if found == 0:
+                issues.append('ZERO_RESULTS')
+            if unknown:
+                issues.append(f'UNKNOWN_TERMS: {unknown}')
+            if was_corrected:
+                issues.append(f'CORRECTED: {query} → {corrected_query}')
+            if not profile.get('search_terms'):
+                issues.append('NO_SEARCH_TERMS')
+            if params.get('q') == '*':
+                issues.append('WILDCARD_QUERY')
+            
+            query_result['issues'] = issues if issues else ['NONE']
+            
+        except Exception as e:
+            query_result = {
+                'query': query,
+                'status': 'ERROR',
+                'error': str(e),
+                'time_ms': round((time.time() - t0) * 1000, 2),
+                'issues': [f'EXCEPTION: {str(e)}'],
+            }
+        
+        results.append(query_result)
+    
+    # Summary
+    total_time = round((time.time() - total_start) * 1000, 2)
+    
+    zero_results = [r['query'] for r in results if r.get('found', 0) == 0 and r.get('status') == 'OK']
+    errors = [r['query'] for r in results if r.get('status') == 'ERROR']
+    corrected = [{'from': r['query'], 'to': r['corrected_query']} for r in results if r.get('was_corrected')]
+    has_unknown = [{'query': r['query'], 'unknown': r.get('unknown_terms', [])} for r in results if r.get('unknown_terms')]
+    
+    return JsonResponse({
+        'total_queries': len(queries),
+        'total_time_ms': total_time,
+        'summary': {
+            'zero_results_count': len(zero_results),
+            'zero_results': zero_results,
+            'error_count': len(errors),
+            'errors': errors,
+            'corrected_count': len(corrected),
+            'corrected': corrected,
+            'unknown_terms_count': len(has_unknown),
+            'unknown_terms': has_unknown,
+        },
+        'results': results,
+    }, json_dumps_params={'indent': 2})
