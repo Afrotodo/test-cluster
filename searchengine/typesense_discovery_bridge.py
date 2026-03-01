@@ -503,13 +503,23 @@ def build_query_profile(discovery: Dict) -> Dict:
         
         'primary_intent': 'general',
         'preferred_data_types': [],
-        
+
+        # Original weights  
+        # 'field_boosts': {
+        #     'primary_keywords': 10,
+        #     'entity_names': 8,
+        #     'semantic_keywords': 6,
+        #     'key_facts': 4,
+        #     'document_title': 3,
+
+        # DEFAULT (general intent)
         'field_boosts': {
-            'primary_keywords': 10,
-            'entity_names': 8,
-            'semantic_keywords': 6,
+            'document_title': 10,
+            'primary_keywords': 8,
             'key_facts': 4,
-            'document_title': 3,
+            'semantic_keywords': 3,
+            'entity_names': 2,
+
         },
     }
     
@@ -724,51 +734,80 @@ def build_query_profile(discovery: Dict) -> Dict:
     if profile['primary_intent'] == 'person':
         profile['preferred_data_types'] = ['article', 'person', 'media']
         profile['field_boosts'] = {
-            'entity_names': 15,
-            'key_facts': 10,
+            # 'entity_names': 15,
+            # 'key_facts': 10,
+            # 'primary_keywords': 8,
+            # 'semantic_keywords': 6,
+            # 'document_title': 5,
+
+            'document_title': 15,
+            'entity_names': 12,
             'primary_keywords': 8,
-            'semantic_keywords': 6,
-            'document_title': 5,
+            'key_facts': 6,
+            'semantic_keywords': 4,
         }
+
+     
+  
         
     elif profile['primary_intent'] == 'organization':
         profile['preferred_data_types'] = ['business', 'article', 'organization']
         profile['field_boosts'] = {
-            'entity_names': 15,
-            'primary_keywords': 12,
-            'key_facts': 8,
-            'semantic_keywords': 6,
-            'document_title': 5,
+            # 'entity_names': 15,
+            # 'primary_keywords': 12,
+            # 'key_facts': 8,
+            # 'semantic_keywords': 6,
+            # 'document_title': 5,
+            'document_title': 15,
+            'entity_names': 12,
+            'primary_keywords': 10,
+            'key_facts': 6,
+            'semantic_keywords': 4,
         }
         
     elif profile['primary_intent'] == 'keyword':
         profile['preferred_data_types'] = ['article', 'media']
         profile['field_boosts'] = {
-            'primary_keywords': 15,
-            'key_facts': 10,
-            'entity_names': 8,
-            'semantic_keywords': 8,
-            'document_title': 5,
+            # 'primary_keywords': 15,
+            # 'key_facts': 10,
+            # 'entity_names': 8,
+            # 'semantic_keywords': 8,
+            # 'document_title': 5,
+            'document_title': 15,
+            'primary_keywords': 12,
+            'key_facts': 8,
+            'semantic_keywords': 6,
+            'entity_names': 3,
         }
         
     elif profile['primary_intent'] == 'media':
         profile['preferred_data_types'] = ['media', 'article']
         profile['field_boosts'] = {
-            'semantic_keywords': 15,
+            # 'semantic_keywords': 15,
+            # 'primary_keywords': 12,
+            # 'document_title': 10,
+            # 'entity_names': 8,
+            # 'key_facts': 5,
+            'document_title': 15,
             'primary_keywords': 12,
-            'document_title': 10,
-            'entity_names': 8,
+            'semantic_keywords': 10,
             'key_facts': 5,
+            'entity_names': 4,
         }
         
     elif profile['primary_intent'] == 'location':
         profile['preferred_data_types'] = ['place', 'business', 'article']
         profile['field_boosts'] = {
-            'primary_keywords': 12,
-            'entity_names': 10,
+            # 'primary_keywords': 12,
+            # 'entity_names': 10,
+            # 'key_facts': 8,
+            # 'semantic_keywords': 6,
+            # 'document_title': 5,
+            'document_title': 12,
+            'primary_keywords': 10,
             'key_facts': 8,
-            'semantic_keywords': 6,
-            'document_title': 5,
+            'semantic_keywords': 5,
+            'entity_names': 3,
         }
     
     return profile
