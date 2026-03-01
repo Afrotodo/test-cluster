@@ -6481,8 +6481,10 @@ from searchengine.typesense_discovery_bridge import (
     LOCATION_CATEGORIES,
 )
 
-from searchengine.intent_detect import detect_intent
 
+
+
+from searchengine.intent_detect import detect_intent
 
 @require_GET
 def debug_search_view(request):

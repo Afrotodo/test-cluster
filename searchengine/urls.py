@@ -82,7 +82,7 @@ urlpatterns = [
 
 
     #  Testing endpoints 
-    path('debug/search/', debug_search_view, name='debug_search'),
+    path('debug/search/', views.debug_search_view, name='debug_search'),
     path('debug/business/', views.debug_business_search, name='debug_business'),
     path('debug/schema/', views.debug_schema, name='debug_schema'),
     # If you want to test the fixed view:
