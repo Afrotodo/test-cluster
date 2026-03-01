@@ -914,7 +914,7 @@ def fetch_candidate_ids(
             'per_page': PAGE_SIZE,
             'page': current_page,
             'include_fields': 'document_uuid,document_data_type,document_category,document_schema,authority_score',
-            'num_typos': 1,
+            'num_typos': 0,
             'drop_tokens_threshold': 0,
             'sort_by': 'authority_score:desc,published_date:desc',
         }
