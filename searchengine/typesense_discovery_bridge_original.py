@@ -1,21 +1,23 @@
+
 """
-typesense_discovery_bridge_v2.py
-================================
+typesense_discovery_bridge.py
+=============================
 Complete search bridge between Word Discovery v2 and Typesense.
 
-CHANGES FROM ORIGINAL:
-- Dynamic field weights computed from Word Discovery metadata (not presets)
-- Location words stripped from search terms (filter only)
-- Unknown term handling with broad field search
-- Blended ranking: text_match(0.45) + semantic(0.35) + authority(0.20)
-- Unknown terms shift blend toward semantic(0.50)
-- Dynamic drop_tokens_threshold based on query length
-- Conditional num_typos based on whether WD made corrections
-- Sort by _text_match:desc instead of authority_score:desc in Stage 1
-- discovery passed to fetch_candidate_ids for smarter params
+This file handles EVERYTHING:
+- Word Discovery v2 integration
+- Query profile building (intent, locations, field boosts)
+- Embedding generation (via embedding_client.py)
+- Result caching (self-contained)
+- Stage 1: Graph Filter (candidate generation)
+- Stage 2: Semantic Rerank (vector-based ranking)
+- Facet counting from cache
+- Pagination from cache
+- Full document fetching
+- Returns same structure as execute_full_search() for views.py compatibility
 
 USAGE IN VIEWS.PY:
-    from .typesense_discovery_bridge_v2 import execute_full_search
+    from .typesense_discovery_bridge import execute_full_search
     
     result = execute_full_search(
         query=corrected_query,
@@ -39,7 +41,6 @@ from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
 from decouple import config
 import requests
-import random
 
 # ============================================================================
 # IMPORTS - Word Discovery v2 and Embedding Client
@@ -82,7 +83,6 @@ except ImportError:
         def get_query_embedding(query: str) -> Optional[List[float]]:
             print("⚠️ embedding_client not available")
             return None
-
 try:
     from .cached_embedding_related_search import store_query_embedding
     print("✅ store_query_embedding imported")
@@ -96,9 +96,15 @@ except ImportError:
         print("⚠️ store_query_embedding not available")
 
 
-# ============================================================================
-# HUMANIZE KEY FACTS
-# ============================================================================
+
+
+
+
+
+
+import random
+
+import random
 
 def humanize_key_facts(key_facts: list, query: str = '', matched_keyword: str = '') -> str:
     """Format key_facts into a readable AfroToDo AI Overview,
@@ -106,19 +112,24 @@ def humanize_key_facts(key_facts: list, query: str = '', matched_keyword: str = 
     if not key_facts:
         return ''
     
+    # Clean up facts
     facts = [f.rstrip('.').strip() for f in key_facts if f.strip()]
     
     if not facts:
         return ''
     
+    # Filter: only keep facts that contain the matched keyword
     if matched_keyword:
         keyword_lower = matched_keyword.lower()
         relevant_facts = [f for f in facts if keyword_lower in f.lower()]
+        
+        # If no facts match the keyword, fall back to first fact only
         if not relevant_facts:
             relevant_facts = [facts[0]]
     else:
         relevant_facts = [facts[0]]
     
+    # Cap at 2 — keeps it concise
     relevant_facts = relevant_facts[:2]
     
     is_question = query and any(
@@ -315,12 +326,6 @@ CATEGORY_LABELS = {
     'general': 'General',
 }
 
-# Noise words to strip from search terms (beyond what WD catches as stopwords)
-NOISE_WORDS = frozenset([
-    'in', 'near', 'around', 'at', 'from', 'the', 'for', 'and', 'or', 'of', 'to',
-    'a', 'an', 'on', 'by', 'with', 'about',
-])
-
 
 # ============================================================================
 # HELPER FUNCTIONS
@@ -371,6 +376,32 @@ def is_city_category(category: str) -> bool:
 # WORD DISCOVERY WRAPPER
 # ============================================================================
 
+# def _run_word_discovery(query: str) -> Dict:
+#     """Run Word Discovery v2 on query."""
+#     if WORD_DISCOVERY_AVAILABLE:
+#         try:
+#             wd = WordDiscovery(verbose=False)
+#             return wd.process(query)
+#         except Exception as e:
+#             print(f"⚠️ WordDiscovery error: {e}")
+    
+#     # Fallback
+#     return {
+#         'query': query,
+#         'corrected_query': query,
+#         'terms': [],
+#         'ngrams': [],
+#         'corrections': [],
+#         'stats': {
+#             'total_words': len(query.split()),
+#             'valid_words': 0,
+#             'corrected_words': 0,
+#             'unknown_words': len(query.split()),
+#             'stopwords': 0,
+#             'ngram_count': 0,
+#         }
+#     }
+
 def _run_word_discovery(query: str) -> Dict:
     """Run Word Discovery v2 on query."""
     if WORD_DISCOVERY_AVAILABLE:
@@ -403,7 +434,6 @@ def _run_word_discovery(query: str) -> Dict:
             'ngram_count': 0,
         }
     }
-
 
 def _run_embedding(query: str) -> Optional[List[float]]:
     """Run embedding generation."""
@@ -444,19 +474,12 @@ def build_query_profile(discovery: Dict) -> Dict:
     """
     Analyze ALL metadata from Word Discovery to understand user intent.
     
-    V2 CHANGES:
-    - Field weights computed dynamically from term metadata (not presets)
-    - Unknown terms tracked separately
-    - Location words stripped from search_terms
-    - Weights scale with term rank values
-    
     Returns profile with:
     - Primary intent (person, organization, location, keyword, media)
     - Scores for each intent type
     - Cities and states for filters
-    - Search terms for query (cleaned of locations)
-    - Field boosts computed from actual term categories and ranks
-    - Unknown terms list
+    - Search terms for query
+    - Field boosts for query_by_weights
     """
     profile = {
         'has_person': False,
@@ -477,22 +500,30 @@ def build_query_profile(discovery: Dict) -> Dict:
         'states': [],
         'keywords': [],
         'search_terms': [],
-        'unknown_terms': [],  # NEW: track unknown terms
         
         'primary_intent': 'general',
         'preferred_data_types': [],
-        'field_boosts': {},  # Will be computed dynamically
+
+        # Original weights  
+        # 'field_boosts': {
+        #     'primary_keywords': 10,
+        #     'entity_names': 8,
+        #     'semantic_keywords': 6,
+        #     'key_facts': 4,
+        #     'document_title': 3,
+
+        # DEFAULT (general intent)
+        'field_boosts': {
+            'document_title': 10,
+            'primary_keywords': 8,
+            'key_facts': 4,
+            'semantic_keywords': 3,
+            'entity_names': 2,
+
+        },
     }
     
     if not discovery:
-        # No discovery data — set generic weights
-        profile['field_boosts'] = {
-            'document_title': 10,
-            'primary_keywords': 10,
-            'key_facts': 6,
-            'semantic_keywords': 5,
-            'entity_names': 4,
-        }
         return profile
     
     terms = discovery.get('terms', [])
@@ -559,6 +590,8 @@ def build_query_profile(discovery: Dict) -> Dict:
         has_city_term = any(is_city_category(tc['category']) for tc in term_categories)
         has_state_term = any(is_state_category(tc['category']) for tc in term_categories)
         
+        # Rule: If BOTH terms are locations → trust term categories
+        #       Otherwise → trust n-gram category
         both_terms_are_locations = has_city_term and has_state_term
         ngram_is_location = ngram_category in LOCATION_CATEGORIES
         
@@ -622,7 +655,6 @@ def build_query_profile(discovery: Dict) -> Dict:
         display = term.get('display', word)
         category = term.get('category', '')
         rank = _parse_rank(term.get('rank', 0))
-        status = term.get('status', '')
         is_stopword = term.get('is_stopword', False)
         part_of_ngram = term.get('part_of_ngram', False) or (position in ngram_positions)
         
@@ -673,23 +705,12 @@ def build_query_profile(discovery: Dict) -> Dict:
         elif category == 'Dictionary Word':
             profile['search_terms'].append(word)
             
-        # ============================================================
-        # UNKNOWN TERM HANDLING — NEW
-        # ============================================================
-        elif status == 'unknown' or (not category and word):
-            profile['search_terms'].append(word)
-            profile['unknown_terms'].append({
-                'word': word,
-                'display': display,
-                'position': position,
-            })
-            
         else:
             if word:
                 profile['search_terms'].append(word)
     
     # =================================================================
-    # Determine Primary Intent (kept for logging/UI compatibility)
+    # Determine Primary Intent
     # =================================================================
     
     scores = {
@@ -707,124 +728,87 @@ def build_query_profile(discovery: Dict) -> Dict:
         profile['primary_intent'] = 'general'
     
     # =================================================================
-    # DYNAMIC Field Boosts — computed from actual term metadata
-    # Instead of picking from 5 presets, weights emerge from what
-    # Word Discovery actually found. Each category boosts the field
-    # where that type of term lives in the database.
-    # =================================================================
-    
-    weights = {
-        'entity_names': 2,
-        'document_title': 5,
-        'primary_keywords': 3,
-        'key_facts': 3,
-        'semantic_keywords': 2,
-    }
-    
-    # Person terms → entity_names is where person names live
-    if profile['has_person']:
-        person_boost = min(profile['person_score'] // 100, 5)
-        weights['entity_names'] += 10 + person_boost
-        weights['document_title'] += 5
-        print(f"   📊 Person boost: entity_names +{10 + person_boost}, document_title +5")
-    
-    # Organization terms → entity_names is where org names live
-    if profile['has_organization']:
-        org_boost = min(profile['organization_score'] // 100, 5)
-        weights['entity_names'] += 10 + org_boost
-        weights['primary_keywords'] += 5
-        print(f"   📊 Org boost: entity_names +{10 + org_boost}, primary_keywords +5")
-    
-    # Keyword/topic terms → primary_keywords is the curated topic signal
-    if profile['has_keyword']:
-        kw_boost = min(profile['keyword_score'] // 100, 5)
-        weights['primary_keywords'] += 10 + kw_boost
-        weights['semantic_keywords'] += 5
-        weights['key_facts'] += 4
-        print(f"   📊 Keyword boost: primary_keywords +{10 + kw_boost}, semantic +5, facts +4")
-    
-    # Media terms → document_title is where titles of songs/movies live
-    if profile['has_media']:
-        media_boost = min(profile['media_score'] // 100, 5)
-        weights['document_title'] += 10 + media_boost
-        weights['primary_keywords'] += 5
-        weights['entity_names'] += 4
-        print(f"   📊 Media boost: document_title +{10 + media_boost}, primary_keywords +5")
-    
-    # Unknown terms — need broad field coverage
-    has_unknown = len(profile['unknown_terms']) > 0
-    has_known = any([profile['has_person'], profile['has_organization'],
-                     profile['has_keyword'], profile['has_media']])
-    
-    if has_unknown and has_known:
-        # Mix of known and unknown — bump everything slightly so unknown
-        # term has a fair chance to match in any field
-        weights['document_title'] += 3
-        weights['entity_names'] += 3
-        weights['primary_keywords'] += 3
-        weights['key_facts'] += 2
-        weights['semantic_keywords'] += 2
-        print(f"   📊 Mixed known+unknown: all fields +2-3")
-    
-    elif has_unknown and not has_known:
-        # ALL terms are unknown — cast the widest net
-        weights['document_title'] += 10
-        weights['entity_names'] += 8
-        weights['primary_keywords'] += 8
-        weights['key_facts'] += 6
-        weights['semantic_keywords'] += 5
-        print(f"   📊 All unknown: broad boost to all fields")
-    
-    elif not has_known and not has_unknown:
-        # No categorized terms at all (edge case — maybe all stopwords)
-        weights['primary_keywords'] += 7
-        weights['document_title'] += 5
-        weights['key_facts'] += 4
-        weights['semantic_keywords'] += 3
-        print(f"   📊 No terms categorized: generic weights")
-    
-    profile['field_boosts'] = weights
-    
-    print(f"   📊 Final weights: {weights}")
-    
-    # =================================================================
-    # Clean search terms — remove location words from text search
-    # Locations are already filters, searching them as text dilutes relevance
-    # =================================================================
-    
-    location_words = set()
-    for c in profile['cities']:
-        location_words.add(c['name'].lower())
-    for s in profile['states']:
-        location_words.add(s['name'].lower())
-        for v in s.get('variants', []):
-            location_words.add(v.lower())
-    
-    original_terms = list(profile['search_terms'])
-    profile['search_terms'] = [
-        t for t in profile['search_terms']
-        if t.lower() not in location_words and t.lower() not in NOISE_WORDS
-    ]
-    
-    if original_terms != profile['search_terms']:
-        print(f"   🧹 Cleaned search terms: {original_terms} → {profile['search_terms']}")
-    
-    # =================================================================
-    # Set preferred data types (for UI hints)
+    # Set Field Boosts Based on Intent
     # =================================================================
     
     if profile['primary_intent'] == 'person':
         profile['preferred_data_types'] = ['article', 'person', 'media']
+        profile['field_boosts'] = {
+            # 'entity_names': 15,
+            # 'key_facts': 10,
+            # 'primary_keywords': 8,
+            # 'semantic_keywords': 6,
+            # 'document_title': 5,
+
+            'document_title': 15,
+            'entity_names': 12,
+            'primary_keywords': 8,
+            'key_facts': 6,
+            'semantic_keywords': 4,
+        }
+
+     
+  
+        
     elif profile['primary_intent'] == 'organization':
         profile['preferred_data_types'] = ['business', 'article', 'organization']
+        profile['field_boosts'] = {
+            # 'entity_names': 15,
+            # 'primary_keywords': 12,
+            # 'key_facts': 8,
+            # 'semantic_keywords': 6,
+            # 'document_title': 5,
+            'document_title': 15,
+            'entity_names': 12,
+            'primary_keywords': 10,
+            'key_facts': 6,
+            'semantic_keywords': 4,
+        }
+        
     elif profile['primary_intent'] == 'keyword':
         profile['preferred_data_types'] = ['article', 'media']
+        profile['field_boosts'] = {
+            # 'primary_keywords': 15,
+            # 'key_facts': 10,
+            # 'entity_names': 8,
+            # 'semantic_keywords': 8,
+            # 'document_title': 5,
+            'document_title': 15,
+            'primary_keywords': 12,
+            'key_facts': 8,
+            'semantic_keywords': 6,
+            'entity_names': 3,
+        }
+        
     elif profile['primary_intent'] == 'media':
         profile['preferred_data_types'] = ['media', 'article']
+        profile['field_boosts'] = {
+            # 'semantic_keywords': 15,
+            # 'primary_keywords': 12,
+            # 'document_title': 10,
+            # 'entity_names': 8,
+            # 'key_facts': 5,
+            'document_title': 15,
+            'primary_keywords': 12,
+            'semantic_keywords': 10,
+            'key_facts': 5,
+            'entity_names': 4,
+        }
+        
     elif profile['primary_intent'] == 'location':
         profile['preferred_data_types'] = ['place', 'business', 'article']
-    else:
-        profile['preferred_data_types'] = ['article']
+        profile['field_boosts'] = {
+            # 'primary_keywords': 12,
+            # 'entity_names': 10,
+            # 'key_facts': 8,
+            # 'semantic_keywords': 6,
+            # 'document_title': 5,
+            'document_title': 12,
+            'primary_keywords': 10,
+            'key_facts': 8,
+            'semantic_keywords': 5,
+            'entity_names': 3,
+        }
     
     return profile
 
@@ -836,10 +820,13 @@ def build_query_profile(discovery: Dict) -> Dict:
 def build_typesense_params(profile: Dict, ui_filters: Dict = None) -> Dict:
     """
     Convert query profile into Typesense search parameters.
+    
+    Returns:
+        Dict with q, query_by, query_by_weights, filter_by
     """
     params = {}
     
-    # Build query string from cleaned search terms
+    # Build query string
     search_terms = profile.get('search_terms', [])
     seen = set()
     unique_terms = []
@@ -851,7 +838,7 @@ def build_typesense_params(profile: Dict, ui_filters: Dict = None) -> Dict:
     
     params['q'] = ' '.join(unique_terms) if unique_terms else '*'
     
-    # Build query_by and weights from dynamic field boosts
+    # Build query_by and weights
     field_boosts = profile.get('field_boosts', {})
     sorted_fields = sorted(field_boosts.items(), key=lambda x: x[1], reverse=True)
     params['query_by'] = ','.join([f[0] for f in sorted_fields])
@@ -934,38 +921,18 @@ def build_filter_string_without_data_type(profile: Dict) -> str:
 def fetch_candidate_ids(
     search_query: str,
     profile: Dict,
-    discovery: Dict = None,
     max_results: int = MAX_CACHED_RESULTS
 ) -> List[Dict]:
     """
     Stage 1: Graph Filter - Candidate Generation
     
-    V2 CHANGES:
-    - Accepts discovery dict for smarter param decisions
-    - Dynamic drop_tokens_threshold based on query length
-    - Conditional num_typos based on WD corrections
-    - Sort by _text_match:desc for relevance-first ordering
-    - Preserves text_match score for blended ranking
+    Uses keyword fields for FILTERING (fast inverted index lookup).
+    Does NOT filter by data_type so we get ALL types for tab counts.
     """
     params = build_typesense_params(profile)
+    
+    # Override filter to exclude data_type (for accurate facet counts)
     filter_str = build_filter_string_without_data_type(profile)
-    
-    # Dynamic drop_tokens based on query length
-    clean_terms = params.get('q', search_query).split()
-    term_count = len(clean_terms)
-    
-    if term_count <= 2:
-        drop_threshold = 0    # Short queries: require all terms
-    elif term_count <= 4:
-        drop_threshold = 1    # Medium queries: allow dropping 1 term
-    else:
-        drop_threshold = 2    # Long queries: allow dropping 2 terms
-    
-    # Conditional typo tolerance
-    # If Word Discovery already corrected spelling, trust it — no typos needed
-    # If no corrections were made, allow 1 typo as safety net for terms WD missed
-    has_corrections = bool(discovery and discovery.get('corrections'))
-    num_typos = 0 if has_corrections else 1
     
     PAGE_SIZE = 250
     all_results = []
@@ -975,7 +942,6 @@ def fetch_candidate_ids(
     print(f"🔍 Stage 1 Query: '{params.get('q', search_query)}'")
     print(f"   Fields: {params.get('query_by', '')}")
     print(f"   Weights: {params.get('query_by_weights', '')}")
-    print(f"   drop_tokens: {drop_threshold}, num_typos: {num_typos}")
     if filter_str:
         print(f"   Location Filters: {filter_str}")
     
@@ -987,10 +953,10 @@ def fetch_candidate_ids(
             'per_page': PAGE_SIZE,
             'page': current_page,
             'include_fields': 'document_uuid,document_data_type,document_category,document_schema,authority_score',
-            'num_typos': num_typos,
-            'prefix': 'no',
-            'drop_tokens_threshold': drop_threshold,
-            'sort_by': '_text_match:desc,authority_score:desc',  # CHANGED: text match first
+            'num_typos': 0,
+             'prefix': 'no', # added to help find africa and not african
+            'drop_tokens_threshold': 0,
+            'sort_by': 'authority_score:desc,published_date:desc',
         }
         
         if filter_str:
@@ -1012,7 +978,8 @@ def fetch_candidate_ids(
                     'category': doc.get('document_category', ''),
                     'schema': doc.get('document_schema', ''),
                     'authority_score': doc.get('authority_score', 0),
-                    'text_match': hit.get('text_match', 0),  # PRESERVED for blended ranking
+                    'service_phone': doc.get('service_phone'),
+                    'text_match': hit.get('text_match', 0),
                 })
             
             if len(all_results) >= found or len(hits) < PAGE_SIZE:
@@ -1041,7 +1008,6 @@ def semantic_rerank_candidates(
     Stage 2: Semantic Rerank - Pure Vector Ranking
     
     Takes candidate IDs and reranks by vector similarity ONLY.
-    The blending with text_match happens in apply_semantic_ranking.
     """
     if not candidate_ids or not query_embedding:
         return [{'id': cid, 'vector_distance': 1.0, 'semantic_rank': i}
@@ -1093,24 +1059,56 @@ def semantic_rerank_candidates(
                 for i, cid in enumerate(ids_to_rerank)]
 
 
+# def apply_semantic_ranking(
+#     cached_results: List[Dict],
+#     reranked_results: List[Dict]
+# ) -> List[Dict]:
+#     """Apply semantic ranking to cached results."""
+#     if not reranked_results:
+#         return cached_results
+    
+#     rank_lookup = {
+#         r['id']: {
+#             'semantic_rank': r['semantic_rank'],
+#             'vector_distance': r.get('vector_distance', 1.0)
+#         }
+#         for r in reranked_results
+#     }
+    
+#     for item in cached_results:
+#         item_id = item.get('id')
+#         if item_id in rank_lookup:
+#             item['semantic_rank'] = rank_lookup[item_id]['semantic_rank']
+#             item['vector_distance'] = rank_lookup[item_id]['vector_distance']
+#         else:
+#             item['semantic_rank'] = 999999
+#             item['vector_distance'] = 1.0
+    
+#     cached_results.sort(key=lambda x: x.get('semantic_rank', 999999))
+    
+#     for i, item in enumerate(cached_results):
+#         item['rank'] = i
+    
+#     return cached_results
+
+# This is designed to take an average and push the wrong documents to the bottom 
+
 def apply_semantic_ranking(
     cached_results: List[Dict],
-    reranked_results: List[Dict],
-    has_unknown_terms: bool = False
+    reranked_results: List[Dict]
 ) -> List[Dict]:
-    """
-    Apply blended ranking: text_match + semantic + authority.
-    
-    V2 CHANGES:
-    - Blends text_match, vector distance, and authority score
-    - text_match is the primary signal (0.45)
-    - semantic is tiebreaker (0.35)
-    - authority is quality floor (0.20)
-    - When unknown terms present, shifts weight toward semantic (0.50)
-      because embeddings may understand terms that keywords missed
-    """
+    """Apply semantic ranking to cached results with distance cutoff."""
     if not reranked_results:
         return cached_results
+    
+    # Find best distance for relative cutoff
+    best_distance = min(
+        (r.get('vector_distance', 1.0) for r in reranked_results if r.get('vector_distance', 1.0) < 1.0),
+        default=1.0
+    )
+    cutoff = min(best_distance * 2.0, 0.85)
+    
+    print(f"🎯 Semantic cutoff: best={best_distance:.3f}, cutoff={cutoff:.3f}")
     
     rank_lookup = {
         r['id']: {
@@ -1120,56 +1118,25 @@ def apply_semantic_ranking(
         for r in reranked_results
     }
     
-    # Normalize text_match scores
-    max_text_match = max(
-        (item.get('text_match', 0) for item in cached_results), default=1
-    ) or 1
-    
-    # When terms are unknown, trust semantic more — embeddings may
-    # understand the term even if our keyword index doesn't have a
-    # strong match for it
-    if has_unknown_terms:
-        text_weight = 0.30
-        semantic_weight = 0.50
-        authority_weight = 0.20
-        print(f"🎯 Unknown terms detected — boosting semantic weight")
-    else:
-        text_weight = 0.45
-        semantic_weight = 0.35
-        authority_weight = 0.20
-    
     for item in cached_results:
         item_id = item.get('id')
-        
-        # Text match score (0-1, higher is better)
-        text_score = item.get('text_match', 0) / max_text_match
-        
-        # Semantic score (0-1, higher is better)
         if item_id in rank_lookup:
-            item['vector_distance'] = rank_lookup[item_id]['vector_distance']
             item['semantic_rank'] = rank_lookup[item_id]['semantic_rank']
-            semantic_score = 1.0 - item['vector_distance']
+            item['vector_distance'] = rank_lookup[item_id]['vector_distance']
         else:
-            item['vector_distance'] = 1.0
             item['semantic_rank'] = 999999
-            semantic_score = 0.0
-        
-        # Authority score (0-1, normalized)
-        authority = min(item.get('authority_score', 0) / 100.0, 1.0)
-        
-        # Combined score — text match anchors, semantic tiebreaks, authority floors
-        item['combined_score'] = (
-            text_weight * text_score +
-            semantic_weight * semantic_score +
-            authority_weight * authority
-        )
+            item['vector_distance'] = 1.0
     
-    cached_results.sort(key=lambda x: x.get('combined_score', 0), reverse=True)
+    # Apply cutoff — demote documents above threshold
+    for item in cached_results:
+        if item['vector_distance'] > cutoff:
+            item['semantic_rank'] += 1000000
+    
+    cached_results.sort(key=lambda x: x.get('semantic_rank', 999999))
     
     for i, item in enumerate(cached_results):
         item['rank'] = i
     
-    print(f"🎯 Blended ranking: text({text_weight}) + semantic({semantic_weight}) + authority({authority_weight})")
     return cached_results
 
 
@@ -1372,7 +1339,8 @@ def format_result(hit: Dict, query: str = '') -> Dict:
             'address': doc.get('location_address'),
             'lat': (doc.get('location_geopoint') or doc.get('location_coordinates', [None, None]) or [None, None])[0],
             'lng': (doc.get('location_geopoint') or doc.get('location_coordinates', [None, None]) or [None, None])[1],
-        },
+            },
+
         'time_period': {
             'start': doc.get('time_period_start'),
             'end': doc.get('time_period_end'),
@@ -1402,10 +1370,6 @@ def detect_query_intent(query: str, pos_tags: List[Tuple] = None) -> str:
     return 'general'
 
 
-# ============================================================================
-# MAIN ENTRY POINT
-# ============================================================================
-
 def execute_full_search(
     query: str,
     session_id: str = None,
@@ -1432,7 +1396,6 @@ def execute_full_search(
     t0 = time.time()
     print(f"🔴 DEBUG: alt_mode='{alt_mode}' type={type(alt_mode)} search_source='{search_source}'")
     print(f"🔴 DEBUG: is_keyword_path would be: {(alt_mode == 'n') or search_source in ('dropdown', 'keyword', 'suggestion', 'autocomplete')}")
-    
     # Extract active filters
     active_data_type = filters.get('data_type') if filters else None
     active_category = filters.get('category') if filters else None
@@ -1459,7 +1422,6 @@ def execute_full_search(
             'search_terms': query.split(),
             'cities': [],
             'states': [],
-            'unknown_terms': [],
             'primary_intent': intent,
             'field_boosts': {
                 'primary_keywords': 10,
@@ -1551,6 +1513,7 @@ def execute_full_search(
                 'data_type': active_data_type,
                 'category': active_category,
                 'schema': active_schema,
+                # Added this for the location based search and mapping
                 'is_local_search': False,
                 'local_search_strength': 'none',
             }
@@ -1567,7 +1530,7 @@ def execute_full_search(
     discovery, query_embedding = run_parallel_prep(query, skip_embedding=skip_embedding)
     times['parallel_prep'] = round((time.time() - t1) * 1000, 2)
     
-    # Run intent detection (logging only - no behavior changes)
+        # Run intent detection (logging only - no behavior changes)
     if INTENT_DETECT_AVAILABLE:
         try:
             discovery = detect_intent(discovery)
@@ -1585,13 +1548,13 @@ def execute_full_search(
     corrected_query = discovery.get('corrected_query', query)
     semantic_enabled = query_embedding is not None
     
-    # Build profile from discovery — NOW WITH DYNAMIC WEIGHTS
+    # Build profile from discovery
     t2 = time.time()
     profile = build_query_profile(discovery)
     times['build_profile'] = round((time.time() - t2) * 1000, 2)
     
     # =========================================================================
-    # Apply corrections to search terms so Typesense gets corrected words
+    # FIX: Apply corrections to search terms so Typesense gets corrected words
     # =========================================================================
     corrections = discovery.get('corrections', [])
     if corrections:
@@ -1607,16 +1570,14 @@ def execute_full_search(
         ]
         if original_terms != profile['search_terms']:
             print(f"   ✅ Applied corrections to search terms: {original_terms} → {profile['search_terms']}")
+    # =========================================================================
     
     intent = profile.get('primary_intent', 'general')
-    has_unknown = len(profile.get('unknown_terms', [])) > 0
     
     print(f"   Intent: {intent}")
     print(f"   Cities: {[c['name'] for c in profile.get('cities', [])]}")
     print(f"   States: {[s['name'] for s in profile.get('states', [])]}")
     print(f"   Search Terms: {profile.get('search_terms', [])}")
-    print(f"   Unknown Terms: {[u['word'] for u in profile.get('unknown_terms', [])]}")
-    print(f"   Field Boosts: {profile.get('field_boosts', {})}")
     
     # Generate cache key
     city_names = [c['name'] for c in profile.get('cities', [])]
@@ -1633,8 +1594,7 @@ def execute_full_search(
     else:
         print(f"❌ Cache MISS: Running Stage 1...")
         t3 = time.time()
-        # CHANGED: pass discovery for smarter params
-        all_results = fetch_candidate_ids(corrected_query, profile, discovery=discovery)
+        all_results = fetch_candidate_ids(corrected_query, profile)
         times['stage1'] = round((time.time() - t3) * 1000, 2)
         
         if all_results:
@@ -1655,13 +1615,12 @@ def execute_full_search(
         schema=active_schema
     )
     
-    # Stage 2: Semantic Rerank with BLENDED scoring
+    # Stage 2: Semantic Rerank
     if semantic_enabled and filtered_results:
         t4 = time.time()
         candidate_ids = [item['id'] for item in filtered_results]
         reranked = semantic_rerank_candidates(candidate_ids, query_embedding, max_to_rerank=500)
-        # CHANGED: pass has_unknown_terms for adaptive blending
-        filtered_results = apply_semantic_ranking(filtered_results, reranked, has_unknown_terms=has_unknown)
+        filtered_results = apply_semantic_ranking(filtered_results, reranked)
         times['stage2'] = round((time.time() - t4) * 1000, 2)
     else:
         print(f"⚠️ Skipping Stage 2: semantic={semantic_enabled}, filtered={len(filtered_results)}")
@@ -1676,13 +1635,17 @@ def execute_full_search(
     times['fetch_docs'] = round((time.time() - t5) * 1000, 2)
 
     # Humanize top result key_facts (semantic path only)
+  
     if results and results[0].get('key_facts') and page == 1:
+        # Only show AI Overview when top result is highly relevant
         top_facts = ' '.join(results[0].get('key_facts', []))
         top_title = results[0].get('title', '')
         
+        # Get meaningful words from query (skip stopwords)
         stopwords = {'who', 'what', 'where', 'when', 'why', 'how', 'is', 'are', 'the', 'a', 'an', 'in', 'of', 'for', 'to', 'do', 'does', 'can', 'was', 'were', 'be', 'been', 'it', 'its', 'this', 'that'}
         query_words = [w for w in query.lower().split() if w not in stopwords and len(w) > 1]
         
+        # Count how many query words appear in title or key_facts
         matches = sum(1 for w in query_words if w in top_title.lower() or w in top_facts.lower())
         confidence = matches / len(query_words) if query_words else 0
         
@@ -1706,7 +1669,7 @@ def execute_full_search(
     
     # Extract valid/unknown terms
     valid_terms = profile.get('search_terms', [])
-    unknown_terms = [t['word'] for t in profile.get('unknown_terms', [])]
+    unknown_terms = [t['word'] for t in discovery.get('terms', []) if t.get('status') == 'unknown']
     
     return {
         'query': query,
@@ -1750,8 +1713,12 @@ def execute_full_search(
             'data_type': active_data_type,
             'category': active_category,
             'schema': active_schema,
+
+             # Added this for the location based search and mapping
+
             'is_local_search': discovery.get('signals', {}).get('is_local_search', False),
             'local_search_strength': discovery.get('signals', {}).get('local_search_strength', 'none'),
+
             'graph_filters': [],
             'graph_locations': [
                 {'field': 'location_city', 'values': city_names},
@@ -1842,13 +1809,13 @@ if __name__ == "__main__":
     import sys
     
     if len(sys.argv) < 2:
-        print("Usage: python typesense_discovery_bridge_v2.py \"your search query\"")
+        print("Usage: python typesense_discovery_bridge.py \"your search query\"")
         sys.exit(1)
     
     query = ' '.join(sys.argv[1:])
     
     print("=" * 70)
-    print(f"🚀 TESTING V2: '{query}'")
+    print(f"🚀 TESTING: '{query}'")
     print("=" * 70)
     
     result = execute_full_search(
@@ -1887,11 +1854,6 @@ if __name__ == "__main__":
     print(f"\n📍 Locations:")
     for loc in result.get('word_discovery', {}).get('locations', []):
         print(f"   {loc['field']}: {loc['values']}")
-    
-    print(f"\n📊 Field Boosts (dynamic):")
-    profile = result.get('profile', {})
-    for field, weight in sorted(profile.get('field_boosts', {}).items(), key=lambda x: -x[1]):
-        print(f"   {field}: {weight}")
     
     print(f"\n📁 Data Type Facets:")
     for f in result.get('data_type_facets', []):
