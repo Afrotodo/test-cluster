@@ -735,6 +735,9 @@ def build_query_profile(discovery: Dict, signals: Dict = None) -> Dict:
         if is_stopword or part_of_ngram:
             continue
         
+        # ─── Blueprint Step 1: Determine if this is a noun (needed for all routing)
+        is_noun = pos in SEARCHABLE_POS
+        
         # ─── Blueprint Step 7: Location terms → filter OR search ─────
         # Cities/states → filter_by (strip from q)
         # Continents/countries/regions → keep in search_terms (not filterable)
@@ -776,7 +779,6 @@ def build_query_profile(discovery: Dict, signals: Dict = None) -> Dict:
         
         # ─── Blueprint Step 1: Only nouns go into search terms ───────
         # Verbs, adjectives, prepositions, wh-pronouns are SIGNALS not SEARCH
-        is_noun = pos in SEARCHABLE_POS
         
         if category in PERSON_CATEGORIES:
             profile['has_person'] = True
