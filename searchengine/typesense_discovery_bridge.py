@@ -868,6 +868,13 @@ def _compute_field_boosts(profile: Dict, query_mode: str, signals: Dict = None) 
     if query_mode == 'answer':
         boosts['document_title'] = 20
         boosts['entity_names'] = 15
+        # For single-result answers, heavily favor title-first matching
+        if signals.get('wants_single_result'):
+            boosts['document_title'] = 50
+            boosts['entity_names'] = 20
+            boosts['primary_keywords'] = 5
+            boosts['key_facts'] = 2
+            boosts['semantic_keywords'] = 1
     elif query_mode == 'browse':
         boosts['primary_keywords'] = 15
         boosts['semantic_keywords'] = 10
@@ -1309,6 +1316,11 @@ def apply_semantic_ranking(
     
     # Get blend ratios for this mode
     blend = BLEND_RATIOS.get(query_mode, BLEND_RATIOS['explore']).copy()
+    
+    # Single-result answer mode: text_match dominance
+    # "where is africa" should rank "Africa: Geography..." over "She Leads Africa"
+    if query_mode == 'answer' and signals.get('wants_single_result'):
+        blend = {'text_match': 0.55, 'semantic': 0.30, 'authority': 0.15}
     
     # Unknown term adjustment: shift +0.15 from text_match to semantic
     if signals.get('has_unknown_terms', False):
