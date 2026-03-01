@@ -1001,7 +1001,7 @@ def fetch_candidate_ids(
 def semantic_rerank_candidates(
     candidate_ids: List[str],
     query_embedding: List[float],
-    max_to_rerank: int = 500
+    max_to_rerank: int = 250
 ) -> List[Dict]:
     """
     Stage 2: Semantic Rerank - Pure Vector Ranking
@@ -1058,13 +1058,56 @@ def semantic_rerank_candidates(
                 for i, cid in enumerate(ids_to_rerank)]
 
 
+# def apply_semantic_ranking(
+#     cached_results: List[Dict],
+#     reranked_results: List[Dict]
+# ) -> List[Dict]:
+#     """Apply semantic ranking to cached results."""
+#     if not reranked_results:
+#         return cached_results
+    
+#     rank_lookup = {
+#         r['id']: {
+#             'semantic_rank': r['semantic_rank'],
+#             'vector_distance': r.get('vector_distance', 1.0)
+#         }
+#         for r in reranked_results
+#     }
+    
+#     for item in cached_results:
+#         item_id = item.get('id')
+#         if item_id in rank_lookup:
+#             item['semantic_rank'] = rank_lookup[item_id]['semantic_rank']
+#             item['vector_distance'] = rank_lookup[item_id]['vector_distance']
+#         else:
+#             item['semantic_rank'] = 999999
+#             item['vector_distance'] = 1.0
+    
+#     cached_results.sort(key=lambda x: x.get('semantic_rank', 999999))
+    
+#     for i, item in enumerate(cached_results):
+#         item['rank'] = i
+    
+#     return cached_results
+
+# This is designed to take an average and push the wrong documents to the bottom 
+
 def apply_semantic_ranking(
     cached_results: List[Dict],
     reranked_results: List[Dict]
 ) -> List[Dict]:
-    """Apply semantic ranking to cached results."""
+    """Apply semantic ranking to cached results with distance cutoff."""
     if not reranked_results:
         return cached_results
+    
+    # Find best distance for relative cutoff
+    best_distance = min(
+        (r.get('vector_distance', 1.0) for r in reranked_results if r.get('vector_distance', 1.0) < 1.0),
+        default=1.0
+    )
+    cutoff = min(best_distance * 2.0, 0.85)
+    
+    print(f"🎯 Semantic cutoff: best={best_distance:.3f}, cutoff={cutoff:.3f}")
     
     rank_lookup = {
         r['id']: {
@@ -1082,6 +1125,11 @@ def apply_semantic_ranking(
         else:
             item['semantic_rank'] = 999999
             item['vector_distance'] = 1.0
+    
+    # Apply cutoff — demote documents above threshold
+    for item in cached_results:
+        if item['vector_distance'] > cutoff:
+            item['semantic_rank'] += 1000000
     
     cached_results.sort(key=lambda x: x.get('semantic_rank', 999999))
     
