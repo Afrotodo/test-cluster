@@ -1996,6 +1996,11 @@ def execute_full_search(
         
         # Update total for display
         total_filtered = len(filtered_results)
+        
+        # Recount facets after vector filter so tab counts are accurate
+        all_facets = count_facets_from_cache(filtered_results)
+        facet_total = len(filtered_results)
+        print(f"   📊 Facets (post-filter): {[(f['value'], f['count']) for f in all_facets.get('data_type', [])]}")
     else:
         print(f"⚠️ Skipping Stage 2: semantic={semantic_enabled}, filtered={len(filtered_results)}")
     
