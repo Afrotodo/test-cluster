@@ -1714,6 +1714,400 @@ def detect_query_intent(query: str, pos_tags: List[Tuple] = None) -> str:
 # MAIN ENTRY POINT
 # ============================================================================
 
+# def execute_full_search(
+#     query: str,
+#     session_id: str = None,
+#     filters: Dict = None,
+#     page: int = 1,
+#     per_page: int = 20,
+#     user_location: Tuple[float, float] = None,
+#     pos_tags: List[Tuple] = None,
+#     safe_search: bool = True,
+#     alt_mode: str = 'y',
+#     skip_embedding: bool = False,
+#     search_source: str = None
+# ) -> Dict:
+#     """
+#     Main entry point for search.
+    
+#     Returns same structure as old execute_full_search() for views.py compatibility.
+    
+#     alt_mode:
+#         'n' = KEYWORD PATH - no semantic reranking
+#         'y' = SEMANTIC PATH - full staged retrieval with signal-driven behavior
+#     """
+#     times = {}
+#     t0 = time.time()
+    
+#     # Extract active filters
+#     active_data_type = filters.get('data_type') if filters else None
+#     active_category = filters.get('category') if filters else None
+#     active_schema = filters.get('schema') if filters else None
+    
+#     if filters:
+#         active_filters = {k: v for k, v in filters.items() if v}
+#         if active_filters:
+#             print(f"🎛️ Active UI filters: {active_filters}")
+    
+#     # =========================================================================
+#     # KEYWORD PATH (alt_mode='n')
+#     # =========================================================================
+    
+#     is_keyword_path = (alt_mode == 'n') or search_source in ('dropdown', 'keyword', 'suggestion', 'autocomplete')
+    
+#     if is_keyword_path:
+#         print(f"⚡ KEYWORD PATH: '{query}' | page={page} | per_page={per_page} | alt_mode={alt_mode} | search_source={search_source}")
+        
+#         intent = detect_query_intent(query, pos_tags)
+        
+#         # Simple profile for keyword path
+#         profile = {
+#             'search_terms': query.split(),
+#             'cities': [],
+#             'states': [],
+#             'location_terms': [],
+#             'primary_intent': intent,
+#             'field_boosts': {
+#                 'primary_keywords': 10,
+#                 'entity_names': 8,
+#                 'semantic_keywords': 6,
+#                 'key_facts': 4,
+#                 'document_title': 3,
+#             },
+#         }
+        
+#         cache_key = _generate_cache_key(query, 'keyword', [], [])
+#         cached_data = _get_cached_results(cache_key)
+        
+#         if cached_data:
+#             print(f"✅ Cache HIT: {len(cached_data)} candidates")
+#             all_results = cached_data
+#             times['cache'] = 'hit'
+#         else:
+#             print(f"❌ Cache MISS: Running Stage 1...")
+#             t1 = time.time()
+#             all_results = fetch_candidate_ids(query, profile)
+#             times['stage1'] = round((time.time() - t1) * 1000, 2)
+            
+#             if all_results:
+#                 _set_cached_results(cache_key, all_results)
+#             times['cache'] = 'miss'
+        
+#         # Facets from cache
+#         all_facets = count_facets_from_cache(all_results)
+#         facet_total = len(all_results)
+        
+#         # Filter by UI filters
+#         filtered_results = filter_cached_results(
+#             all_results,
+#             data_type=active_data_type,
+#             category=active_category,
+#             schema=active_schema
+#         )
+        
+#         # Paginate
+#         page_items, total_filtered = paginate_cached_results(filtered_results, page, per_page)
+        
+#         # Fetch full documents
+#         t2 = time.time()
+#         page_ids = [item['id'] for item in page_items]
+#         results = fetch_full_documents(page_ids, query)
+#         times['fetch_docs'] = round((time.time() - t2) * 1000, 2)
+#         times['total'] = round((time.time() - t0) * 1000, 2)
+        
+#         print(f"⏱️ TIMING: {times}")
+#         print(f"🔍 KEYWORD PATH | Total: {facet_total} | Filtered: {total_filtered} | Page: {len(results)}")
+        
+#         return {
+#             'query': query,
+#             'corrected_query': query,
+#             'intent': intent,
+#             'results': results,
+#             'total': total_filtered,
+#             'facet_total': facet_total,
+#             'page': page,
+#             'per_page': per_page,
+#             'search_time': round(time.time() - t0, 3),
+#             'session_id': session_id,
+#             'semantic_enabled': False,
+#             'search_strategy': 'keyword_graph_filter',
+#             'alt_mode': alt_mode,
+#             'skip_embedding': True,
+#             'search_source': search_source or 'dropdown',
+#             'valid_terms': query.split(),
+#             'unknown_terms': [],
+#             'data_type_facets': all_facets.get('data_type', []),
+#             'category_facets': all_facets.get('category', []),
+#             'schema_facets': all_facets.get('schema', []),
+#             'related_searches': [],
+#             'facets': all_facets,
+#             'word_discovery': {
+#                 'valid_count': len(query.split()),
+#                 'unknown_count': 0,
+#                 'corrections': [],
+#                 'filters': [],
+#                 'locations': [],
+#                 'sort': None,
+#                 'total_score': 0,
+#                 'average_score': 0,
+#                 'max_score': 0,
+#             },
+#             'timings': times,
+#             'filters_applied': {
+#                 'data_type': active_data_type,
+#                 'category': active_category,
+#                 'schema': active_schema,
+#                 'is_local_search': False,
+#                 'local_search_strength': 'none',
+#             }
+#         }
+    
+#     # =========================================================================
+#     # SEMANTIC PATH (alt_mode='y')
+#     # =========================================================================
+    
+#     print(f"🔬 SEMANTIC PATH: '{query}'")
+    
+#     # Run word discovery and embedding in parallel
+#     t1 = time.time()
+#     discovery, query_embedding = run_parallel_prep(query, skip_embedding=skip_embedding)
+#     times['parallel_prep'] = round((time.time() - t1) * 1000, 2)
+    
+#     # Run intent detection
+#     signals = {}
+#     if INTENT_DETECT_AVAILABLE:
+#         try:
+#             discovery = detect_intent(discovery)
+#             signals = discovery.get('signals', {})
+#             print(f"   🎯 Intent signals: mode={signals.get('query_mode')}, "
+#                   f"q_word={signals.get('question_word')}, "
+#                   f"local={signals.get('is_local_search')}, "
+#                   f"location={signals.get('has_location')}, "
+#                   f"service={signals.get('service_words')}, "
+#                   f"temporal={signals.get('temporal_direction')}, "
+#                   f"black_owned={signals.get('has_black_owned')}, "
+#                   f"single={signals.get('wants_single_result')}, "
+#                   f"domains={signals.get('domains_detected', [])[:3]}")
+#         except Exception as e:
+#             print(f"   ⚠️ intent_detect error: {e}")
+    
+#     corrected_query = discovery.get('corrected_query', query)
+#     semantic_enabled = query_embedding is not None
+#     query_mode = signals.get('query_mode', 'explore')
+    
+#     # Build profile from discovery (now signal-aware)
+#     t2 = time.time()
+#     profile = build_query_profile(discovery, signals=signals)
+#     times['build_profile'] = round((time.time() - t2) * 1000, 2)
+    
+#     # =========================================================================
+#     # Apply corrections to search terms
+#     # =========================================================================
+#     corrections = discovery.get('corrections', [])
+#     if corrections:
+#         correction_map = {
+#             c['original'].lower(): c['corrected']
+#             for c in corrections
+#             if c.get('original') and c.get('corrected')
+#         }
+#         original_terms = profile.get('search_terms', [])
+#         profile['search_terms'] = [
+#             correction_map.get(term.lower(), term)
+#             for term in original_terms
+#         ]
+#         if original_terms != profile['search_terms']:
+#             print(f"   ✅ Applied corrections to search terms: {original_terms} → {profile['search_terms']}")
+    
+#     intent = profile.get('primary_intent', 'general')
+    
+#     print(f"   Intent: {intent} | Mode: {query_mode}")
+#     print(f"   Cities: {[c['name'] for c in profile.get('cities', [])]}")
+#     print(f"   States: {[s['name'] for s in profile.get('states', [])]}")
+#     print(f"   Search Terms (POS-filtered): {profile.get('search_terms', [])}")
+#     print(f"   Location Terms (stripped): {profile.get('location_terms', [])}")
+#     print(f"   Field Boosts: {profile.get('field_boosts', {})}")
+    
+#     # Generate cache key
+#     city_names = [c['name'] for c in profile.get('cities', [])]
+#     state_names = [s['name'] for s in profile.get('states', [])]
+#     cache_key = _generate_cache_key(corrected_query, query_mode, city_names, state_names)
+    
+#     # Check cache
+#     cached_data = _get_cached_results(cache_key)
+    
+#     if cached_data:
+#         print(f"✅ Cache HIT: {len(cached_data)} candidates")
+#         all_results = cached_data
+#         times['cache'] = 'hit'
+#     else:
+#         print(f"❌ Cache MISS: Running Stage 1...")
+#         t3 = time.time()
+#         all_results = fetch_candidate_ids(corrected_query, profile, signals=signals)
+#         times['stage1'] = round((time.time() - t3) * 1000, 2)
+        
+#         if all_results:
+#             _set_cached_results(cache_key, all_results)
+#         times['cache'] = 'miss'
+    
+#     # Facets from cache
+#     all_facets = count_facets_from_cache(all_results)
+#     facet_total = len(all_results)
+    
+#     print(f"📊 Facets: {[(f['value'], f['count']) for f in all_facets.get('data_type', [])]}")
+    
+#     # Filter by UI filters
+#     filtered_results = filter_cached_results(
+#         all_results,
+#         data_type=active_data_type,
+#         category=active_category,
+#         schema=active_schema
+#     )
+    
+#     # Stage 2: Semantic Rerank (with mode-specific blend ratios)
+#     if semantic_enabled and filtered_results:
+#         t4 = time.time()
+#         candidate_ids = [item['id'] for item in filtered_results]
+#         reranked = semantic_rerank_candidates(candidate_ids, query_embedding, max_to_rerank=500)
+#         filtered_results = apply_semantic_ranking(filtered_results, reranked, signals=signals)
+#         times['stage2'] = round((time.time() - t4) * 1000, 2)
+        
+#         # ─── Vector distance hard filter ─────────────────────────────
+#         # Remove results that are too far from the query embedding.
+#         # Thresholds vary by mode: answer is strictest, browse is most lenient.
+#         DISTANCE_THRESHOLDS = {
+#             'answer':  0.60,
+#             'explore': 0.70,
+#             'compare': 0.65,
+#             'browse':  0.85,
+#             'local':   0.85,
+#             'shop':    0.80,
+#         }
+#         threshold = DISTANCE_THRESHOLDS.get(query_mode, 0.75)
+        
+#         before_filter = len(filtered_results)
+#         filtered_results = [
+#             r for r in filtered_results
+#             if r.get('vector_distance', 1.0) <= threshold
+#         ]
+#         after_filter = len(filtered_results)
+        
+#         if before_filter != after_filter:
+#             print(f"   🔪 Vector filter ({query_mode}, threshold={threshold}): {before_filter} → {after_filter} ({before_filter - after_filter} removed)")
+        
+
+#         # Update total for display
+#         total_filtered = len(filtered_results)
+
+
+#         # ─── Sync all_results with surviving IDs ─────────────────────
+#         surviving_ids = {r['id'] for r in filtered_results}
+#         all_results = [r for r in all_results if r['id'] in surviving_ids]
+        
+#         # Update cache so repeat visits don't serve rejected docs
+#         _set_cached_results(cache_key, all_results)
+
+#         # Recount facets after vector filter so tab counts are accurate
+#         all_facets = count_facets_from_cache(filtered_results)
+#         facet_total = len(filtered_results)
+#         print(f"   📊 Facets (post-filter): {[(f['value'], f['count']) for f in all_facets.get('data_type', [])]}")
+#     else:
+#         print(f"⚠️ Skipping Stage 2: semantic={semantic_enabled}, filtered={len(filtered_results)}")
+    
+#     # Paginate
+#     page_items, total_filtered = paginate_cached_results(filtered_results, page, per_page)
+    
+#     # Fetch full documents
+#     t5 = time.time()
+#     page_ids = [item['id'] for item in page_items]
+#     results = fetch_full_documents(page_ids, query)
+#     times['fetch_docs'] = round((time.time() - t5) * 1000, 2)
+    
+#     # ─── AI Overview (Blueprint Step 8 — signal-driven) ─────────────
+#     if results and page == 1:
+#         if _should_trigger_ai_overview(signals, results, query):
+#             overview = _build_ai_overview(signals, results, query)
+#             if overview:
+#                 results[0]['humanized_summary'] = overview
+    
+#     # Store query embedding for popular queries
+#     if query_embedding:
+#         try:
+#             store_query_embedding(corrected_query, query_embedding, result_count=facet_total)
+#         except Exception as e:
+#             print(f"⚠️ store_query_embedding error: {e}")
+    
+#     times['total'] = round((time.time() - t0) * 1000, 2)
+    
+#     strategy = 'staged_semantic' if semantic_enabled else 'keyword_fallback'
+    
+#     print(f"⏱️ TIMING: {times}")
+#     print(f"🔍 {strategy.upper()} ({query_mode}) | Total: {facet_total} | Filtered: {total_filtered} | Page: {len(results)}")
+    
+#     # Extract valid/unknown terms
+#     valid_terms = profile.get('search_terms', [])
+#     unknown_terms = [t['word'] for t in discovery.get('terms', []) if t.get('status') == 'unknown']
+    
+#     return {
+#         'query': query,
+#         'corrected_query': corrected_query,
+#         'intent': intent,
+#         'query_mode': query_mode,
+#         'results': results,
+#         'total': total_filtered,
+#         'facet_total': facet_total,
+#         'page': page,
+#         'per_page': per_page,
+#         'search_time': round(time.time() - t0, 3),
+#         'session_id': session_id,
+#         'semantic_enabled': semantic_enabled,
+#         'search_strategy': strategy,
+#         'alt_mode': alt_mode,
+#         'skip_embedding': skip_embedding,
+#         'search_source': search_source,
+#         'valid_terms': valid_terms,
+#         'unknown_terms': unknown_terms,
+#         'related_searches': [],
+#         'data_type_facets': all_facets.get('data_type', []),
+#         'category_facets': all_facets.get('category', []),
+#         'schema_facets': all_facets.get('schema', []),
+#         'facets': all_facets,
+#         'word_discovery': {
+#             'valid_count': discovery.get('stats', {}).get('valid_words', 0),
+#             'unknown_count': discovery.get('stats', {}).get('unknown_words', 0),
+#             'corrections': discovery.get('corrections', []),
+#             'filters': [],
+#             'locations': [
+#                 {'field': 'location_city', 'values': city_names},
+#                 {'field': 'location_state', 'values': state_names},
+#             ] if city_names or state_names else [],
+#             'sort': None,
+#             'total_score': 0,
+#             'average_score': 0,
+#             'max_score': 0,
+#         },
+#         'timings': times,
+#         'filters_applied': {
+#             'data_type': active_data_type,
+#             'category': active_category,
+#             'schema': active_schema,
+#             'is_local_search': signals.get('is_local_search', False),
+#             'local_search_strength': signals.get('local_search_strength', 'none'),
+#             'has_black_owned': signals.get('has_black_owned', False),
+#             'graph_filters': [],
+#             'graph_locations': [
+#                 {'field': 'location_city', 'values': city_names},
+#                 {'field': 'location_state', 'values': state_names},
+#             ] if city_names or state_names else [],
+#             'graph_sort': None,
+#         },
+#         'signals': signals,
+#         'profile': profile,
+#     }
+
+# ============================================================================
+# MAIN ENTRY POINT
+# ============================================================================
+
 def execute_full_search(
     query: str,
     session_id: str = None,
@@ -1750,10 +2144,25 @@ def execute_full_search(
             print(f"🎛️ Active UI filters: {active_filters}")
     
     # =========================================================================
-    # KEYWORD PATH (alt_mode='n')
+    # ★ FIX: Check keyword cache BEFORE routing.
+    # When the user clicks a tab or page 2+, the URL may lose alt_mode=n.
+    # If a keyword cache already exists for this query, stay on keyword path.
+    # This prevents tab clicks and pagination from falling into the semantic
+    # path and generating a different cache key / different results.
     # =========================================================================
+    keyword_cache_key = _generate_cache_key(query, 'keyword', [], [])
+    keyword_cache_hit = _get_cached_results(keyword_cache_key)
     
     is_keyword_path = (alt_mode == 'n') or search_source in ('dropdown', 'keyword', 'suggestion', 'autocomplete')
+    
+    # ★ If keyword cache exists for this query, force keyword path
+    if keyword_cache_hit is not None:
+        is_keyword_path = True
+        print(f"🔄 Keyword cache exists for '{query}' — forcing keyword path (page={page}, alt_mode={alt_mode})")
+    
+    # =========================================================================
+    # KEYWORD PATH (alt_mode='n' or keyword cache exists)
+    # =========================================================================
     
     if is_keyword_path:
         print(f"⚡ KEYWORD PATH: '{query}' | page={page} | per_page={per_page} | alt_mode={alt_mode} | search_source={search_source}")
@@ -1776,12 +2185,11 @@ def execute_full_search(
             },
         }
         
-        cache_key = _generate_cache_key(query, 'keyword', [], [])
-        cached_data = _get_cached_results(cache_key)
+        cache_key = keyword_cache_key  # ★ Reuse the key we already checked
         
-        if cached_data:
-            print(f"✅ Cache HIT: {len(cached_data)} candidates")
-            all_results = cached_data
+        if keyword_cache_hit is not None:
+            print(f"✅ Cache HIT: {len(keyword_cache_hit)} candidates")
+            all_results = keyword_cache_hit
             times['cache'] = 'hit'
         else:
             print(f"❌ Cache MISS: Running Stage 1...")
@@ -1793,11 +2201,11 @@ def execute_full_search(
                 _set_cached_results(cache_key, all_results)
             times['cache'] = 'miss'
         
-        # Facets from cache
+        # Facets from ALL results (unfiltered — so all tabs show correct counts)
         all_facets = count_facets_from_cache(all_results)
         facet_total = len(all_results)
         
-        # Filter by UI filters
+        # Filter by UI filters (tab click)
         filtered_results = filter_cached_results(
             all_results,
             data_type=active_data_type,
@@ -1805,10 +2213,10 @@ def execute_full_search(
             schema=active_schema
         )
         
-        # Paginate
+        # Paginate the filtered set
         page_items, total_filtered = paginate_cached_results(filtered_results, page, per_page)
         
-        # Fetch full documents
+        # Fetch full documents for this page only
         t2 = time.time()
         page_ids = [item['id'] for item in page_items]
         results = fetch_full_documents(page_ids, query)
@@ -1863,7 +2271,7 @@ def execute_full_search(
         }
     
     # =========================================================================
-    # SEMANTIC PATH (alt_mode='y')
+    # SEMANTIC PATH (alt_mode='y' and no keyword cache)
     # =========================================================================
     
     print(f"🔬 SEMANTIC PATH: '{query}'")
@@ -2103,7 +2511,6 @@ def execute_full_search(
         'signals': signals,
         'profile': profile,
     }
-
 
 # ============================================================================
 # CONVENIENCE FUNCTIONS (for compatibility with views.py imports)
