@@ -1756,7 +1756,7 @@ def execute_full_search(
     is_keyword_path = (alt_mode == 'n') or search_source in ('dropdown', 'keyword', 'suggestion', 'autocomplete')
     
     if is_keyword_path:
-        print(f"⚡ KEYWORD PATH: '{query}'")
+        print(f"⚡ KEYWORD PATH: '{query}' | page={page} | per_page={per_page} | alt_mode={alt_mode} | search_source={search_source}")
         
         intent = detect_query_intent(query, pos_tags)
         

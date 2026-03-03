@@ -1102,7 +1102,7 @@
                                     class="search-box" 
                                     id="search-input" 
                                     name="query" 
-                                    placeholder="Where can I find a Black-owned bookstore in Atlanta?"
+                                    placeholder="Coffee shops near me?"
                                     autocomplete="off"
                                 >
                                 <input type="hidden" id="session-id-field" name="session_id" value="">
@@ -1158,7 +1158,8 @@
 
                 <div class="question-list">
                 {% for item in trending_results %}
-                <a href="{{ item.url }}" class="question-card trending-card" target="_blank" rel="noopener">
+                <a href="{{ item.url }}" class="question-card trending-card">
+                   
                     {% if item.image_url %}
                     <img src="{{ item.image_url }}" alt="{{ item.title }}" class="trending-thumb" loading="lazy" onerror="this.style.display='none'">
                     {% endif %}
