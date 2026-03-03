@@ -1994,9 +1994,18 @@ def execute_full_search(
         if before_filter != after_filter:
             print(f"   🔪 Vector filter ({query_mode}, threshold={threshold}): {before_filter} → {after_filter} ({before_filter - after_filter} removed)")
         
+
         # Update total for display
         total_filtered = len(filtered_results)
+
+
+        # ─── Sync all_results with surviving IDs ─────────────────────
+        surviving_ids = {r['id'] for r in filtered_results}
+        all_results = [r for r in all_results if r['id'] in surviving_ids]
         
+        # Update cache so repeat visits don't serve rejected docs
+        _set_cached_results(cache_key, all_results)
+
         # Recount facets after vector filter so tab counts are accurate
         all_facets = count_facets_from_cache(filtered_results)
         facet_total = len(filtered_results)
