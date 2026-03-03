@@ -5259,36 +5259,31 @@ def search(request):
             # 8B. IMAGE EXTRACTION & PAGINATION
             # =============================================================
             if show_images:
-                # ----------------------------------------------------------
-                # PRIMARY PATH: Try the discovery bridge cache so we can
-                # paginate across ALL matching results, not just this page.
-                # ----------------------------------------------------------
                 discovery_cache_loaded = False
-                
+
                 try:
                     from .typesense_discovery_bridge import (
-                        _generate_stable_cache_key, _get_cached_results, fetch_full_documents
+                        _generate_stable_cache_key, _get_cached_results,
+                        fetch_full_documents, _has_real_images
                     )
-                    
+
                     stable_key = _generate_stable_cache_key(params.session_id, params.query)
                     finished = _get_cached_results(stable_key)
-                    
+
                     if finished and finished.get('all_results'):
                         all_candidates = finished['all_results']
-                        # Only candidates that actually have images
                         has_image = [
                             r for r in all_candidates
-                            if r.get('image_url') or r.get('logo_url')
+                            if _has_real_images(r)
                         ]
-                        
+
                         if has_image:
                             img_per_page = 40
                             img_total = len(has_image)
                             img_start = (page - 1) * img_per_page
                             img_end = min(img_start + img_per_page, img_total)
                             page_slice = has_image[img_start:img_end]
-                            
-                            # Fetch full docs for this page only
+
                             page_ids = [
                                 item['id'] for item in page_slice
                                 if item.get('id')
@@ -5298,34 +5293,28 @@ def search(request):
                                 image_results = extract_images_from_results(full_docs)
                             else:
                                 image_results = extract_images_from_results(page_slice)
-                            
-                            image_count = finished.get('total_image_count', img_total)
+
+                            image_count = img_total
                             image_pagination = _build_image_pagination(img_total, page, img_per_page)
                             discovery_cache_loaded = True
-                
+
                 except ImportError:
                     logger.warning("Could not import typesense_discovery_bridge for image pagination")
                 except Exception as e:
                     logger.warning(f"Discovery bridge image extraction error: {e}")
-                
-                # ----------------------------------------------------------
-                # FALLBACK: Discovery cache unavailable or empty.
-                # Build pagination from current page results so that
-                # image_pagination is NEVER None when images exist.
-                # ----------------------------------------------------------
+
                 if not discovery_cache_loaded:
                     image_results = extract_images_from_results(results)
-                    image_count = result.get('total_image_count', len(image_results))
-                    # Build pagination from what we have
-                    image_pagination = _build_image_pagination(image_count, page)
-            
+                    image_count = len(image_results)
+                    image_pagination = _build_image_pagination(
+                        len(image_results), 1, max(len(image_results), 1)
+                    )
+
             else:
-                # ----- Normal (non-image) view -----
-                # Extract images for count/preview only, no pagination needed
-                image_results = extract_images_from_results(results)
-                image_count = result.get('total_image_count', len(image_results))
+                image_count = result.get('total_image_count', 0)
+                image_results = []
                 image_pagination = None
-            
+
         except Exception as e:
             logger.error(f"Search execution error: {e}")
     
