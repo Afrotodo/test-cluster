@@ -227,58 +227,102 @@ COLLECTION_NAME = 'documents'
 # RESULT CACHE (Self-Contained)
 # ============================================================================
 
-_result_cache = {}
-_cache_lock = threading.Lock()
+# _result_cache = {}
+# _cache_lock = threading.Lock()
+# CACHE_TTL_SECONDS = 300  # 5 minutes
+# MAX_CACHED_RESULTS = 2000
+# MAX_CACHE_ENTRIES = 100
+
+from django.core.cache import cache as django_cache
+
 CACHE_TTL_SECONDS = 300  # 5 minutes
 MAX_CACHED_RESULTS = 2000
-MAX_CACHE_ENTRIES = 100
 
 
-def _generate_cache_key(query: str, mode: str, cities: List = None, states: List = None) -> str:
-    """Generate unique cache key for a search."""
-    key_parts = [
-        query.lower().strip(),
-        mode,
-        json.dumps(cities or [], sort_keys=True),
-        json.dumps(states or [], sort_keys=True),
-    ]
-    key_string = '|'.join(key_parts)
-    return hashlib.md5(key_string.encode()).hexdigest()
+# def _generate_cache_key(query: str, mode: str, cities: List = None, states: List = None) -> str:
+#     """Generate unique cache key for a search."""
+#     key_parts = [
+#         query.lower().strip(),
+#         mode,
+#         json.dumps(cities or [], sort_keys=True),
+#         json.dumps(states or [], sort_keys=True),
+#     ]
+#     key_string = '|'.join(key_parts)
+#     return hashlib.md5(key_string.encode()).hexdigest()
+
+# def _generate_cache_key(query: str, mode: str, cities: List = None, states: List = None) -> str:
+#     """Generate unique cache key for a search."""
+#     key_parts = [
+#         query.lower().strip(),
+#         mode,
+#         json.dumps(cities or [], sort_keys=True),
+#         json.dumps(states or [], sort_keys=True),
+#     ]
+#     key_string = '|'.join(key_parts)
+#     return hashlib.md5(key_string.encode()).hexdigest()
+
+def _get_cached_results(cache_key: str):
+    """Get cached result set from Redis."""
+    try:
+        data = django_cache.get(cache_key)
+        if data is not None:
+            print(f"🟢 Redis cache HIT: {cache_key[:12]}...")
+            return data
+        print(f"🔴 Redis cache MISS: {cache_key[:12]}...")
+        return None
+    except Exception as e:
+        print(f"⚠️ Redis cache GET error: {e}")
+        return None
+
+# def _get_cached_results(cache_key: str) -> Optional[List[Dict]]:
+#     """Get cached result set if not expired."""
+#     with _cache_lock:
+#         if cache_key in _result_cache:
+#             entry = _result_cache[cache_key]
+#             age = (datetime.now() - entry['timestamp']).total_seconds()
+#             if age < CACHE_TTL_SECONDS:
+#                 return entry['data']
+#             else:
+#                 del _result_cache[cache_key]
+#     return None
 
 
-def _get_cached_results(cache_key: str) -> Optional[List[Dict]]:
-    """Get cached result set if not expired."""
-    with _cache_lock:
-        if cache_key in _result_cache:
-            entry = _result_cache[cache_key]
-            age = (datetime.now() - entry['timestamp']).total_seconds()
-            if age < CACHE_TTL_SECONDS:
-                return entry['data']
-            else:
-                del _result_cache[cache_key]
-    return None
-
-
-def _set_cached_results(cache_key: str, data: List[Dict]):
-    """Cache result set with timestamp."""
-    with _cache_lock:
-        if len(_result_cache) >= MAX_CACHE_ENTRIES:
-            oldest_key = min(_result_cache.keys(),
-                           key=lambda k: _result_cache[k]['timestamp'])
-            del _result_cache[oldest_key]
+# def _set_cached_results(cache_key: str, data: List[Dict]):
+#     """Cache result set with timestamp."""
+#     with _cache_lock:
+#         if len(_result_cache) >= MAX_CACHE_ENTRIES:
+#             oldest_key = min(_result_cache.keys(),
+#                            key=lambda k: _result_cache[k]['timestamp'])
+#             del _result_cache[oldest_key]
         
-        _result_cache[cache_key] = {
-            'timestamp': datetime.now(),
-            'data': data
-        }
+#         _result_cache[cache_key] = {
+#             'timestamp': datetime.now(),
+#             'data': data
+#         }
 
+def _set_cached_results(cache_key: str, data):
+    """Cache result set in Redis with TTL."""
+    try:
+        django_cache.set(cache_key, data, timeout=CACHE_TTL_SECONDS)
+        print(f"💾 Redis cache SET: {cache_key[:12]}... (TTL={CACHE_TTL_SECONDS}s)")
+    except Exception as e:
+        print(f"⚠️ Redis cache SET error: {e}")
+
+
+# def clear_search_cache():
+#     """Clear all cached search results."""
+#     global _result_cache
+#     with _cache_lock:
+#         _result_cache = {}
+#     print("🧹 Search cache cleared")
 
 def clear_search_cache():
     """Clear all cached search results."""
-    global _result_cache
-    with _cache_lock:
-        _result_cache = {}
-    print("🧹 Search cache cleared")
+    try:
+        django_cache.clear()
+        print("🧹 Redis search cache cleared")
+    except Exception as e:
+        print(f"⚠️ Redis cache CLEAR error: {e}")
 
 
 # ============================================================================

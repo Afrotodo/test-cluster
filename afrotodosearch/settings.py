@@ -79,7 +79,20 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'afrotodosearch.wsgi.application'
 
-
+CACHES = {
+    'default': {
+        'BACKEND': 'django_redis.cache.RedisCache',
+        'LOCATION': config('REDIS_ANALYTICS_URL'),
+        'OPTIONS': {
+            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+            'SOCKET_CONNECT_TIMEOUT': 5,
+            'SOCKET_TIMEOUT': 5,
+            'RETRY_ON_TIMEOUT': True,
+        },
+        'KEY_PREFIX': 'search_cache',
+        'TIMEOUT': 300,  # 5 minutes default TTL
+    }
+}
 
 
 DATABASES = {

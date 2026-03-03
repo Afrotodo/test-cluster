@@ -4616,6 +4616,8 @@ def search(request):
                 related_searches = result.get('related_searches', [])
                 
                 # Extract images from results
+                # image_results = extract_images_from_results(results)
+                # image_count = len(image_results)
                 image_results = extract_images_from_results(results)
                 image_count = len(image_results)
                 
