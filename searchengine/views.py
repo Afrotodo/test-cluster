@@ -4411,6 +4411,7 @@ def search(request):
             'show_images': False,
             'image_results': [],
             'image_count': 0,
+            'image_pagination': None,
         })
     
     # === 6. INITIALIZE ALL VARIABLES ===
@@ -4441,6 +4442,7 @@ def search(request):
     # Image results - initialize upfront
     image_results = []
     image_count = 0
+    image_pagination = None  # ← FIX: Must be initialized here
     
     # Determine if we have active filters
     has_filters = bool(active_data_type or active_category or active_schema)
@@ -4542,138 +4544,95 @@ def search(request):
                 intent = {}
     
     # === 8. EXECUTE SEARCH ===
-    # if execute_full_search:
-    #     try:
-    #         result = execute_full_search(
-    #             query=corrected_query,
-    #             session_id=params.session_id,
-    #             filters=filters,
-    #             page=page,
-    #             per_page=per_page,
-    #             alt_mode=params.alt_mode, 
-    #             user_location=user_location,
-    #             pos_tags=tuple_array if params.is_semantic_search else [],
-    #             safe_search=safe_search
-    #         )
-            
-    #         results = result.get('results', [])
-    #         total_results = result.get('total', 0)
-    #         search_time = result.get('search_time', 0)
-    #         search_strategy = result.get('search_strategy', search_type)
-            
-    #         # Get facets from the search result
-    #         data_type_facets = result.get('data_type_facets', [])
-    #         category_facets = result.get('category_facets', [])
-    #         schema_facets = result.get('schema_facets', [])
-    #         facet_total = result.get('facet_total', 0)
-            
-    #         # Get related searches from the search result (handled in typesense_calculations.py)
-    #         related_searches = result.get('related_searches', [])
-            
-    #         # Extract images from results
-    #         image_results = extract_images_from_results(results)
-    #         image_count = len(image_results)
-            
-    #     except Exception as e:
-    #         logger.error(f"Search execution error: {e}")
-    #         # Keep default empty values set in section 6
-    
-    # search_time_ms = (time.time() - search_start_time) * 1000
-    
     if execute_full_search:
-            try:
-                result = execute_full_search(
-                    query=params.query,           # ← CHANGED: pass ORIGINAL query, not corrected_query
-                    session_id=params.session_id,
-                    filters=filters,
-                    page=page,
-                    per_page=per_page,
-                    alt_mode=params.alt_mode, 
-                    user_location=user_location,
-                    pos_tags=tuple_array if params.is_semantic_search else [],
-                    safe_search=safe_search
+        try:
+            result = execute_full_search(
+                query=params.query,
+                session_id=params.session_id,
+                filters=filters,
+                page=page,
+                per_page=per_page,
+                alt_mode=params.alt_mode,
+                user_location=user_location,
+                pos_tags=tuple_array if params.is_semantic_search else [],
+                safe_search=safe_search
+            )
+            
+            results = result.get('results', [])
+            total_results = result.get('total', 0)
+            search_time = result.get('search_time', 0)
+            search_strategy = result.get('search_strategy', search_type)
+            
+            # === Get correction info from bridge ===
+            bridge_corrected = result.get('corrected_query', params.query)
+            if bridge_corrected and bridge_corrected.lower() != params.query.lower():
+                corrected_query = bridge_corrected
+                was_corrected = True
+                word_corrections = result.get('word_discovery', {}).get('corrections', [])
+            
+            # Get facets from the search result
+            data_type_facets = result.get('data_type_facets', [])
+            category_facets = result.get('category_facets', [])
+            schema_facets = result.get('schema_facets', [])
+            facet_total = result.get('facet_total', 0)
+            
+            # Get related searches from the search result
+            related_searches = result.get('related_searches', [])
+            
+            # === Extract images from results ===
+            if show_images:
+                from .typesense_discovery_bridge import (
+                    _generate_stable_cache_key, _get_cached_results, fetch_full_documents
                 )
                 
-                results = result.get('results', [])
-                total_results = result.get('total', 0)
-                search_time = result.get('search_time', 0)
-                search_strategy = result.get('search_strategy', search_type)
+                stable_key = _generate_stable_cache_key(params.session_id, params.query)
+                finished = _get_cached_results(stable_key)
                 
-                # === ADDED: Get correction info from bridge ===
-                bridge_corrected = result.get('corrected_query', params.query)
-                if bridge_corrected and bridge_corrected.lower() != params.query.lower():
-                    corrected_query = bridge_corrected
-                    was_corrected = True
-                    word_corrections = result.get('word_discovery', {}).get('corrections', [])
-                
-                # Get facets from the search result
-                data_type_facets = result.get('data_type_facets', [])
-                category_facets = result.get('category_facets', [])
-                schema_facets = result.get('schema_facets', [])
-                facet_total = result.get('facet_total', 0)
-                
-                # Get related searches from the search result
-                related_searches = result.get('related_searches', [])
-                
-                # Extract images from results
-                # image_results = extract_images_from_results(results)
-                # image_count = len(image_results)
-                # image_results = extract_images_from_results(results)
-                # image_count = result.get('total_image_count', len(image_results))
-                # Extract images from results
-# Extract images from results
-                if show_images:
-                    from .typesense_discovery_bridge import (
-                        _generate_stable_cache_key, _get_cached_results, fetch_full_documents
-                    )
+                if finished:
+                    all_candidates = finished['all_results']
+                    # Only candidates that actually have images
+                    has_image = [r for r in all_candidates if r.get('image_url') or r.get('logo_url')]
                     
-                    stable_key = _generate_stable_cache_key(params.session_id, params.query)
-                    finished = _get_cached_results(stable_key)
+                    # Paginate the image-bearing documents (40 per page)
+                    img_per_page = 40
+                    img_total = len(has_image)
+                    img_start = (page - 1) * img_per_page
+                    img_end = img_start + img_per_page
+                    page_slice = has_image[img_start:img_end]
                     
-                    if finished:
-                        all_candidates = finished['all_results']
-                        # Only candidates that actually have images
-                        has_image = [r for r in all_candidates if r.get('image_url') or r.get('logo_url')]
-                        
-                        # Paginate the image-bearing documents (40 per page)
-                        img_per_page = 40
-                        img_total = len(has_image)
-                        img_start = (page - 1) * img_per_page
-                        img_end = img_start + img_per_page
-                        page_slice = has_image[img_start:img_end]
-                        
-                        # Fetch full docs for this page only
-                        page_ids = [item['id'] for item in page_slice]
-                        full_docs = fetch_full_documents(page_ids, params.query)
-                        image_results = extract_images_from_results(full_docs)
-                        image_count = finished.get('total_image_count', img_total)
-                        
-                        # Build image pagination
-                        img_total_pages = (img_total + img_per_page - 1) // img_per_page
-                        image_pagination = {
-                            'current_page': page,
-                            'total_pages': img_total_pages,
-                            'has_previous': page > 1,
-                            'previous_page': page - 1,
-                            'has_next': page < img_total_pages,
-                            'next_page': page + 1,
-                            'page_range': range(max(1, page - 3), min(img_total_pages + 1, page + 4)),
-                            'total_images': img_total,
-                            'start_result': img_start + 1,
-                            'end_result': min(img_end, img_total),
-                        }
-                    else:
-                        # Fallback — no cache yet, use current page results
-                        image_results = extract_images_from_results(results)
-                        image_count = len(image_results)
-                        image_pagination = None
+                    # Fetch full docs for this page only
+                    page_ids = [item['id'] for item in page_slice]
+                    full_docs = fetch_full_documents(page_ids, params.query)
+                    image_results = extract_images_from_results(full_docs)
+                    image_count = finished.get('total_image_count', img_total)
+                    
+                    # Build image pagination
+                    img_total_pages = (img_total + img_per_page - 1) // img_per_page
+                    image_pagination = {
+                        'current_page': page,
+                        'total_pages': img_total_pages,
+                        'has_previous': page > 1,
+                        'previous_page': page - 1,
+                        'has_next': page < img_total_pages,
+                        'next_page': page + 1,
+                        'page_range': range(max(1, page - 3), min(img_total_pages + 1, page + 4)),
+                        'total_images': img_total,
+                        'start_result': img_start + 1,
+                        'end_result': min(img_end, img_total),
+                    }
                 else:
+                    # Fallback — no cache yet, use current page results
                     image_results = extract_images_from_results(results)
-                    image_count = result.get('total_image_count', len(image_results))
+                    image_count = len(image_results)
                     image_pagination = None
-                                
-            except Exception as e:
-                logger.error(f"Search execution error: {e}")
+            else:
+                image_results = extract_images_from_results(results)
+                image_count = result.get('total_image_count', len(image_results))
+                image_pagination = None
+            
+        except Exception as e:
+            logger.error(f"Search execution error: {e}")
+    
     # === 9. TRACK SEARCH (Analytics) ===
     if analytics:
         try:
@@ -4768,11 +4727,12 @@ def search(request):
     log_search_analytics(params, search_type, total_results, is_suspicious)
     
     map_data = process_address_maps(request, results)
+    
     # === 15. BUILD CONTEXT ===
     context = {
         # Core search
         'query': params.query,
-        **map_data,          
+        **map_data,
         'corrected_query': corrected_query,
         'was_corrected': was_corrected,
         'word_corrections': word_corrections,
@@ -4795,7 +4755,6 @@ def search(request):
         'show_images': show_images,
         'image_results': image_results,
         'image_count': image_count,
-        # In the context dict, add:
         'image_pagination': image_pagination,
         
         # Filters
@@ -4849,12 +4808,10 @@ def search(request):
         trending_city = location.get('city', '') if location else ''
         cache_trending_result(query=params.query, top_result=results[0], city=trending_city)
 
-
-    # In your search view, replace the single cache_trending_result call:
+    # Cache at each location level
     if results and len(results) > 0:
         top_result = results[0]
         
-        # Cache at each location level
         loc_city = location.get('city', '') if location else ''
         loc_region = location.get('region', '') if location else ''
         loc_country = location.get('country', '') if location else ''
