@@ -1230,17 +1230,32 @@ def log_search_analytics(
 # =============================================================================
 
 from .cached_embedding_related_search import get_popular_queries
+from .trending import get_trending_results, cache_trending_result
+
+# def home(request):
+#     """Home page view."""
+#     city = get_user_city(request)
+    
+#     context = {
+#         'city': city,
+#         'supported_cities': list(SUPPORTED_CITIES),
+#         'popular_queries': get_popular_queries(limit=6),
+#     }
+    
+#     return render(request, 'home3.html', context)
+
 
 def home(request):
-    """Home page view."""
+    """Home page view with trending results."""
     city = get_user_city(request)
-    
+
     context = {
         'city': city,
         'supported_cities': list(SUPPORTED_CITIES),
         'popular_queries': get_popular_queries(limit=6),
+        'trending_results': get_trending_results(city=city, limit=6),
     }
-    
+
     return render(request, 'home3.html', context)
 
 

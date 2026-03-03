@@ -851,6 +851,112 @@
                 height: 40px;
             }
         }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        
+.question-card.trending-card {
+    flex-direction: row;
+    align-items: center;
+    gap: var(--space-md);
+    padding: var(--space-sm) var(--space-md);
+}
+
+.trending-thumb {
+    width: 64px;
+    height: 64px;
+    border-radius: 8px;
+    object-fit: cover;
+    flex-shrink: 0;
+}
+
+.trending-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.trending-brand {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--green);
+}
+
+.trending-card .question-text {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--black);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.trending-card .question-text::before,
+.trending-card .question-text::after {
+    content: none;
+}
+
+.trending-summary {
+    font-size: 13px;
+    color: var(--gray-500);
+    line-height: 1.4;
+    display: -webkit-box;
+    -webkit-line-clamp: 1;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.trending-category {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--gold);
+    background: rgba(212, 160, 58, 0.1);
+    padding: 2px 8px;
+    border-radius: 4px;
+    text-transform: capitalize;
+    flex-shrink: 0;
+}
+
+@media (max-width: 480px) {
+    .trending-thumb {
+        width: 52px;
+        height: 52px;
+    }
+
+    .trending-card .question-text {
+        font-size: 13px;
+    }
+
+    .trending-category {
+        display: none;
+    }
+}
     </style>
 </head>
 <body>
@@ -1011,8 +1117,67 @@
                     </form>
                 </div>
             </section>
-{% if popular_queries %}
+
+
+
             <!-- Community Questions -->
+            <!-- <section class="community-section">
+                <div class="section-header">
+                    <svg class="section-icon" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9-4.03-9-9-9zm0 16c-3.86 0-7-3.14-7-7s3.14-7 7-7 7 3.14 7 7-3.14 7-7 7zm1-11h-2v3H8v2h3v3h2v-3h3v-2h-3V8z"/>
+                    </svg>
+                    <span class="section-title">Popular Queries</span>
+                </div> -->
+                
+
+                <!-- <div class="question-list">
+                {% for item in popular_queries %}
+                <a href="#" class="question-card" data-query="{{ item.query }}" data-alt-mode="y">
+                    <span class="question-text">{{ item.query }}</span>
+                </a>
+                {% endfor %}
+                </div> -->
+
+
+
+
+            <!-- </section> -->
+
+          
+
+
+            
+{% if trending_results %}
+            <!-- Trending Section -->
+            <section class="community-section">
+                <div class="section-header">
+                    <svg class="section-icon" viewBox="0 0 24 24" fill="currentColor" style="color: var(--red);">
+                        <path d="M13.5.67s.74 2.65.74 4.8c0 2.06-1.35 3.73-3.41 3.73-2.07 0-3.63-1.67-3.63-3.73l.03-.36C5.21 7.51 4 10.62 4 14c0 4.42 3.58 8 8 8s8-3.58 8-8C20 8.61 17.41 3.8 13.5.67zM11.71 19c-1.78 0-3.22-1.4-3.22-3.14 0-1.62 1.05-2.76 2.81-3.12 1.77-.36 3.6-1.21 4.62-2.58.39 1.29.59 2.65.59 4.04 0 2.65-2.15 4.8-4.8 4.8z"/>
+                    </svg>
+                    <span class="section-title">Trending in {{ city|default:"Your Area" }}</span>
+                </div>
+
+                <div class="question-list">
+                {% for item in trending_results %}
+                <a href="{{ item.url }}" class="question-card trending-card" target="_blank" rel="noopener">
+                    {% if item.image_url %}
+                    <img src="{{ item.image_url }}" alt="{{ item.title }}" class="trending-thumb" loading="lazy" onerror="this.style.display='none'">
+                    {% endif %}
+                    <div class="trending-info">
+                        {% if item.brand %}<span class="trending-brand">{{ item.brand }}</span>{% endif %}
+                        <span class="question-text">{{ item.title }}</span>
+                        <span class="trending-summary">{{ item.summary|truncatewords:18 }}</span>
+                    </div>
+                    {% if item.category %}
+                    <span class="trending-category">{{ item.category }}</span>
+                    {% endif %}
+                </a>
+                {% endfor %}
+                </div>
+            </section>
+
+{% elif popular_queries %}
+            <!-- Fallback: Popular Queries (original) -->
             <section class="community-section">
                 <div class="section-header">
                     <svg class="section-icon" viewBox="0 0 24 24" fill="currentColor">
@@ -1020,7 +1185,6 @@
                     </svg>
                     <span class="section-title">Popular Queries</span>
                 </div>
-                
 
                 <div class="question-list">
                 {% for item in popular_queries %}
@@ -1029,12 +1193,12 @@
                 </a>
                 {% endfor %}
                 </div>
-
-
-
             </section>
+{% endif %}
 
-            {% endif %}
+
+
+
 
             <!-- Category Pills -->
             <section class="categories-section">
