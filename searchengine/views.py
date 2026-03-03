@@ -4790,6 +4790,9 @@ def search(request):
     if not filters and total_results > 0:
         safe_cache_set(cache_key, context, SEARCH_CONFIG['cache_timeout'])
 
+    if results and len(results) > 0:
+        trending_city = location.get('city', '') if location else ''
+        cache_trending_result(query=params.query, top_result=results[0], city=trending_city)
 
 
     # In your search view, replace the single cache_trending_result call:
@@ -4807,8 +4810,8 @@ def search(request):
         
         # Always cache to general
         cache_trending_result(query=params.query, top_result=top_result, city=None)
-        
-        return render(request, 'results2.html', context)
+    
+    return render(request, 'results2.html', context)
 
 # =============================================================================
 # VIEW: CATEGORY ROUTER
