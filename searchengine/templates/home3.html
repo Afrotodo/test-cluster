@@ -1146,8 +1146,7 @@
           
 
 
-            
-{% if trending_results %}
+  {% if trending_results %}
             <!-- Trending Section -->
             <section class="community-section">
                 <div class="section-header">
@@ -1171,25 +1170,6 @@
                     {% if item.category %}
                     <span class="trending-category">{{ item.category }}</span>
                     {% endif %}
-                </a>
-                {% endfor %}
-                </div>
-            </section>
-
-{% elif popular_queries %}
-            <!-- Fallback: Popular Queries (original) -->
-            <section class="community-section">
-                <div class="section-header">
-                    <svg class="section-icon" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9-4.03-9-9-9zm0 16c-3.86 0-7-3.14-7-7s3.14-7 7-7 7 3.14 7 7-3.14 7-7 7zm1-11h-2v3H8v2h3v3h2v-3h3v-2h-3V8z"/>
-                    </svg>
-                    <span class="section-title">Popular Queries</span>
-                </div>
-
-                <div class="question-list">
-                {% for item in popular_queries %}
-                <a href="#" class="question-card" data-query="{{ item.query }}" data-alt-mode="y">
-                    <span class="question-text">{{ item.query }}</span>
                 </a>
                 {% endfor %}
                 </div>
