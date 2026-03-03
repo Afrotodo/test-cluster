@@ -5258,60 +5258,49 @@ def search(request):
             # =============================================================
             # 8B. IMAGE EXTRACTION & PAGINATION
             # =============================================================
+            # =============================================================
+            # 8B. IMAGE DATA
+            # =============================================================
+            image_count = result.get('total_image_count', 0)
+
             if show_images:
-                discovery_cache_loaded = False
-
                 try:
-                    from .typesense_discovery_bridge import (
-                        _generate_stable_cache_key, _get_cached_results,
-                        fetch_full_documents, _has_real_images
-                    )
-
                     stable_key = _generate_stable_cache_key(params.session_id, params.query)
                     finished = _get_cached_results(stable_key)
 
                     if finished and finished.get('all_results'):
                         all_candidates = finished['all_results']
-                        has_image = [
-                            r for r in all_candidates
-                            if _has_real_images(r)
-                        ]
+                        has_image = [r for r in all_candidates if _has_real_images(r)]
 
                         if has_image:
-                            img_per_page = 40
+                            img_per_page = 20
                             img_total = len(has_image)
                             img_start = (page - 1) * img_per_page
                             img_end = min(img_start + img_per_page, img_total)
                             page_slice = has_image[img_start:img_end]
 
-                            page_ids = [
-                                item['id'] for item in page_slice
-                                if item.get('id')
-                            ]
+                            page_ids = [item['id'] for item in page_slice if item.get('id')]
                             if page_ids:
                                 full_docs = fetch_full_documents(page_ids, params.query)
                                 image_results = extract_images_from_results(full_docs)
                             else:
-                                image_results = extract_images_from_results(page_slice)
+                                image_results = []
 
-                            image_count = img_total
                             image_pagination = _build_image_pagination(img_total, page, img_per_page)
-                            discovery_cache_loaded = True
-
-                except ImportError:
-                    logger.warning("Could not import typesense_discovery_bridge for image pagination")
+                        else:
+                            image_results = []
+                            image_pagination = None
+                    else:
+                        image_results = extract_images_from_results(results)
+                        image_count = len(image_results)
+                        image_pagination = _build_image_pagination(
+                            len(image_results), 1, max(len(image_results), 1)
+                        )
                 except Exception as e:
-                    logger.warning(f"Discovery bridge image extraction error: {e}")
-
-                if not discovery_cache_loaded:
-                    image_results = extract_images_from_results(results)
-                    image_count = len(image_results)
-                    image_pagination = _build_image_pagination(
-                        len(image_results), 1, max(len(image_results), 1)
-                    )
-
+                    logger.warning(f"Image extraction error: {e}")
+                    image_results = []
+                    image_pagination = None
             else:
-                image_count = result.get('total_image_count', 0)
                 image_results = []
                 image_pagination = None
 
