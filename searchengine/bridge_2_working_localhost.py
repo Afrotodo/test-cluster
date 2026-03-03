@@ -2107,25 +2107,6 @@ def detect_query_intent(query: str, pos_tags: List[Tuple] = None) -> str:
 # ============================================================================
 # MAIN ENTRY POINT
 # ============================================================================
-# ============================================================================
-# STABLE CACHE KEY (add this right above execute_full_search)
-# ============================================================================
-
-def _generate_stable_cache_key(session_id: str, query: str) -> str:
-    """
-    Stable cache key for the FINISHED result package.
-    Uses session_id + original query so tab clicks and pagination
-    always find the same cache. Never depends on derived values
-    like corrected_query, query_mode, cities, states.
-    """
-    normalized = query.strip().lower()
-    key_string = f"final|{session_id or 'nosession'}|{normalized}"
-    return hashlib.md5(key_string.encode()).hexdigest()
-
-
-# ============================================================================
-# MAIN ENTRY POINT (restructured — cache-last)
-# ============================================================================
 
 def execute_full_search(
     query: str,
@@ -2143,13 +2124,7 @@ def execute_full_search(
     """
     Main entry point for search.
     
-    RESTRUCTURED: Cache-Last Strategy
-    ==================================
-    Flow: search → rerank → prune → AI overview → cache final package → done
-    
-    Two paths:
-      FAST PATH  — finished cache exists → filter → paginate → return
-      FULL PATH  — no cache → run full pipeline → cache at end → return
+    Returns same structure as old execute_full_search() for views.py compatibility.
     
     alt_mode:
         'n' = KEYWORD PATH - no semantic reranking
@@ -2169,117 +2144,32 @@ def execute_full_search(
             print(f"🎛️ Active UI filters: {active_filters}")
     
     # =========================================================================
-    # ★ FAST PATH: Check for finished cache FIRST
-    # If we already ran the full pipeline for this query+session,
-    # just filter/paginate/return. No discovery, no embedding, no rerank.
+    # ★ FIX: Check keyword cache BEFORE routing.
+    # When the user clicks a tab or page 2+, the URL may lose alt_mode=n.
+    # If a keyword cache already exists for this query, stay on keyword path.
+    # This prevents tab clicks and pagination from falling into the semantic
+    # path and generating a different cache key / different results.
     # =========================================================================
-    stable_key = _generate_stable_cache_key(session_id, query)
-    finished = _get_cached_results(stable_key)
-    
-    if finished is not None:
-        print(f"⚡ FAST PATH: '{query}' | page={page} | filter={active_data_type}/{active_category}/{active_schema}")
-        
-        all_results = finished['all_results']
-        all_facets = finished['all_facets']
-        facet_total = finished['facet_total']
-        ai_overview = finished.get('ai_overview')
-        metadata = finished['metadata']
-        times['cache'] = 'hit (fast path)'
-        
-        # Filter by UI filters (tab click)
-        filtered_results = filter_cached_results(
-            all_results,
-            data_type=active_data_type,
-            category=active_category,
-            schema=active_schema
-        )
-        
-        # Paginate
-        page_items, total_filtered = paginate_cached_results(filtered_results, page, per_page)
-        
-        # Fetch full documents for this page only
-        t_fetch = time.time()
-        page_ids = [item['id'] for item in page_items]
-        results = fetch_full_documents(page_ids, query)
-        times['fetch_docs'] = round((time.time() - t_fetch) * 1000, 2)
-        
-        # ★ Reattach AI overview on page 1
-        if results and page == 1 and ai_overview:
-            results[0]['humanized_summary'] = ai_overview
-        
-        times['total'] = round((time.time() - t0) * 1000, 2)
-        
-        print(f"⏱️ FAST PATH TIMING: {times}")
-        print(f"🔍 FAST PATH | Total: {facet_total} | Filtered: {total_filtered} | Page: {len(results)}")
-        
-        # Build return dict using cached metadata
-        signals = metadata.get('signals', {})
-        city_names = metadata.get('city_names', [])
-        state_names = metadata.get('state_names', [])
-        
-        return {
-            'query': query,
-            'corrected_query': metadata.get('corrected_query', query),
-            'intent': metadata.get('intent', 'general'),
-            'query_mode': metadata.get('query_mode', 'keyword'),
-            'results': results,
-            'total': total_filtered,
-            'facet_total': facet_total,
-            'page': page,
-            'per_page': per_page,
-            'search_time': round(time.time() - t0, 3),
-            'session_id': session_id,
-            'semantic_enabled': metadata.get('semantic_enabled', False),
-            'search_strategy': metadata.get('search_strategy', 'cached'),
-            'alt_mode': alt_mode,
-            'skip_embedding': skip_embedding,
-            'search_source': search_source,
-            'valid_terms': metadata.get('valid_terms', query.split()),
-            'unknown_terms': metadata.get('unknown_terms', []),
-            'data_type_facets': all_facets.get('data_type', []),
-            'category_facets': all_facets.get('category', []),
-            'schema_facets': all_facets.get('schema', []),
-            'related_searches': [],
-            'facets': all_facets,
-            'word_discovery': metadata.get('word_discovery', {
-                'valid_count': len(query.split()),
-                'unknown_count': 0,
-                'corrections': [],
-                'filters': [],
-                'locations': [],
-                'sort': None,
-                'total_score': 0,
-                'average_score': 0,
-                'max_score': 0,
-            }),
-            'timings': times,
-            'filters_applied': metadata.get('filters_applied', {
-                'data_type': active_data_type,
-                'category': active_category,
-                'schema': active_schema,
-                'is_local_search': False,
-                'local_search_strength': 'none',
-            }),
-            'signals': signals,
-            'profile': metadata.get('profile', {}),
-        }
-    
-    # =========================================================================
-    # ★ FULL PATH: No finished cache. Run the entire pipeline.
-    # =========================================================================
-    print(f"🔬 FULL PATH: '{query}' (no finished cache for stable_key={stable_key[:12]}...)")
+    keyword_cache_key = _generate_cache_key(query, 'keyword', [], [])
+    keyword_cache_hit = _get_cached_results(keyword_cache_key)
     
     is_keyword_path = (alt_mode == 'n') or search_source in ('dropdown', 'keyword', 'suggestion', 'autocomplete')
     
+    # ★ If keyword cache exists for this query, force keyword path
+    if keyword_cache_hit is not None:
+        is_keyword_path = True
+        print(f"🔄 Keyword cache exists for '{query}' — forcing keyword path (page={page}, alt_mode={alt_mode})")
+    
     # =========================================================================
-    # KEYWORD PATH (full pipeline)
+    # KEYWORD PATH (alt_mode='n' or keyword cache exists)
     # =========================================================================
     
     if is_keyword_path:
-        print(f"⚡ KEYWORD PIPELINE: '{query}' | page={page} | per_page={per_page} | alt_mode={alt_mode} | search_source={search_source}")
+        print(f"⚡ KEYWORD PATH: '{query}' | page={page} | per_page={per_page} | alt_mode={alt_mode} | search_source={search_source}")
         
         intent = detect_query_intent(query, pos_tags)
         
+        # Simple profile for keyword path
         profile = {
             'search_terms': query.split(),
             'cities': [],
@@ -2295,65 +2185,38 @@ def execute_full_search(
             },
         }
         
-        # Stage 1: Fetch ALL candidates
-        t1 = time.time()
-        all_results = fetch_candidate_ids(query, profile)
-        times['stage1'] = round((time.time() - t1) * 1000, 2)
-        times['cache'] = 'miss (full path - keyword)'
+        cache_key = keyword_cache_key  # ★ Reuse the key we already checked
         
-        # Facets from ALL results
+        if keyword_cache_hit is not None:
+            print(f"✅ Cache HIT: {len(keyword_cache_hit)} candidates")
+            all_results = keyword_cache_hit
+            times['cache'] = 'hit'
+        else:
+            print(f"❌ Cache MISS: Running Stage 1...")
+            t1 = time.time()
+            all_results = fetch_candidate_ids(query, profile)
+            times['stage1'] = round((time.time() - t1) * 1000, 2)
+            
+            if all_results:
+                _set_cached_results(cache_key, all_results)
+            times['cache'] = 'miss'
+        
+        # Facets from ALL results (unfiltered — so all tabs show correct counts)
         all_facets = count_facets_from_cache(all_results)
         facet_total = len(all_results)
         
-        # ★ CACHE THE FINAL PACKAGE (keyword path has no reranking/pruning)
-        _set_cached_results(stable_key, {
-            'all_results': all_results,
-            'all_facets': all_facets,
-            'facet_total': facet_total,
-            'ai_overview': None,
-            'metadata': {
-                'corrected_query': query,
-                'intent': intent,
-                'query_mode': 'keyword',
-                'semantic_enabled': False,
-                'search_strategy': 'keyword_graph_filter',
-                'valid_terms': query.split(),
-                'unknown_terms': [],
-                'signals': {},
-                'city_names': [],
-                'state_names': [],
-                'profile': profile,
-                'word_discovery': {
-                    'valid_count': len(query.split()),
-                    'unknown_count': 0,
-                    'corrections': [],
-                    'filters': [],
-                    'locations': [],
-                    'sort': None,
-                    'total_score': 0,
-                    'average_score': 0,
-                    'max_score': 0,
-                },
-                'filters_applied': {
-                    'data_type': active_data_type,
-                    'category': active_category,
-                    'schema': active_schema,
-                    'is_local_search': False,
-                    'local_search_strength': 'none',
-                },
-            },
-        })
-        print(f"💾 Cached final keyword package: {facet_total} results (stable_key={stable_key[:12]}...)")
-        
-        # Filter → Paginate → Fetch for THIS request
+        # Filter by UI filters (tab click)
         filtered_results = filter_cached_results(
             all_results,
             data_type=active_data_type,
             category=active_category,
             schema=active_schema
         )
+        
+        # Paginate the filtered set
         page_items, total_filtered = paginate_cached_results(filtered_results, page, per_page)
         
+        # Fetch full documents for this page only
         t2 = time.time()
         page_ids = [item['id'] for item in page_items]
         results = fetch_full_documents(page_ids, query)
@@ -2408,18 +2271,17 @@ def execute_full_search(
         }
     
     # =========================================================================
-    # SEMANTIC PATH (full pipeline)
-    # discovery → embed → candidates → rerank → prune → AI overview → cache
+    # SEMANTIC PATH (alt_mode='y' and no keyword cache)
     # =========================================================================
     
-    print(f"🔬 SEMANTIC PIPELINE: '{query}'")
+    print(f"🔬 SEMANTIC PATH: '{query}'")
     
-    # --- Word discovery + embedding in parallel ---
+    # Run word discovery and embedding in parallel
     t1 = time.time()
     discovery, query_embedding = run_parallel_prep(query, skip_embedding=skip_embedding)
     times['parallel_prep'] = round((time.time() - t1) * 1000, 2)
     
-    # --- Intent detection ---
+    # Run intent detection
     signals = {}
     if INTENT_DETECT_AVAILABLE:
         try:
@@ -2441,12 +2303,14 @@ def execute_full_search(
     semantic_enabled = query_embedding is not None
     query_mode = signals.get('query_mode', 'explore')
     
-    # --- Build profile ---
+    # Build profile from discovery (now signal-aware)
     t2 = time.time()
     profile = build_query_profile(discovery, signals=signals)
     times['build_profile'] = round((time.time() - t2) * 1000, 2)
     
-    # --- Apply corrections to search terms ---
+    # =========================================================================
+    # Apply corrections to search terms
+    # =========================================================================
     corrections = discovery.get('corrections', [])
     if corrections:
         correction_map = {
@@ -2463,33 +2327,61 @@ def execute_full_search(
             print(f"   ✅ Applied corrections to search terms: {original_terms} → {profile['search_terms']}")
     
     intent = profile.get('primary_intent', 'general')
-    city_names = [c['name'] for c in profile.get('cities', [])]
-    state_names = [s['name'] for s in profile.get('states', [])]
     
     print(f"   Intent: {intent} | Mode: {query_mode}")
-    print(f"   Cities: {city_names}")
-    print(f"   States: {state_names}")
+    print(f"   Cities: {[c['name'] for c in profile.get('cities', [])]}")
+    print(f"   States: {[s['name'] for s in profile.get('states', [])]}")
     print(f"   Search Terms (POS-filtered): {profile.get('search_terms', [])}")
     print(f"   Location Terms (stripped): {profile.get('location_terms', [])}")
     print(f"   Field Boosts: {profile.get('field_boosts', {})}")
     
-    # --- Stage 1: Fetch ALL candidates ---
-    t3 = time.time()
-    all_results = fetch_candidate_ids(corrected_query, profile, signals=signals)
-    times['stage1'] = round((time.time() - t3) * 1000, 2)
-    times['cache'] = 'miss (full path - semantic)'
+    # Generate cache key
+    city_names = [c['name'] for c in profile.get('cities', [])]
+    state_names = [s['name'] for s in profile.get('states', [])]
+    cache_key = _generate_cache_key(corrected_query, query_mode, city_names, state_names)
     
-    print(f"📊 Stage 1: {len(all_results)} candidates")
+    # Check cache
+    cached_data = _get_cached_results(cache_key)
     
-    # --- Stage 2: Semantic Rerank + Vector Distance Prune ---
-    if semantic_enabled and all_results:
+    if cached_data:
+        print(f"✅ Cache HIT: {len(cached_data)} candidates")
+        all_results = cached_data
+        times['cache'] = 'hit'
+    else:
+        print(f"❌ Cache MISS: Running Stage 1...")
+        t3 = time.time()
+        all_results = fetch_candidate_ids(corrected_query, profile, signals=signals)
+        times['stage1'] = round((time.time() - t3) * 1000, 2)
+        
+        if all_results:
+            _set_cached_results(cache_key, all_results)
+        times['cache'] = 'miss'
+    
+    # Facets from cache
+    all_facets = count_facets_from_cache(all_results)
+    facet_total = len(all_results)
+    
+    print(f"📊 Facets: {[(f['value'], f['count']) for f in all_facets.get('data_type', [])]}")
+    
+    # Filter by UI filters
+    filtered_results = filter_cached_results(
+        all_results,
+        data_type=active_data_type,
+        category=active_category,
+        schema=active_schema
+    )
+    
+    # Stage 2: Semantic Rerank (with mode-specific blend ratios)
+    if semantic_enabled and filtered_results:
         t4 = time.time()
-        candidate_ids = [item['id'] for item in all_results]
+        candidate_ids = [item['id'] for item in filtered_results]
         reranked = semantic_rerank_candidates(candidate_ids, query_embedding, max_to_rerank=500)
-        all_results = apply_semantic_ranking(all_results, reranked, signals=signals)
+        filtered_results = apply_semantic_ranking(filtered_results, reranked, signals=signals)
         times['stage2'] = round((time.time() - t4) * 1000, 2)
         
-        # Vector distance hard filter — prune irrelevant
+        # ─── Vector distance hard filter ─────────────────────────────
+        # Remove results that are too far from the query embedding.
+        # Thresholds vary by mode: answer is strictest, browse is most lenient.
         DISTANCE_THRESHOLDS = {
             'answer':  0.60,
             'explore': 0.70,
@@ -2500,111 +2392,50 @@ def execute_full_search(
         }
         threshold = DISTANCE_THRESHOLDS.get(query_mode, 0.75)
         
-        before_filter = len(all_results)
-        all_results = [
-            r for r in all_results
+        before_filter = len(filtered_results)
+        filtered_results = [
+            r for r in filtered_results
             if r.get('vector_distance', 1.0) <= threshold
         ]
-        after_filter = len(all_results)
+        after_filter = len(filtered_results)
         
         if before_filter != after_filter:
-            print(f"   🔪 Vector prune ({query_mode}, threshold={threshold}): {before_filter} → {after_filter} ({before_filter - after_filter} removed)")
-    else:
-        print(f"⚠️ Skipping Stage 2: semantic={semantic_enabled}, candidates={len(all_results)}")
-    
-    # --- Facets from the FINAL pruned set ---
-    all_facets = count_facets_from_cache(all_results)
-    facet_total = len(all_results)
-    print(f"📊 Facets (final): {[(f['value'], f['count']) for f in all_facets.get('data_type', [])]}")
-    
-    # --- AI Overview (generate from page 1 full docs) ---
-    ai_overview = None
-    if all_results:
-        preview_items, _ = paginate_cached_results(all_results, 1, per_page)
-        preview_ids = [item['id'] for item in preview_items]
-        preview_docs = fetch_full_documents(preview_ids, query)
+            print(f"   🔪 Vector filter ({query_mode}, threshold={threshold}): {before_filter} → {after_filter} ({before_filter - after_filter} removed)")
         
-        if preview_docs and _should_trigger_ai_overview(signals, preview_docs, query):
-            ai_overview = _build_ai_overview(signals, preview_docs, query)
-            if ai_overview:
-                print(f"   💡 AI Overview: {ai_overview[:80]}...")
+
+        # Update total for display
+        total_filtered = len(filtered_results)
+
+
+        # ─── Sync all_results with surviving IDs ─────────────────────
+        surviving_ids = {r['id'] for r in filtered_results}
+        all_results = [r for r in all_results if r['id'] in surviving_ids]
+        
+        # Update cache so repeat visits don't serve rejected docs
+        _set_cached_results(cache_key, all_results)
+
+        # Recount facets after vector filter so tab counts are accurate
+        all_facets = count_facets_from_cache(filtered_results)
+        facet_total = len(filtered_results)
+        print(f"   📊 Facets (post-filter): {[(f['value'], f['count']) for f in all_facets.get('data_type', [])]}")
+    else:
+        print(f"⚠️ Skipping Stage 2: semantic={semantic_enabled}, filtered={len(filtered_results)}")
     
-    # --- Extract terms ---
-    valid_terms = profile.get('search_terms', [])
-    unknown_terms = [t['word'] for t in discovery.get('terms', []) if t.get('status') == 'unknown']
-    
-    # =========================================================================
-    # ★ CACHE THE FINAL PACKAGE
-    # All done: reranked, pruned, AI overview generated.
-    # Next tab click / pagination hits the fast path at the top.
-    # =========================================================================
-    _set_cached_results(stable_key, {
-        'all_results': all_results,
-        'all_facets': all_facets,
-        'facet_total': facet_total,
-        'ai_overview': ai_overview,
-        'metadata': {
-            'corrected_query': corrected_query,
-            'intent': intent,
-            'query_mode': query_mode,
-            'semantic_enabled': semantic_enabled,
-            'search_strategy': 'staged_semantic' if semantic_enabled else 'keyword_fallback',
-            'valid_terms': valid_terms,
-            'unknown_terms': unknown_terms,
-            'signals': signals,
-            'city_names': city_names,
-            'state_names': state_names,
-            'profile': profile,
-            'word_discovery': {
-                'valid_count': discovery.get('stats', {}).get('valid_words', 0),
-                'unknown_count': discovery.get('stats', {}).get('unknown_words', 0),
-                'corrections': discovery.get('corrections', []),
-                'filters': [],
-                'locations': [
-                    {'field': 'location_city', 'values': city_names},
-                    {'field': 'location_state', 'values': state_names},
-                ] if city_names or state_names else [],
-                'sort': None,
-                'total_score': 0,
-                'average_score': 0,
-                'max_score': 0,
-            },
-            'filters_applied': {
-                'data_type': active_data_type,
-                'category': active_category,
-                'schema': active_schema,
-                'is_local_search': signals.get('is_local_search', False),
-                'local_search_strength': signals.get('local_search_strength', 'none'),
-                'has_black_owned': signals.get('has_black_owned', False),
-                'graph_filters': [],
-                'graph_locations': [
-                    {'field': 'location_city', 'values': city_names},
-                    {'field': 'location_state', 'values': state_names},
-                ] if city_names or state_names else [],
-                'graph_sort': None,
-            },
-        },
-    })
-    print(f"💾 Cached final semantic package: {facet_total} results (stable_key={stable_key[:12]}...)")
-    
-    # --- Filter → Paginate → Fetch for THIS request ---
-    filtered_results = filter_cached_results(
-        all_results,
-        data_type=active_data_type,
-        category=active_category,
-        schema=active_schema
-    )
-    
+    # Paginate
     page_items, total_filtered = paginate_cached_results(filtered_results, page, per_page)
     
+    # Fetch full documents
     t5 = time.time()
     page_ids = [item['id'] for item in page_items]
     results = fetch_full_documents(page_ids, query)
     times['fetch_docs'] = round((time.time() - t5) * 1000, 2)
     
-    # Attach AI overview on page 1
-    if results and page == 1 and ai_overview:
-        results[0]['humanized_summary'] = ai_overview
+    # ─── AI Overview (Blueprint Step 8 — signal-driven) ─────────────
+    if results and page == 1:
+        if _should_trigger_ai_overview(signals, results, query):
+            overview = _build_ai_overview(signals, results, query)
+            if overview:
+                results[0]['humanized_summary'] = overview
     
     # Store query embedding for popular queries
     if query_embedding:
@@ -2619,6 +2450,10 @@ def execute_full_search(
     
     print(f"⏱️ TIMING: {times}")
     print(f"🔍 {strategy.upper()} ({query_mode}) | Total: {facet_total} | Filtered: {total_filtered} | Page: {len(results)}")
+    
+    # Extract valid/unknown terms
+    valid_terms = profile.get('search_terms', [])
+    unknown_terms = [t['word'] for t in discovery.get('terms', []) if t.get('status') == 'unknown']
     
     return {
         'query': query,
@@ -2676,6 +2511,7 @@ def execute_full_search(
         'signals': signals,
         'profile': profile,
     }
+
 # ============================================================================
 # CONVENIENCE FUNCTIONS (for compatibility with views.py imports)
 # ============================================================================
