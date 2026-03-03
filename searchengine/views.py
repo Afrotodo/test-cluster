@@ -1245,17 +1245,34 @@ from .trending import get_trending_results, cache_trending_result
 #     return render(request, 'home3.html', context)
 
 
+# def home(request):
+#     """Home page view with trending results."""
+#     city = get_user_city(request)
+
+#     context = {
+#         'city': city,
+#         'supported_cities': list(SUPPORTED_CITIES),
+#         'popular_queries': get_popular_queries(limit=6),
+#         'trending_results': get_trending_results(city=city, limit=6),
+#     }
+
+#     return render(request, 'home3.html', context)
+
 def home(request):
-    """Home page view with trending results."""
     city = get_user_city(request)
-
+    
+    # Get city from IP geolocation for trending (same source as search view)
+    client_info = get_full_client_info(request)
+    trending_city = ''
+    if client_info.get('location'):
+        trending_city = client_info['location'].get('city', '')
+    
     context = {
-        'city': city,
+        'city': trending_city or city,
         'supported_cities': list(SUPPORTED_CITIES),
-        'popular_queries': get_popular_queries(limit=6),
-        'trending_results': get_trending_results(city=city, limit=6),
+        'trending_results': get_trending_results(city=trending_city, limit=6),
     }
-
+    
     return render(request, 'home3.html', context)
 
 
@@ -4751,7 +4768,7 @@ def search(request):
     # === 16. CACHE RESULTS ===
     if not filters and total_results > 0:
         safe_cache_set(cache_key, context, SEARCH_CONFIG['cache_timeout'])
-        
+
     if results and len(results) > 0:
         trending_city = location.get('city', '') if location else ''
         cache_trending_result(query=params.query, top_result=results[0], city=trending_city)
