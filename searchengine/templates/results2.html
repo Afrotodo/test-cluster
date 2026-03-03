@@ -41,15 +41,14 @@
         .search-box { display: flex; align-items: center; background: var(--warm-white); border: 2px solid var(--gray-200); border-radius: 12px; padding: var(--space-xs) var(--space-sm) var(--space-xs) var(--space-md); transition: all var(--transition-base); }
         .search-box:hover { border-color: var(--gray-300); box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
         .search-box:focus-within { border-color: var(--green); box-shadow: 0 0 0 3px var(--green-soft); }
-        .search-icon { width: 20px; height: 20px; color: var(--gray-500); flex-shrink: 0; margin-right: var(--space-sm); }
         .search-input { flex: 1; border: none; outline: none; font-family: var(--font-body); font-size: 16px; color: var(--black); background: transparent; padding: var(--space-sm) 0; min-width: 0; }
         .search-input::placeholder { color: var(--gray-400); }
         .search-actions { display: flex; align-items: center; gap: var(--space-xs); }
-        .search-action-btn { width: 36px; height: 36px; background: none; border: none; cursor: pointer; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: var(--gray-500); transition: all var(--transition-fast); }
+        .search-action-btn { padding: var(--space-sm) var(--space-md); background: none; border: none; cursor: pointer; border-radius: 8px; font-family: var(--font-body); font-size: 13px; font-weight: 500; color: var(--gray-500); transition: all var(--transition-fast); }
         .search-action-btn:hover { background: var(--gray-100); color: var(--gray-700); }
         .search-divider { width: 1px; height: 24px; background: var(--gray-300); margin: 0 var(--space-xs); }
-        .search-submit { width: 40px; height: 40px; background: var(--black); border: none; cursor: pointer; border-radius: 10px; display: flex; align-items: center; justify-content: center; color: var(--warm-white); transition: all var(--transition-fast); }
-        .search-submit:hover { background: var(--gray-700); } .search-submit svg { width: 18px; height: 18px; }
+        .search-submit { padding: var(--space-sm) var(--space-md); background: var(--black); border: none; cursor: pointer; border-radius: 10px; font-family: var(--font-body); font-size: 14px; font-weight: 600; color: var(--warm-white); transition: all var(--transition-fast); }
+        .search-submit:hover { background: var(--gray-700); }
         .header-auth { display: flex; align-items: center; gap: var(--space-sm); flex-shrink: 0; }
         .auth-link { padding: var(--space-sm) var(--space-md); font-size: 14px; font-weight: 500; border-radius: 8px; transition: all var(--transition-fast); }
         .auth-link.login { color: var(--gray-700); } .auth-link.login:hover { background: var(--gray-100); }
@@ -61,7 +60,6 @@
         .nav-tab:hover { color: var(--black); background: var(--gray-100); }
         .nav-tab.active { color: var(--green); } .nav-tab::after { content: ''; position: absolute; bottom: -1px; left: var(--space-sm); right: var(--space-sm); height: 2px; background: transparent; border-radius: 2px 2px 0 0; }
         .nav-tab.active::after { background: var(--green); }
-        .nav-tab svg { width: 16px; height: 16px; flex-shrink: 0; }
         .nav-tab .tab-count { font-size: 11px; font-weight: 600; background: var(--gray-200); color: var(--gray-600); padding: 2px 6px; border-radius: 10px; margin-left: 4px; }
         .nav-tab.active .tab-count { background: var(--green-soft); color: var(--green); }
         /* Main content */
@@ -71,7 +69,7 @@
         .results-count { font-weight: 600; color: var(--gray-700); }
         .active-filter-badge { display: inline-flex; align-items: center; gap: 4px; background: var(--green-soft); color: var(--green); padding: 4px 10px; border-radius: 20px; font-size: 13px; font-weight: 500; }
         .active-filter-badge.schema-badge { background: rgba(99,102,241,0.1); color: #6366f1; }
-        .active-filter-badge .remove-filter { width: 14px; height: 14px; display: flex; align-items: center; justify-content: center; background: var(--green); color: white; border-radius: 50%; cursor: pointer; margin-left: 4px; }
+        .active-filter-badge .remove-filter { width: 14px; height: 14px; display: flex; align-items: center; justify-content: center; background: var(--green); color: white; border-radius: 50%; cursor: pointer; margin-left: 4px; font-size: 10px; line-height: 1; }
         .active-filter-badge.schema-badge .remove-filter { background: #6366f1; }
         .spelling-correction { background: var(--gold-soft); border-left: 3px solid var(--gold); padding: var(--space-md); border-radius: 0 8px 8px 0; margin-bottom: var(--space-lg); }
         .including-results { font-size: 15px; color: var(--black); margin-bottom: var(--space-xs); }
@@ -83,12 +81,10 @@
         .multi-map-section { background: var(--warm-white); border: 1px solid var(--gray-200); border-radius: 12px; overflow: hidden; margin-bottom: var(--space-lg); }
         .multi-map-header { display: flex; align-items: center; justify-content: space-between; padding: var(--space-sm) var(--space-lg); border-bottom: 1px solid var(--gray-200); background: var(--gray-50); }
         .multi-map-header-left { display: flex; align-items: center; gap: var(--space-sm); }
-        .multi-map-header-icon { width: 28px; height: 28px; background: rgba(188,71,73,0.08); border-radius: 8px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
         .multi-map-title { font-family: var(--font-display); font-size: 15px; font-weight: 600; color: var(--black); }
         .multi-map-count { font-size: 12px; color: var(--gray-500); font-weight: 500; }
         .multi-map-toggle { display: flex; align-items: center; gap: 4px; padding: 5px 12px; border-radius: 8px; font-size: 12px; font-weight: 600; font-family: var(--font-body); color: var(--gray-600); background: var(--warm-white); border: 1px solid var(--gray-200); cursor: pointer; transition: all var(--transition-fast); }
         .multi-map-toggle:hover { background: var(--gray-100); color: var(--black); }
-        .multi-map-toggle svg { width: 14px; height: 14px; }
         .multi-map-frame { width: 100%; height: 300px; background: var(--gray-100); position: relative; }
         .multi-map-frame .leaflet-popup-content-wrapper { font-family: var(--font-body) !important; font-size: 13px !important; border-radius: 8px !important; box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important; }
         .multi-map-frame .leaflet-popup-content { margin: 10px 14px !important; }
@@ -116,8 +112,6 @@
         .result-item.has-map-card .result-item-content { padding: var(--space-lg); }
         .result-item.has-map-card:hover { transform: translateY(-1px); }
         .result-header { display: flex; align-items: center; margin-bottom: var(--space-sm); }
-        .result-favicon { width: 32px; height: 32px; border-radius: 8px; background: var(--gray-100); display: flex; align-items: center; justify-content: center; margin-right: var(--space-sm); font-size: 13px; font-weight: 600; color: var(--gray-600); overflow: hidden; flex-shrink: 0; }
-        .result-favicon img { width: 20px; height: 20px; object-fit: contain; }
         .result-site-info { display: flex; flex-direction: column; min-width: 0; flex: 1; }
         .result-site-name { font-size: 13px; font-weight: 600; color: var(--gray-700); line-height: 1.3; }
         .result-url { font-size: 12px; color: var(--gray-500); display: flex; align-items: center; flex-wrap: wrap; gap: 2px; }
@@ -137,12 +131,12 @@
         .result-tag { font-size: 12px; font-weight: 500; padding: 4px 10px; border-radius: 20px; background: var(--gray-100); color: var(--gray-600); }
         .result-tag.clickable { cursor: pointer; transition: all var(--transition-fast); } .result-tag.clickable:hover { background: var(--gray-200); }
         .result-map-link { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 500; padding: 4px 10px; border-radius: 20px; background: rgba(188,71,73,0.08); color: var(--red); transition: all var(--transition-fast); }
-        .result-map-link:hover { background: rgba(188,71,73,0.15); } .result-map-link svg { width: 12px; height: 12px; }
+        .result-map-link:hover { background: rgba(188,71,73,0.15); }
 
-        /* Inline map within result card (kept for single-pin fallback) */
+        /* Inline map within result card */
         .result-map-frame { width: 100%; height: 220px; background: var(--gray-100); position: relative; }
         .result-map-expand { position: absolute; top: var(--space-sm); left: var(--space-sm); z-index: 500; display: inline-flex; align-items: center; gap: 4px; padding: 6px 12px; background: var(--warm-white); border: 1px solid var(--gray-200); border-radius: 8px; font-size: 12px; font-weight: 600; font-family: var(--font-body); color: var(--gray-700); text-decoration: none; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
-        .result-map-expand:hover { background: var(--gray-100); } .result-map-expand svg { width: 14px; height: 14px; }
+        .result-map-expand:hover { background: var(--gray-100); }
         .result-map-frame .leaflet-control-zoom a { background: var(--warm-white) !important; color: var(--black) !important; border-color: var(--gray-200) !important; width: 32px !important; height: 32px !important; line-height: 32px !important; border-radius: 8px !important; }
         .result-map-frame .leaflet-control-zoom { border: none !important; box-shadow: 0 2px 8px rgba(0,0,0,0.1) !important; border-radius: 8px !important; overflow: hidden; }
         .result-map-frame .leaflet-popup-content-wrapper { font-family: var(--font-body) !important; font-size: 13px !important; border-radius: 8px !important; }
@@ -150,7 +144,6 @@
         .result-map-details { padding: var(--space-md) var(--space-lg); background: var(--gray-50); border-top: 1px solid var(--gray-200); border-bottom: 1px solid var(--gray-200); }
         .result-map-details-row { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-md); }
         .result-map-info { display: flex; align-items: flex-start; gap: var(--space-sm); flex: 1; min-width: 0; }
-        .result-map-icon { width: 32px; height: 32px; background: rgba(188,71,73,0.08); border-radius: 8px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
         .result-map-text { min-width: 0; }
         .result-map-address { font-size: 14px; color: var(--gray-700); font-weight: 500; line-height: 1.4; }
         .result-map-phone { font-size: 13px; color: var(--gray-500); margin-top: 2px; }
@@ -178,7 +171,6 @@
 
         /* No results */
         .no-results { text-align: center; padding: var(--space-2xl) var(--space-lg); }
-        .no-results-icon { width: 64px; height: 64px; background: var(--gray-100); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto var(--space-lg); color: var(--gray-400); }
         .no-results h2 { font-family: var(--font-display); font-size: 22px; font-weight: 600; margin-bottom: var(--space-md); } .no-results h2 b { color: var(--green); }
         .no-results p { color: var(--gray-600); margin-bottom: var(--space-md); }
         .no-results-suggestions { text-align: left; max-width: 400px; margin: 0 auto; background: var(--warm-white); border: 1px solid var(--gray-200); border-radius: 12px; padding: var(--space-lg); }
@@ -189,18 +181,16 @@
         /* Sidebar */
         .sidebar { width: 320px; flex-shrink: 0; }
         .sidebar-section { background: var(--warm-white); border: 1px solid var(--gray-200); border-radius: 12px; padding: var(--space-lg); margin-bottom: var(--space-md); }
-        .sidebar-title { font-family: var(--font-display); font-size: 16px; font-weight: 600; color: var(--black); margin-bottom: var(--space-md); display: flex; align-items: center; gap: var(--space-sm); }
-        .sidebar-title svg { width: 18px; height: 18px; color: var(--gold); }
+        .sidebar-title { font-family: var(--font-display); font-size: 16px; font-weight: 600; color: var(--black); margin-bottom: var(--space-md); }
         .filter-options { display: flex; flex-direction: column; gap: 4px; }
         .filter-option { display: flex; align-items: center; justify-content: space-between; padding: var(--space-sm) var(--space-md); font-size: 14px; color: var(--gray-700); background: var(--gray-50); border-radius: 8px; transition: all var(--transition-fast); cursor: pointer; }
         .filter-option:hover { background: var(--gray-100); } .filter-option.active { background: var(--green-soft); color: var(--green); }
         .filter-option .count { font-size: 12px; font-weight: 600; color: var(--gray-400); } .filter-option.active .count { color: var(--green); }
         .related-searches { display: flex; flex-direction: column; gap: var(--space-sm); }
         .related-search { display: flex; align-items: center; gap: var(--space-sm); padding: var(--space-sm) var(--space-md); background: var(--gray-50); border-radius: 8px; font-size: 14px; color: var(--gray-700); transition: all var(--transition-fast); }
-        .related-search:hover { background: var(--gray-100); color: var(--black); } .related-search svg { width: 14px; height: 14px; color: var(--gray-400); flex-shrink: 0; }
+        .related-search:hover { background: var(--gray-100); color: var(--black); }
         .related-searches-inline { background: var(--warm-white); border: 1px solid var(--gray-200); border-radius: 12px; padding: var(--space-md); margin-top: var(--space-lg); margin-bottom: var(--space-md); }
-        .related-searches-inline-title { font-family: var(--font-display); font-size: 15px; font-weight: 600; color: var(--black); margin-bottom: var(--space-sm); display: flex; align-items: center; gap: var(--space-sm); }
-        .related-searches-inline-title svg { color: var(--gold); flex-shrink: 0; }
+        .related-searches-inline-title { font-family: var(--font-display); font-size: 15px; font-weight: 600; color: var(--black); margin-bottom: var(--space-sm); }
         .related-searches-inline-list { display: flex; flex-wrap: wrap; gap: var(--space-sm); }
         .related-searches-inline-item { display: inline-flex; align-items: center; padding: var(--space-sm) var(--space-md); background: var(--gray-50); border: 1px solid var(--gray-200); border-radius: 20px; font-size: 13px; color: var(--gray-700); transition: all var(--transition-fast); }
         .related-searches-inline-item:hover { background: var(--gray-100); border-color: var(--gray-300); }
@@ -217,7 +207,6 @@
         .image-card-overlay { position: absolute; bottom: 0; left: 0; right: 0; padding: var(--space-sm) var(--space-md); background: linear-gradient(transparent, rgba(0,0,0,0.85)); color: white; opacity: 0; transition: opacity var(--transition-fast); }
         .image-card:hover .image-card-overlay { opacity: 1; }
         .image-card-title { font-size: 12px; font-weight: 500; line-height: 1.3; } .image-card-source { font-size: 10px; opacity: 0.8; }
-        .image-card-type { position: absolute; top: var(--space-sm); right: var(--space-sm); background: rgba(0,0,0,0.6); color: white; padding: 3px 6px; border-radius: 4px; font-size: 9px; text-transform: uppercase; font-weight: 600; }
         .lightbox { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.95); z-index: 9999; justify-content: center; align-items: center; padding: 40px; }
         .lightbox.active { display: flex; }
         .lightbox-content { max-width: 90vw; max-height: 90vh; position: relative; text-align: center; } .lightbox-content img { max-width: 100%; max-height: 75vh; object-fit: contain; border-radius: 8px; }
@@ -225,22 +214,18 @@
         .lightbox-info { color: white; margin-top: var(--space-md); } .lightbox-title { font-size: 16px; font-weight: 500; } .lightbox-source { font-size: 14px; opacity: 0.8; } .lightbox-source a { color: var(--green-light); }
         .lightbox-nav { position: absolute; top: 50%; transform: translateY(-50%); background: rgba(255,255,255,0.2); border: none; color: white; width: 50px; height: 50px; border-radius: 50%; cursor: pointer; font-size: 28px; display: flex; align-items: center; justify-content: center; z-index: 10001; }
         .lightbox-prev { left: 20px; } .lightbox-next { right: 20px; }
-        .image-filters { display: flex; gap: var(--space-sm); margin-bottom: var(--space-md); flex-wrap: wrap; }
-        .image-filter-chip { padding: 6px 14px; border-radius: 20px; background: var(--gray-100); color: var(--gray-700); font-size: 13px; cursor: pointer; border: 1px solid var(--gray-200); font-weight: 500; font-family: var(--font-body); }
-        .image-filter-chip.active { background: var(--green); color: white; border-color: var(--green); }
 
-        /* Legacy standalone address map card — kept for full map view */
+        /* Legacy standalone address map card */
         .address-map-card { background: var(--warm-white); border: 1px solid var(--gray-200); border-radius: 12px; overflow: hidden; margin-bottom: var(--space-lg); transition: all var(--transition-fast); }
         .address-map-card:hover { border-color: var(--gray-300); box-shadow: 0 4px 12px rgba(0,0,0,0.06); }
         .address-map-frame { width: 100%; height: 280px; background: var(--gray-100); position: relative; }
         .address-map-expand { position: absolute; top: var(--space-sm); left: var(--space-sm); z-index: 500; display: inline-flex; align-items: center; gap: 4px; padding: 6px 12px; background: var(--warm-white); border: 1px solid var(--gray-200); border-radius: 8px; font-size: 12px; font-weight: 600; font-family: var(--font-body); color: var(--gray-700); text-decoration: none; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
-        .address-map-expand:hover { background: var(--gray-100); } .address-map-expand svg { width: 14px; height: 14px; }
+        .address-map-expand:hover { background: var(--gray-100); }
         .address-map-frame .leaflet-control-zoom a { background: var(--warm-white) !important; color: var(--black) !important; border-color: var(--gray-200) !important; width: 32px !important; height: 32px !important; line-height: 32px !important; border-radius: 8px !important; }
         .address-map-frame .leaflet-control-zoom { border: none !important; box-shadow: 0 2px 8px rgba(0,0,0,0.1) !important; border-radius: 8px !important; overflow: hidden; }
         .address-map-frame .leaflet-popup-content-wrapper { font-family: var(--font-body) !important; font-size: 13px !important; border-radius: 8px !important; }
         .address-map-body { padding: var(--space-lg); display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-md); }
         .address-map-info { display: flex; align-items: flex-start; gap: var(--space-sm); flex: 1; min-width: 0; }
-        .address-map-icon { width: 36px; height: 36px; background: rgba(188,71,73,0.08); border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
         .address-map-text { min-width: 0; }
         .address-map-title { font-family: var(--font-display); font-size: 18px; font-weight: 600; line-height: 1.3; margin-bottom: 2px; }
         .address-map-location { font-size: 14px; color: var(--gray-600); }
@@ -254,7 +239,7 @@
         /* FULL MAP VIEW */
         .full-map-page { display: flex; flex-direction: column; height: calc(100vh - 110px); }
         .full-map-bar { display: flex; align-items: center; gap: var(--space-md); padding: var(--space-sm) var(--space-lg); background: var(--warm-white); border-bottom: 1px solid var(--gray-200); flex-shrink: 0; }
-        .full-map-back { display: flex; align-items: center; gap: var(--space-xs); padding: var(--space-sm) var(--space-md); border-radius: 8px; font-size: 14px; font-weight: 500; color: var(--gray-700); } .full-map-back:hover { background: var(--gray-100); } .full-map-back svg { width: 16px; height: 16px; }
+        .full-map-back { display: flex; align-items: center; gap: var(--space-xs); padding: var(--space-sm) var(--space-md); border-radius: 8px; font-size: 14px; font-weight: 500; color: var(--gray-700); } .full-map-back:hover { background: var(--gray-100); }
         .full-map-info { flex: 1; min-width: 0; }
         .full-map-title { font-family: var(--font-display); font-size: 16px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .full-map-subtitle { font-size: 12px; color: var(--gray-500); }
@@ -262,17 +247,14 @@
         .full-map-btn { display: inline-flex; align-items: center; gap: 6px; padding: var(--space-sm) var(--space-md); border-radius: 8px; font-size: 13px; font-weight: 600; font-family: var(--font-body); white-space: nowrap; transition: all var(--transition-fast); text-decoration: none; }
         .full-map-btn.primary { background: var(--green); color: white; } .full-map-btn.primary:hover { background: var(--green-light); color: white; }
         .full-map-btn.secondary { background: var(--gray-100); color: var(--gray-700); border: 1px solid var(--gray-200); } .full-map-btn.secondary:hover { background: var(--gray-200); }
-        .full-map-btn svg { width: 14px; height: 14px; }
         .full-map-container { flex: 1; position: relative; }
         #full-map { width: 100%; height: 100%; }
         .full-map-info-card { position: absolute; bottom: var(--space-lg); left: var(--space-lg); z-index: 800; background: var(--warm-white); border: 1px solid var(--gray-200); border-radius: 12px; padding: var(--space-md) var(--space-lg); box-shadow: 0 4px 20px rgba(0,0,0,0.12); max-width: 360px; display: flex; align-items: center; gap: var(--space-sm); }
-        .full-map-info-card .address-map-icon { width: 36px; height: 36px; }
         .full-map-coords { font-size: 11px; color: var(--gray-400); font-family: monospace; }
         .nearme-badge { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; color: var(--green); background: var(--green-soft); padding: 2px 8px; border-radius: 10px; margin-top: 2px; }
         .nearme-dot { width: 6px; height: 6px; background: var(--green); border-radius: 50%; animation: pulse 2s infinite; }
         @keyframes pulse { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:0.5; transform:scale(1.3); } }
         .map-error { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; text-align: center; padding: var(--space-xl); }
-        .map-error-icon { width: 64px; height: 64px; background: var(--gray-100); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-bottom: var(--space-lg); color: var(--gray-400); }
         .map-error h2 { font-family: var(--font-display); font-size: 20px; margin-bottom: var(--space-sm); }
         .map-error p { color: var(--gray-600); font-size: 14px; margin-bottom: var(--space-lg); }
         .map-error-link { color: var(--green); font-weight: 500; } .map-error-link:hover { text-decoration: underline; }
@@ -292,7 +274,6 @@
             .address-map-frame { height: 220px; } .address-map-body { flex-direction: column; padding: var(--space-md); gap: var(--space-sm); }
             .address-map-actions { width: 100%; } .address-map-btn { flex: 1; justify-content: center; }
             .full-map-bar { padding: var(--space-sm) var(--space-md); gap: var(--space-sm); flex-wrap: wrap; }
-            .full-map-btn span { display: none; }
             .full-map-info-card { left: var(--space-sm); right: var(--space-sm); bottom: var(--space-sm); max-width: none; }
         }
         @media (max-width: 480px) {
@@ -301,9 +282,8 @@
             .result-snippet { font-size: 13px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
             .result-map-frame { height: 160px; } .result-map-btn { font-size: 11px; padding: 6px 10px; }
             .address-map-frame { height: 180px; } .address-map-title { font-size: 15px; } .address-map-btn { font-size: 12px; padding: 8px var(--space-sm); }
-            .full-map-back span { display: none; }
         }
-        @media (max-width: 360px) { .logo a { font-size: 18px; } .nav-tab svg { display: none; } .result-title { font-size: 15px; } .result-map-frame { height: 140px; } .address-map-frame { height: 160px; } .multi-map-frame { height: 170px; } .multi-map-chip { padding: 5px 8px; font-size: 11px; } .multi-map-chip-num { width: 16px; height: 16px; font-size: 9px; } .result-map-number { width: 18px; height: 18px; font-size: 9px; margin-right: 4px; } }
+        @media (max-width: 360px) { .logo a { font-size: 18px; } .result-title { font-size: 15px; } .result-map-frame { height: 140px; } .address-map-frame { height: 160px; } .multi-map-frame { height: 170px; } .multi-map-chip { padding: 5px 8px; font-size: 11px; } .multi-map-chip-num { width: 16px; height: 16px; font-size: 9px; } .result-map-number { width: 18px; height: 18px; font-size: 9px; margin-right: 4px; } }
         @media print { .header, .sidebar, .footer, .pagination, .nav-tabs, .address-map-card, .result-map-frame, .result-map-details, .multi-map-section { display: none !important; } }
         @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration: 0.01ms !important; } }
     </style>
@@ -315,14 +295,13 @@
             <div class="search-wrapper">
                 <form action="{% url 'searchengine:search' %}" method="GET" id="search-form">
                     <div class="search-box">
-                        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
                         <input type="text" name="query" class="search-input" value="{{ query }}" autocomplete="off" placeholder="Search Black business, culture & community...">
                         <input type="hidden" name="session_id" value="{{ session_id }}">
                         <div class="search-actions">
-                            <button type="button" class="search-action-btn" onclick="clearSearch()" title="Clear"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
-                            <button type="button" class="search-action-btn" onclick="nearMe()" title="Near Me"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg></button>
+                            <button type="button" class="search-action-btn" onclick="clearSearch()" title="Clear">✕</button>
+                            <button type="button" class="search-action-btn" onclick="nearMe()" title="Near Me">◎</button>
                             <span class="search-divider"></span>
-                            <button type="submit" class="search-submit" title="Search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button>
+                            <button type="submit" class="search-submit" title="Search">Search</button>
                         </div>
                     </div>
                 </form>
@@ -335,17 +314,11 @@
         {% if not show_map_view %}
         <nav class="nav-tabs">
             <a href="{% url 'searchengine:search' %}?query={{ query|urlencode }}&session_id={{ session_id }}" class="nav-tab {% if not active_data_type and not show_images %}active{% endif %}">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg> All <span class="tab-count">{{ facet_total|default:total_results|default:"0" }}</span></a>
+                All <span class="tab-count">{{ facet_total|default:total_results|default:"0" }}</span></a>
             <a href="{% url 'searchengine:search' %}?query={{ query|urlencode }}&view=images&session_id={{ session_id }}" class="nav-tab {% if show_images %}active{% endif %}">
-                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg> Images <span class="tab-count">{{ image_count|default:"0" }}</span></a>
+                Images <span class="tab-count">{{ image_count|default:"0" }}</span></a>
             {% for facet in data_type_facets %}
             <a href="{% url 'searchengine:search' %}?query={{ query|urlencode }}&data_type={{ facet.value|urlencode }}&session_id={{ session_id }}" class="nav-tab {% if active_data_type == facet.value %}active{% endif %}">
-                {% if facet.value == 'place' %}<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
-                {% elif facet.value == 'business' %}<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 7V3H2v18h20V7H12z"/></svg>
-                {% elif facet.value == 'person' %}<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
-                {% elif facet.value == 'article' %}<svg viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6z"/></svg>
-                {% elif facet.value == 'event' %}<svg viewBox="0 0 24 24" fill="currentColor"><path d="M17 12h-5v5h5v-5zM16 1v2H8V1H6v2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2h-1V1h-2zm3 18H5V8h14v11z"/></svg>
-                {% else %}<svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 8h4V4H4v4zm6 12h4v-4h-4v4zm-6 0h4v-4H4v4zm0-6h4v-4H4v4zm6 0h4v-4h-4v4z"/></svg>{% endif %}
                 {{ facet.label }}<span class="tab-count">{{ facet.count }}</span></a>
             {% endfor %}
         </nav>
@@ -356,21 +329,20 @@
     <div class="full-map-page">
         {% if map_view_data and not map_view_data.error %}
         <div class="full-map-bar">
-            <a href="{% url 'searchengine:search' %}?query={{ query|urlencode }}" class="full-map-back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg> <span>Back to results</span></a>
+            <a href="{% url 'searchengine:search' %}?query={{ query|urlencode }}" class="full-map-back">← <span>Back to results</span></a>
             <div class="full-map-info">
                 <div class="full-map-title">{{ map_view_data.short_address }}</div>
                 <div class="full-map-subtitle">{{ map_view_data.location_line }}</div>
             </div>
             <div class="full-map-actions">
-                <a href="{{ map_view_data.directions_url }}" target="_blank" class="full-map-btn primary"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg> <span>Directions</span></a>
-                <a href="{{ map_view_data.share_url }}" target="_blank" class="full-map-btn secondary"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg> <span>Share</span></a>
-                <a href="{{ map_view_data.streetview_url }}" target="_blank" class="full-map-btn secondary"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="3"/><path d="M12 11v5"/><path d="M9 22l3-6 3 6"/></svg> <span>Street View</span></a>
+                <a href="{{ map_view_data.directions_url }}" target="_blank" class="full-map-btn primary"><span>Directions</span></a>
+                <a href="{{ map_view_data.share_url }}" target="_blank" class="full-map-btn secondary"><span>Share</span></a>
+                <a href="{{ map_view_data.streetview_url }}" target="_blank" class="full-map-btn secondary"><span>Street View</span></a>
             </div>
         </div>
         <div class="full-map-container">
             <div id="full-map"></div>
             <div class="full-map-info-card">
-                <div class="address-map-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="#bc4749"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg></div>
                 <div class="address-map-text">
                     <div class="address-map-title" style="font-size:15px;">{{ map_view_data.short_address }}</div>
                     <div class="address-map-location" style="font-size:12px;">{{ map_view_data.location_line }}</div>
@@ -381,7 +353,6 @@
         </div>
         {% else %}
         <div class="map-error">
-            <div class="map-error-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div>
             <h2>Location not found</h2>
             <p>{{ map_view_data.error_message|default:"Could not find that location. Try a more specific address." }}</p>
             <a href="{% url 'searchengine:search' %}?query={{ query|urlencode }}" class="map-error-link">← Back to search</a>
@@ -395,11 +366,11 @@
         <div class="results-area">
             <div class="results-stats">
                 <span class="results-count">{{ display_total|default:total_results|default:"0" }}</span> results for "<strong>{{ query }}</strong>"
-                {% if map_location_count %}<span class="active-filter-badge" style="background:rgba(188,71,73,0.08);color:var(--red);"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg> {{ map_location_count }} on map</span>{% endif %}
-                {% if show_images %}<span class="active-filter-badge">Images<a href="{% url 'searchengine:search' %}?query={{ query|urlencode }}&session_id={{ session_id }}" class="remove-filter"><svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M18 6L6 18M6 6l12 12"/></svg></a></span>{% endif %}
-                {% if active_data_type %}<span class="active-filter-badge">{% if active_data_type == 'article' %}Articles{% elif active_data_type == 'person' %}People{% elif active_data_type == 'business' %}Businesses{% elif active_data_type == 'place' %}Places{% elif active_data_type == 'event' %}Events{% else %}{{ active_data_type|title }}{% endif %}<a href="{% url 'searchengine:search' %}?query={{ query|urlencode }}&session_id={{ session_id }}" class="remove-filter"><svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M18 6L6 18M6 6l12 12"/></svg></a></span>{% endif %}
-                {% if active_category %}<span class="active-filter-badge">{{ active_category|cut:"_"|title }}<a href="{% url 'searchengine:search' %}?query={{ query|urlencode }}{% if active_data_type %}&data_type={{ active_data_type }}{% endif %}&session_id={{ session_id }}" class="remove-filter"><svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M18 6L6 18M6 6l12 12"/></svg></a></span>{% endif %}
-                {% if active_schema %}<span class="active-filter-badge schema-badge">{{ active_schema }}<a href="{% url 'searchengine:search' %}?query={{ query|urlencode }}{% if active_data_type %}&data_type={{ active_data_type }}{% endif %}&session_id={{ session_id }}" class="remove-filter"><svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M18 6L6 18M6 6l12 12"/></svg></a></span>{% endif %}
+                {% if map_location_count %}<span class="active-filter-badge" style="background:rgba(188,71,73,0.08);color:var(--red);">{{ map_location_count }} on map</span>{% endif %}
+                {% if show_images %}<span class="active-filter-badge">Images<a href="{% url 'searchengine:search' %}?query={{ query|urlencode }}&session_id={{ session_id }}" class="remove-filter">✕</a></span>{% endif %}
+                {% if active_data_type %}<span class="active-filter-badge">{% if active_data_type == 'article' %}Articles{% elif active_data_type == 'person' %}People{% elif active_data_type == 'business' %}Businesses{% elif active_data_type == 'place' %}Places{% elif active_data_type == 'event' %}Events{% else %}{{ active_data_type|title }}{% endif %}<a href="{% url 'searchengine:search' %}?query={{ query|urlencode }}&session_id={{ session_id }}" class="remove-filter">✕</a></span>{% endif %}
+                {% if active_category %}<span class="active-filter-badge">{{ active_category|cut:"_"|title }}<a href="{% url 'searchengine:search' %}?query={{ query|urlencode }}{% if active_data_type %}&data_type={{ active_data_type }}{% endif %}&session_id={{ session_id }}" class="remove-filter">✕</a></span>{% endif %}
+                {% if active_schema %}<span class="active-filter-badge schema-badge">{{ active_schema }}<a href="{% url 'searchengine:search' %}?query={{ query|urlencode }}{% if active_data_type %}&data_type={{ active_data_type }}{% endif %}&session_id={{ session_id }}" class="remove-filter">✕</a></span>{% endif %}
             </div>
             {% if was_corrected %}<div class="spelling-correction"><div class="including-results"><span class="label">Showing results for </span><a href="{% url 'searchengine:search' %}?query={{ corrected_query|urlencode }}&session_id={{ session_id }}" class="corrected-link">{{ corrected_query }}</a></div><div class="search-instead">Search instead for <a href="{% url 'searchengine:search' %}?query={{ query|urlencode }}&session_id={{ session_id }}&no_correct=1">{{ query }}</a></div></div>{% endif %}
 
@@ -407,14 +378,10 @@
             {% if results.0.humanized_summary and map_location_count < 2 and not show_images and not active_data_type and not active_category and not active_schema %}
             <div class="featured-snippet" style="background: var(--warm-white); border: 1px solid var(--gray-200); border-radius: 12px; padding: var(--space-lg); margin-bottom: var(--space-lg); box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
                 <div style="display: flex; align-items: center; gap: var(--space-sm); margin-bottom: var(--space-md);">
-                    <div style="width: 24px; height: 24px; background: var(--green); border-radius: 6px; display: flex; align-items: center; justify-content: center;">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="white"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>
-                    </div>
                     <span style="font-family: var(--font-display); font-size: 15px; font-weight: 600; color: var(--black);">AfroTodo AI Overview</span>
                 </div>
                 <p style="font-size: 15px; line-height: 1.8; color: var(--gray-700); margin-bottom: var(--space-md);">{{ results.0.humanized_summary }}</p>
                 <div style="display: flex; align-items: center; gap: var(--space-sm); padding-top: var(--space-sm); border-top: 1px solid var(--gray-200);">
-                    <div style="width: 20px; height: 20px; border-radius: 4px; background: var(--gray-100); display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 600; color: var(--gray-600);">{{ results.0.site_name|default:results.0.source|slice:":1"|upper }}</div>
                     <a href="{{ results.0.url }}" target="_blank" style="font-size: 13px; color: var(--green); font-weight: 500; text-decoration: none;">{{ results.0.site_name|default:results.0.source }}</a>
                     <span style="font-size: 12px; color: var(--gray-400);">·</span>
                     <a href="{{ results.0.url }}" target="_blank" style="font-size: 12px; color: var(--gray-400); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 300px;">{{ results.0.url|truncatechars:50 }}</a>
@@ -429,12 +396,10 @@
             <div class="multi-map-section" id="multi-map-section">
                 <div class="multi-map-header">
                     <div class="multi-map-header-left">
-                        <div class="multi-map-header-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="#bc4749"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg></div>
                         <span class="multi-map-title">{{ map_location_count }} locations</span>
                         <span class="multi-map-count">on map</span>
                     </div>
                     <button class="multi-map-toggle" onclick="toggleMultiMap()" id="multi-map-toggle">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 15l-6-6-6 6"/></svg>
                         <span id="multi-map-toggle-text">Hide</span>
                     </button>
                 </div>
@@ -455,16 +420,10 @@
             {# ═══════════ IMAGE VIEW WITH PAGINATION ═══════════ #}
             {% if show_images %}
                 {% if image_results %}
-                    <div class="image-filters">
-                        <button class="image-filter-chip active" data-filter="all">All</button>
-                        <button class="image-filter-chip" data-filter="photo">Photos</button>
-                        <button class="image-filter-chip" data-filter="logo">Logos</button>
-                    </div>
                     <div class="image-grid">
                         {% for img in image_results %}
                         <div class="image-card" data-index="{{ forloop.counter0 }}" data-url="{{ img.url }}" data-title="{{ img.title }}" data-source="{{ img.source_url }}" data-source-name="{{ img.source_name }}" data-type="{{ img.image_type }}" onclick="openLightbox(this)">
                             <img src="{{ img.url }}" alt="{{ img.title }}" loading="lazy" onerror="this.parentElement.style.display='none'">
-                            {% if img.image_type %}<span class="image-card-type">{{ img.image_type }}</span>{% endif %}
                             <div class="image-card-overlay">
                                 <div class="image-card-title">{{ img.title|truncatewords:8 }}</div>
                                 <div class="image-card-source">{{ img.source_name|truncatewords:4 }}</div>
@@ -482,10 +441,10 @@
                         <div class="pagination-controls">
                             {% if image_pagination.has_previous %}
                             <a href="?query={{ query|urlencode }}&view=images&page={{ image_pagination.previous_page }}&session_id={{ session_id }}" class="pagination-btn">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>Prev
+                                ← Prev
                             </a>
                             {% else %}
-                            <span class="pagination-btn disabled"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>Prev</span>
+                            <span class="pagination-btn disabled">← Prev</span>
                             {% endif %}
 
                             <div class="pagination-pages">
@@ -500,10 +459,10 @@
 
                             {% if image_pagination.has_next %}
                             <a href="?query={{ query|urlencode }}&view=images&page={{ image_pagination.next_page }}&session_id={{ session_id }}" class="pagination-btn">
-                                Next<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+                                Next →
                             </a>
                             {% else %}
-                            <span class="pagination-btn disabled">Next<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg></span>
+                            <span class="pagination-btn disabled">Next →</span>
                             {% endif %}
                         </div>
                     </nav>
@@ -523,12 +482,11 @@
                     {# ── INLINE MAP: rendered inside result card when single address_map match and no multi-map ── #}
                     {% if address_map and item.id == address_map.id and map_location_count < 2 %}
                     <div class="result-map-frame" id="address-map">
-                        <a href="{{ address_map.full_map_url }}" class="result-map-expand"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg> Expand</a>
+                        <a href="{{ address_map.full_map_url }}" class="result-map-expand">⛶ Expand</a>
                     </div>
                     <div class="result-map-details">
                         <div class="result-map-details-row">
                             <div class="result-map-info">
-                                <div class="result-map-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="#bc4749"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg></div>
                                 <div class="result-map-text">
                                     <div class="result-map-address">{{ address_map.location_line }}</div>
                                     {% if address_map.phone %}<div class="result-map-phone"><a href="tel:{{ address_map.phone }}">{{ address_map.phone }}</a></div>{% endif %}
@@ -536,9 +494,9 @@
                                 </div>
                             </div>
                             <div class="result-map-actions">
-                                <a href="{{ address_map.directions_url }}" target="_blank" class="result-map-btn result-map-btn-directions"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg> Directions</a>
-                                <a href="{{ address_map.share_url }}" target="_blank" class="result-map-btn result-map-btn-secondary"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg> Share</a>
-                                <a href="{{ address_map.streetview_url }}" target="_blank" class="result-map-btn result-map-btn-secondary"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="3"/><path d="M12 11v5"/><path d="M9 22l3-6 3 6"/></svg> Street View</a>
+                                <a href="{{ address_map.directions_url }}" target="_blank" class="result-map-btn result-map-btn-directions">Directions</a>
+                                <a href="{{ address_map.share_url }}" target="_blank" class="result-map-btn result-map-btn-secondary">Share</a>
+                                <a href="{{ address_map.streetview_url }}" target="_blank" class="result-map-btn result-map-btn-secondary">Street View</a>
                             </div>
                         </div>
                     </div>
@@ -548,7 +506,6 @@
                     <div class="{% if address_map and item.id == address_map.id and map_location_count < 2 %}result-item-content{% endif %}">
                         <div class="result-header">
                             <div class="result-map-number" data-map-badge-for="{{ item.id }}" style="display:none;"></div>
-                            <div class="result-favicon">{% if item.favicon %}<img src="{{ item.favicon }}" alt="">{% else %}{{ item.site_name|default:item.source|default:"W"|slice:":1"|upper }}{% endif %}</div>
                             <div class="result-site-info"><span class="result-site-name">{{ item.site_name|default:item.source|default:"Website" }}</span><div class="result-url">{% if item.url_parts %}{% for part in item.url_parts %}<span class="result-url-part">{{ part }}</span>{% endfor %}{% else %}<span class="result-url-part">{{ item.url|default:"#"|truncatechars:60 }}</span>{% endif %}</div></div>
                             {% if item.data_type %}<a href="{% url 'searchengine:search' %}?query={{ query|urlencode }}&data_type={{ item.data_type|urlencode }}&session_id={{ session_id }}" class="result-type-badge {{ item.data_type|lower }}">{{ item.data_type|title }}</a>{% endif %}
                         </div>
@@ -556,22 +513,22 @@
                         <p class="result-snippet">{% if item.date %}<span class="result-date">{{ item.date }} — </span>{% endif %}{{ item.summary_highlighted|default:item.summary|default:"No description available."|safe|truncatewords:40 }}</p>
                         <div class="result-meta">
                             {% if item.category %}<a href="{% url 'searchengine:search' %}?query={{ query|urlencode }}&category={{ item.category|urlencode }}&session_id={{ session_id }}" class="result-tag clickable">{{ item.category|cut:"_"|title }}</a>{% endif %}
-                            {% if item.location.city or item.location.state %}<span class="result-tag">📍 {{ item.location.city }}{% if item.location.city and item.location.state %}, {% endif %}{{ item.location.state }}</span>{% endif %}
-                            {% if item.has_map and not address_map or item.id != address_map.id %}<a href="{{ item.map_url }}" class="result-map-link"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg> Map</a>{% endif %}
+                            {% if item.location.city or item.location.state %}<span class="result-tag">{{ item.location.city }}{% if item.location.city and item.location.state %}, {% endif %}{{ item.location.state }}</span>{% endif %}
+                            {% if item.has_map and not address_map or item.id != address_map.id %}<a href="{{ item.map_url }}" class="result-map-link">Map</a>{% endif %}
                         </div>
                     </div>
                 </article>
                 {% endfor %}
-                {% if related_searches %}<div class="related-searches-inline"><h3 class="related-searches-inline-title"><svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0A4.5 4.5 0 1 1 14 9.5 4.5 4.5 0 0 1 9.5 14z"/></svg> Related Searches</h3><div class="related-searches-inline-list">{% for s in related_searches|slice:":5" %}<a href="{% url 'searchengine:search' %}?query={{ s.query|urlencode }}&session_id={{ session_id }}&alt_mode=y" class="related-searches-inline-item">{{ s.query }}</a>{% endfor %}</div></div>{% endif %}
-                {% if pagination.total_pages > 1 %}<nav class="pagination"><div class="pagination-info">Showing {{ pagination.start_result }}-{{ pagination.end_result }} of {{ total_results|default:pagination.total_results }}</div><div class="pagination-controls">{% if pagination.has_previous %}<a href="?query={{ query|urlencode }}&page={{ pagination.previous_page }}&per_page={{ per_page }}{% if active_data_type %}&data_type={{ active_data_type }}{% endif %}&session_id={{ session_id }}" class="pagination-btn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>Prev</a>{% else %}<span class="pagination-btn disabled"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>Prev</span>{% endif %}<div class="pagination-pages">{% for p in pagination.page_range %}{% if p == pagination.current_page %}<span class="pagination-page active">{{ p }}</span>{% else %}<a href="?query={{ query|urlencode }}&page={{ p }}&per_page={{ per_page }}{% if active_data_type %}&data_type={{ active_data_type }}{% endif %}&session_id={{ session_id }}" class="pagination-page">{{ p }}</a>{% endif %}{% endfor %}</div>{% if pagination.has_next %}<a href="?query={{ query|urlencode }}&page={{ pagination.next_page }}&per_page={{ per_page }}{% if active_data_type %}&data_type={{ active_data_type }}{% endif %}&session_id={{ session_id }}" class="pagination-btn">Next<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg></a>{% else %}<span class="pagination-btn disabled">Next<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg></span>{% endif %}</div></nav>{% endif %}
+                {% if related_searches %}<div class="related-searches-inline"><h3 class="related-searches-inline-title">Related Searches</h3><div class="related-searches-inline-list">{% for s in related_searches|slice:":5" %}<a href="{% url 'searchengine:search' %}?query={{ s.query|urlencode }}&session_id={{ session_id }}&alt_mode=y" class="related-searches-inline-item">{{ s.query }}</a>{% endfor %}</div></div>{% endif %}
+                {% if pagination.total_pages > 1 %}<nav class="pagination"><div class="pagination-info">Showing {{ pagination.start_result }}-{{ pagination.end_result }} of {{ total_results|default:pagination.total_results }}</div><div class="pagination-controls">{% if pagination.has_previous %}<a href="?query={{ query|urlencode }}&page={{ pagination.previous_page }}&per_page={{ per_page }}{% if active_data_type %}&data_type={{ active_data_type }}{% endif %}&session_id={{ session_id }}" class="pagination-btn">← Prev</a>{% else %}<span class="pagination-btn disabled">← Prev</span>{% endif %}<div class="pagination-pages">{% for p in pagination.page_range %}{% if p == pagination.current_page %}<span class="pagination-page active">{{ p }}</span>{% else %}<a href="?query={{ query|urlencode }}&page={{ p }}&per_page={{ per_page }}{% if active_data_type %}&data_type={{ active_data_type }}{% endif %}&session_id={{ session_id }}" class="pagination-page">{{ p }}</a>{% endif %}{% endfor %}</div>{% if pagination.has_next %}<a href="?query={{ query|urlencode }}&page={{ pagination.next_page }}&per_page={{ per_page }}{% if active_data_type %}&data_type={{ active_data_type }}{% endif %}&session_id={{ session_id }}" class="pagination-btn">Next →</a>{% else %}<span class="pagination-btn disabled">Next →</span>{% endif %}</div></nav>{% endif %}
             {% else %}
-                <div class="no-results"><div class="no-results-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg></div><h2>No results found for <b>{{ query }}</b></h2><p>Try adjusting your search.</p><div class="no-results-suggestions"><h3>Suggestions</h3><ul><li>Check your spelling</li><li>Try more general keywords</li><li>Try different keywords</li></ul></div></div>
-                {% if related_searches %}<div class="related-searches-inline"><h3 class="related-searches-inline-title"><svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0A4.5 4.5 0 1 1 14 9.5 4.5 4.5 0 0 1 9.5 14z"/></svg> Related Searches</h3><div class="related-searches-inline-list">{% for s in related_searches|slice:":5" %}<a href="{% url 'searchengine:search' %}?query={{ s.query|urlencode }}&session_id={{ session_id }}&alt_mode=y" class="related-searches-inline-item">{{ s.query }}</a>{% endfor %}</div></div>{% endif %}
+                <div class="no-results"><h2>No results found for <b>{{ query }}</b></h2><p>Try adjusting your search.</p><div class="no-results-suggestions"><h3>Suggestions</h3><ul><li>Check your spelling</li><li>Try more general keywords</li><li>Try different keywords</li></ul></div></div>
+                {% if related_searches %}<div class="related-searches-inline"><h3 class="related-searches-inline-title">Related Searches</h3><div class="related-searches-inline-list">{% for s in related_searches|slice:":5" %}<a href="{% url 'searchengine:search' %}?query={{ s.query|urlencode }}&session_id={{ session_id }}&alt_mode=y" class="related-searches-inline-item">{{ s.query }}</a>{% endfor %}</div></div>{% endif %}
             {% endif %}
         </div>
         <aside class="sidebar">
-            {% if data_type_facets %}<div class="sidebar-section"><h3 class="sidebar-title"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 18h4v-2h-4v2zM3 6v2h18V6H3zm3 7h12v-2H6v2z"/></svg>Filter by Type</h3><div class="filter-options"><a href="{% url 'searchengine:search' %}?query={{ query|urlencode }}&session_id={{ session_id }}" class="filter-option {% if not active_data_type and not show_images %}active{% endif %}">All Results<span class="count">{{ facet_total|default:total_results }}</span></a>{% for facet in data_type_facets %}<a href="{% url 'searchengine:search' %}?query={{ query|urlencode }}&data_type={{ facet.value|urlencode }}&session_id={{ session_id }}" class="filter-option {% if active_data_type == facet.value %}active{% endif %}">{{ facet.label }}<span class="count">{{ facet.count }}</span></a>{% endfor %}</div></div>{% endif %}
-            {% if related_searches %}<div class="sidebar-section"><h3 class="sidebar-title"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0A4.5 4.5 0 1 1 14 9.5 4.5 4.5 0 0 1 9.5 14z"/></svg>Related Searches</h3><div class="related-searches">{% for s in related_searches|slice:":5" %}<a href="{% url 'searchengine:search' %}?query={{ s.query|urlencode }}&session_id={{ session_id }}&alt_mode=y" class="related-search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>{{ s.query }}</a>{% endfor %}</div></div>{% endif %}
+            {% if data_type_facets %}<div class="sidebar-section"><h3 class="sidebar-title">Filter by Type</h3><div class="filter-options"><a href="{% url 'searchengine:search' %}?query={{ query|urlencode }}&session_id={{ session_id }}" class="filter-option {% if not active_data_type and not show_images %}active{% endif %}">All Results<span class="count">{{ facet_total|default:total_results }}</span></a>{% for facet in data_type_facets %}<a href="{% url 'searchengine:search' %}?query={{ query|urlencode }}&data_type={{ facet.value|urlencode }}&session_id={{ session_id }}" class="filter-option {% if active_data_type == facet.value %}active{% endif %}">{{ facet.label }}<span class="count">{{ facet.count }}</span></a>{% endfor %}</div></div>{% endif %}
+            {% if related_searches %}<div class="sidebar-section"><h3 class="sidebar-title">Related Searches</h3><div class="related-searches">{% for s in related_searches|slice:":5" %}<a href="{% url 'searchengine:search' %}?query={{ s.query|urlencode }}&session_id={{ session_id }}&alt_mode=y" class="related-search">{{ s.query }}</a>{% endfor %}</div></div>{% endif %}
         </aside>
     </div>
     {% endif %}
@@ -594,9 +551,8 @@
         function updLB(){var c=iCards[cIdx];if(c){document.getElementById('lightbox-image').src=c.dataset.url;document.getElementById('lightbox-title').textContent=c.dataset.title;var s=document.getElementById('lightbox-source');s.href=c.dataset.source;s.textContent=c.dataset.sourceName;}}
         document.addEventListener('keydown',e=>{if(!document.getElementById('lightbox').classList.contains('active'))return;if(e.key==='Escape')closeLightbox();if(e.key==='ArrowLeft')navigateLightbox(-1);if(e.key==='ArrowRight')navigateLightbox(1);});
         document.getElementById('lightbox').addEventListener('click',e=>{if(e.target===document.getElementById('lightbox'))closeLightbox();});
-        document.querySelectorAll('.image-filter-chip').forEach(c=>{c.addEventListener('click',function(){document.querySelectorAll('.image-filter-chip').forEach(x=>x.classList.remove('active'));this.classList.add('active');var f=this.dataset.filter;document.querySelectorAll('.image-card').forEach(card=>{card.style.display=(f==='all'||card.dataset.type===f)?'':'none';});});});
         /* Multi-map toggle */
-        function toggleMultiMap(){var b=document.getElementById('multi-map-body'),t=document.getElementById('multi-map-toggle-text'),s=document.getElementById('multi-map-toggle').querySelector('svg');if(b.style.display==='none'){b.style.display='';t.textContent='Hide';s.innerHTML='<path d="M18 15l-6-6-6 6"/>';if(window._multiMap)window._multiMap.invalidateSize();}else{b.style.display='none';t.textContent='Show';s.innerHTML='<path d="M6 9l6 6 6-6"/>';}}
+        function toggleMultiMap(){var b=document.getElementById('multi-map-body'),t=document.getElementById('multi-map-toggle-text');if(b.style.display==='none'){b.style.display='';t.textContent='Hide';if(window._multiMap)window._multiMap.invalidateSize();}else{b.style.display='none';t.textContent='Show';}}
     </script>
 
     {# ═══════════ MULTI-PIN MAP SCRIPT ═══════════ #}
@@ -604,7 +560,6 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
     (function(){
-        /* ── 10 distinct pin colors ── */
         var COLORS=['#bc4749','#2d6a4f','#d4a03a','#6366f1','#ec4899','#0891b2','#ea580c','#7c3aed','#059669','#dc2626'];
 
         var locations = [
@@ -614,7 +569,6 @@
         ];
         if(!locations.length||!document.getElementById('multi-map'))return;
 
-        /* ── Build numbered SVG marker for each pin ── */
         function makeIcon(num,color){
             var svg='<svg width="30" height="40" viewBox="0 0 30 40" xmlns="http://www.w3.org/2000/svg">'
                 +'<path d="M15 0C6.72 0 0 6.72 0 15c0 11.25 15 25 15 25s15-13.75 15-25C30 6.72 23.28 0 15 0z" fill="'+color+'"/>'
@@ -648,11 +602,9 @@
             markers.push(mk);
             bounds.extend([loc.lat,loc.lng]);
 
-            /* ── Color the chip number badges ── */
             var chipNum=document.querySelector('.multi-map-chip-num[data-pin-idx="'+i+'"]');
             if(chipNum) chipNum.style.background=color;
 
-            /* ── Color and show the result card badges ── */
             var badges=document.querySelectorAll('[data-map-badge-for="'+loc.id+'"]');
             badges.forEach(function(badge){
                 badge.style.display='flex';
@@ -669,7 +621,6 @@
         m.fitBounds(bounds,{padding:[40,40],maxZoom:15});
         setTimeout(function(){m.invalidateSize();},300);
 
-        /* ── Focus pin from chip click ── */
         window.focusPin=function(idx){
             if(markers[idx]){
                 m.setView(markers[idx].getLatLng(),16,{animate:true});
@@ -677,7 +628,6 @@
                 document.querySelectorAll('.multi-map-chip').forEach(function(c){c.classList.remove('active');});
                 var chip=document.querySelector('.multi-map-chip[data-idx="'+idx+'"]');
                 if(chip) chip.classList.add('active');
-                /* Highlight matching result card */
                 document.querySelectorAll('.result-item.map-highlighted').forEach(function(el){el.classList.remove('map-highlighted');});
                 var card=document.querySelector('.result-item[data-map-idx="'+idx+'"]');
                 if(card){
@@ -687,10 +637,9 @@
             }
         };
 
-        /* ── Click result card → focus its pin ── */
         document.querySelectorAll('.result-item.map-linked').forEach(function(card){
             card.addEventListener('click',function(e){
-                if(e.target.closest('a'))return;/* Don't hijack link clicks */
+                if(e.target.closest('a'))return;
                 var idx=+this.dataset.mapIdx;
                 if(!isNaN(idx)){
                     focusPin(idx);
@@ -699,7 +648,6 @@
             });
         });
 
-        /* ── Hover result card → highlight chip ── */
         document.querySelectorAll('.result-item.map-linked').forEach(function(card){
             card.addEventListener('mouseenter',function(){
                 var idx=this.dataset.mapIdx;
@@ -716,7 +664,6 @@
     </script>
 
     {% elif address_map and not show_map_view and map_location_count < 2 %}
-    {# Single-pin fallback when only 1 location has geopoint #}
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
     (function(){
