@@ -403,8 +403,8 @@
             </div>
             {% if was_corrected %}<div class="spelling-correction"><div class="including-results"><span class="label">Showing results for </span><a href="{% url 'searchengine:search' %}?query={{ corrected_query|urlencode }}&session_id={{ session_id }}" class="corrected-link">{{ corrected_query }}</a></div><div class="search-instead">Search instead for <a href="{% url 'searchengine:search' %}?query={{ query|urlencode }}&session_id={{ session_id }}&no_correct=1">{{ query }}</a></div></div>{% endif %}
 
-            
-            {% if results.0.humanized_summary and map_location_count < 2 %}
+
+            {% if results.0.humanized_summary and map_location_count < 2 and not show_images and not active_data_type and not active_category and not active_schema %}
             <div class="featured-snippet" style="background: var(--warm-white); border: 1px solid var(--gray-200); border-radius: 12px; padding: var(--space-lg); margin-bottom: var(--space-lg); box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
                 <div style="display: flex; align-items: center; gap: var(--space-sm); margin-bottom: var(--space-md);">
                     <div style="width: 24px; height: 24px; background: var(--green); border-radius: 6px; display: flex; align-items: center; justify-content: center;">
