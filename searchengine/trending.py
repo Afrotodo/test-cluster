@@ -45,19 +45,24 @@ def _query_hash(query: str) -> str:
 
 def _extract_result_data(document: dict) -> dict:
     """
-    Extract the fields we need from a Typesense document.
-    Returns a clean dict ready for caching.
+    Extract the fields we need from a formatted search result.
+    
+    Handles both formats:
+    - Raw Typesense documents (document_title, document_url, etc.)
+    - Formatted results from format_result() (title, url, source, image, etc.)
     """
-    # Get the first usable image
-    image_url = ""
-    if document.get("image_url"):
+    # Get image — format_result() provides 'image' as first image already extracted
+    image_url = document.get("image", "")
+
+    # Fallback: try image_url array
+    if not image_url and document.get("image_url"):
         images = document["image_url"]
         if isinstance(images, list) and len(images) > 0:
             image_url = images[0]
         elif isinstance(images, str):
             image_url = images
 
-    # Fallback to logo_url if no image
+    # Fallback: try logo_url array
     if not image_url and document.get("logo_url"):
         logos = document["logo_url"]
         if isinstance(logos, list) and len(logos) > 0:
@@ -66,14 +71,14 @@ def _extract_result_data(document: dict) -> dict:
             image_url = logos
 
     return {
-        "title": document.get("document_title", ""),
-        "summary": document.get("document_summary", document.get("_description", "")),
-        "url": document.get("document_url", ""),
-        "image_url": image_url,
-        "brand": document.get("document_brand", ""),
-        "category": document.get("document_category", ""),
-        "schema": document.get("document_schema", ""),
-        "document_uuid": document.get("document_uuid", ""),
+        "title": document.get("title", document.get("document_title", "")),
+        "summary": document.get("summary", document.get("document_summary", "")),
+        "url": document.get("url", document.get("document_url", "")),
+        "image_url": image_url or "",
+        "brand": document.get("source", document.get("document_brand", "")),
+        "category": document.get("category", document.get("document_category", "")),
+        "schema": document.get("schema", document.get("document_schema", "")),
+        "document_uuid": document.get("id", document.get("document_uuid", "")),
     }
 
 
