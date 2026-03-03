@@ -1086,28 +1086,35 @@ def build_filter_string_without_data_type(profile: Dict, signals: Dict = None) -
 # STAGE 1: GRAPH FILTER - Candidate Generation
 # ============================================================================
 
-def fetch_candidate_ids(
+
+
+# ============================================================================
+# STAGE 1 (SEMANTIC): Fetch ONLY document_uuids
+# ============================================================================
+
+def fetch_candidate_uuids(
     search_query: str,
     profile: Dict,
     signals: Dict = None,
     max_results: int = MAX_CACHED_RESULTS
-) -> List[Dict]:
+) -> List[str]:
     """
-    Stage 1: Graph Filter - Candidate Generation
+    Stage 1 (Semantic path): Keyword search using intent-based fields.
+    Returns ONLY a list of document_uuid strings — no metadata.
+    Metadata is fetched later in Stage 4 for survivors only.
     """
     signals = signals or {}
     params = build_typesense_params(profile, signals=signals)
-    
     filter_str = build_filter_string_without_data_type(profile, signals=signals)
-    
+
     PAGE_SIZE = 250
-    all_results = []
+    all_uuids = []
     current_page = 1
     max_pages = (max_results // PAGE_SIZE) + 1
-    
+
     query_mode = signals.get('query_mode', 'explore')
-    
-    print(f"🔍 Stage 1 Query: '{params.get('q', search_query)}'")
+
+    print(f"🔍 Stage 1 (uuids only): '{params.get('q', search_query)}'")
     print(f"   Mode: {query_mode}")
     print(f"   Fields: {params.get('query_by', '')}")
     print(f"   Weights: {params.get('query_by_weights', '')}")
@@ -1115,7 +1122,83 @@ def fetch_candidate_ids(
     print(f"   sort_by: {params.get('sort_by', 'default')}")
     if filter_str:
         print(f"   Filters: {filter_str}")
-    
+
+    while len(all_uuids) < max_results and current_page <= max_pages:
+        search_params = {
+            'q': params.get('q', search_query),
+            'query_by': params.get('query_by', 'document_title,primary_keywords,entity_names,key_facts,semantic_keywords'),
+            'query_by_weights': params.get('query_by_weights', '10,8,6,4,3'),
+            'per_page': PAGE_SIZE,
+            'page': current_page,
+            'include_fields': 'document_uuid',
+            'num_typos': params.get('num_typos', 0),
+            'prefix': params.get('prefix', 'no'),
+            'drop_tokens_threshold': params.get('drop_tokens_threshold', 0),
+            'sort_by': params.get('sort_by', '_text_match:desc,authority_score:desc'),
+        }
+
+        if filter_str:
+            search_params['filter_by'] = filter_str
+
+        try:
+            response = client.collections[COLLECTION_NAME].documents.search(search_params)
+            hits = response.get('hits', [])
+            found = response.get('found', 0)
+
+            if not hits:
+                break
+
+            for hit in hits:
+                doc = hit.get('document', {})
+                uuid = doc.get('document_uuid')
+                if uuid:
+                    all_uuids.append(uuid)
+
+            if len(all_uuids) >= found or len(hits) < PAGE_SIZE:
+                break
+
+            current_page += 1
+
+        except Exception as e:
+            print(f"❌ Stage 1 error (page {current_page}): {e}")
+            break
+
+    print(f"📊 Stage 1: Retrieved {len(all_uuids)} candidate UUIDs")
+    return all_uuids[:max_results]
+
+
+# ============================================================================
+# STAGE 1 (KEYWORD): Fetch uuids + metadata in one call (no pruning)
+# ============================================================================
+
+def fetch_candidates_with_metadata(
+    search_query: str,
+    profile: Dict,
+    signals: Dict = None,
+    max_results: int = MAX_CACHED_RESULTS
+) -> List[Dict]:
+    """
+    Stage 1 (Keyword path): Fetch uuids AND lightweight metadata together.
+    Since keyword path has no vector pruning, all candidates survive,
+    so a separate metadata fetch would be a wasted round-trip.
+    """
+    signals = signals or {}
+    params = build_typesense_params(profile, signals=signals)
+    filter_str = build_filter_string_without_data_type(profile, signals=signals)
+
+    PAGE_SIZE = 250
+    all_results = []
+    current_page = 1
+    max_pages = (max_results // PAGE_SIZE) + 1
+
+    query_mode = signals.get('query_mode', 'explore')
+
+    print(f"🔍 Stage 1 (keyword, with metadata): '{params.get('q', search_query)}'")
+    print(f"   Mode: {query_mode}")
+    print(f"   Fields: {params.get('query_by', '')}")
+    if filter_str:
+        print(f"   Filters: {filter_str}")
+
     while len(all_results) < max_results and current_page <= max_pages:
         search_params = {
             'q': params.get('q', search_query),
@@ -1129,18 +1212,18 @@ def fetch_candidate_ids(
             'drop_tokens_threshold': params.get('drop_tokens_threshold', 0),
             'sort_by': params.get('sort_by', '_text_match:desc,authority_score:desc'),
         }
-        
+
         if filter_str:
             search_params['filter_by'] = filter_str
-        
+
         try:
             response = client.collections[COLLECTION_NAME].documents.search(search_params)
             hits = response.get('hits', [])
             found = response.get('found', 0)
-            
+
             if not hits:
                 break
-            
+
             for hit in hits:
                 doc = hit.get('document', {})
                 all_results.append({
@@ -1149,29 +1232,22 @@ def fetch_candidate_ids(
                     'category': doc.get('document_category', ''),
                     'schema': doc.get('document_schema', ''),
                     'authority_score': doc.get('authority_score', 0),
-                    'service_phone': doc.get('service_phone'),
                     'text_match': hit.get('text_match', 0),
                     'image_url': doc.get('image_url', []),
                     'logo_url': doc.get('logo_url', []),
                 })
-            
+
             if len(all_results) >= found or len(hits) < PAGE_SIZE:
                 break
-            
+
             current_page += 1
-            
+
         except Exception as e:
             print(f"❌ Stage 1 error (page {current_page}): {e}")
             break
-    
-    print(f"📊 Stage 1: Retrieved {len(all_results)} candidates")
+
+    print(f"📊 Stage 1 (keyword): Retrieved {len(all_results)} candidates with metadata")
     return all_results[:max_results]
-
-
-# ============================================================================
-# STAGE 2: SEMANTIC RERANK - Vector-Based Ranking (Blueprint Step 5)
-# ============================================================================
-
 def semantic_rerank_candidates(
     candidate_ids: List[str],
     query_embedding: List[float],
@@ -1627,6 +1703,75 @@ def _generate_stable_cache_key(session_id: str, query: str) -> str:
 # IMAGE COUNTING HELPERS (FIXED — counts documents, not URLs)
 # ============================================================================
 
+
+
+# ============================================================================
+# STAGE 4: Fetch lightweight metadata for SURVIVORS ONLY
+# ============================================================================
+
+def fetch_candidate_metadata(survivor_ids: List[str]) -> List[Dict]:
+    """
+    Stage 4 (Semantic path only): Fetch lightweight metadata for documents
+    that survived vector pruning. Documents below the cutoff are never fetched.
+    
+    Returns list of dicts with: id, data_type, category, schema,
+    authority_score, image_url, logo_url — in the same order as input
+    (preserving semantic rank order).
+    """
+    if not survivor_ids:
+        return []
+
+    BATCH_SIZE = 250
+    doc_map = {}
+
+    for i in range(0, len(survivor_ids), BATCH_SIZE):
+        batch_ids = survivor_ids[i:i + BATCH_SIZE]
+        id_filter = ','.join([f'`{doc_id}`' for doc_id in batch_ids])
+
+        params = {
+            'q': '*',
+            'filter_by': f'document_uuid:[{id_filter}]',
+            'per_page': len(batch_ids),
+            'include_fields': 'document_uuid,document_data_type,document_category,document_schema,authority_score,image_url,logo_url',
+        }
+
+        try:
+            search_requests = {'searches': [{'collection': COLLECTION_NAME, **params}]}
+            response = client.multi_search.perform(search_requests, {})
+            result = response['results'][0]
+            hits = result.get('hits', [])
+
+            for hit in hits:
+                doc = hit.get('document', {})
+                uuid = doc.get('document_uuid')
+                if uuid:
+                    doc_map[uuid] = {
+                        'id': uuid,
+                        'data_type': doc.get('document_data_type', ''),
+                        'category': doc.get('document_category', ''),
+                        'schema': doc.get('document_schema', ''),
+                        'authority_score': doc.get('authority_score', 0),
+                        'image_url': doc.get('image_url', []),
+                        'logo_url': doc.get('logo_url', []),
+                    }
+
+        except Exception as e:
+            print(f"❌ Stage 4 metadata fetch error (batch {i}): {e}")
+
+    # Return in original order, preserving semantic rank
+    results = []
+    for uuid in survivor_ids:
+        if uuid in doc_map:
+            results.append(doc_map[uuid])
+
+    print(f"📊 Stage 4: Fetched metadata for {len(results)}/{len(survivor_ids)} survivors")
+    return results
+
+
+# ============================================================================
+# IMAGE COUNTING HELPERS
+# ============================================================================
+
 def _has_real_images(item):
     """Check if a candidate has at least one non-empty image or logo URL.
     
@@ -1649,19 +1794,39 @@ def _has_real_images(item):
 
 
 def _count_images_from_candidates(all_results):
-    """Count DOCUMENTS that have at least one real image or logo URL.
-    
-    Previously this summed total URLs across all docs (a doc with 3 images
-    counted as 3). Now it counts documents (a doc with 3 images counts as 1).
-    
-    This makes the Images tab count match what image pagination delivers,
-    since pagination iterates over documents-with-images, not individual URLs.
-    """
+    """Count DOCUMENTS that have at least one real image or logo URL."""
     return sum(1 for item in all_results if _has_real_images(item))
 
 
 # ============================================================================
-# MAIN ENTRY POINT (restructured — cache-last)
+# STAGE 5: ONE count pass — single source of truth
+# ============================================================================
+
+def count_all(candidates: List[Dict]) -> Dict:
+    """
+    Stage 5: Single counting pass. Runs ONCE, after all pruning is done.
+    Returns facets, image count, and total.
+    This is the ONLY place counting happens — single source of truth.
+    """
+    facets = count_facets_from_cache(candidates)
+    image_count = _count_images_from_candidates(candidates)
+    total = len(candidates)
+
+    print(f"📊 Stage 5 (final counts): total={total}, images={image_count}, "
+          f"facets={[(f['value'], f['count']) for f in facets.get('data_type', [])]}")
+
+    return {
+        'facets': facets,
+        'facet_total': total,
+        'total_image_count': image_count,
+    }
+# ============================================================================
+# MAIN ENTRY POINT — Clean 7-Stage Pipeline
+# ============================================================================
+#
+# SEMANTIC:  1(uuids) → 2(rerank) → 3(prune) → 4(metadata survivors) → 5(count) → 6(cache) → 7(paginate)
+# KEYWORD:   1(uuids+metadata) → 5(count) → 6(cache) → 7(paginate)
+#
 # ============================================================================
 
 def execute_full_search(
@@ -1680,40 +1845,35 @@ def execute_full_search(
     """
     Main entry point for search.
     
-    RESTRUCTURED: Cache-Last Strategy
-    ==================================
-    Flow: search → rerank → prune → AI overview → cache final package → done
+    Clean 7-Stage Pipeline:
+        SEMANTIC:  1 → 2 → 3 → 4 → 5 → 6 → 7
+        KEYWORD:   1 → 5 → 6 → 7
     
-    Two paths:
-      FAST PATH  — finished cache exists → filter → paginate → return
-      FULL PATH  — no cache → run full pipeline → cache at end → return
-    
-    alt_mode:
-        'n' = KEYWORD PATH - no semantic reranking
-        'y' = SEMANTIC PATH - full staged retrieval with signal-driven behavior
+    Counting happens ONCE in Stage 5, after all pruning is done.
+    Single source of truth for facets, image counts, and totals.
     """
     times = {}
     t0 = time.time()
-    
+
     # Extract active filters
     active_data_type = filters.get('data_type') if filters else None
     active_category = filters.get('category') if filters else None
     active_schema = filters.get('schema') if filters else None
-    
+
     if filters:
         active_filters = {k: v for k, v in filters.items() if v}
         if active_filters:
             print(f"🎛️ Active UI filters: {active_filters}")
-    
+
     # =========================================================================
     # ★ FAST PATH: Check for finished cache FIRST
     # =========================================================================
     stable_key = _generate_stable_cache_key(session_id, query)
     finished = _get_cached_results(stable_key)
-    
+
     if finished is not None:
         print(f"⚡ FAST PATH: '{query}' | page={page} | filter={active_data_type}/{active_category}/{active_schema}")
-        
+
         all_results = finished['all_results']
         all_facets = finished['all_facets']
         facet_total = finished['facet_total']
@@ -1721,7 +1881,7 @@ def execute_full_search(
         total_image_count = finished.get('total_image_count', 0)
         metadata = finished['metadata']
         times['cache'] = 'hit (fast path)'
-        
+
         # Filter by UI filters (tab click)
         filtered_results = filter_cached_results(
             all_results,
@@ -1729,30 +1889,28 @@ def execute_full_search(
             category=active_category,
             schema=active_schema
         )
-        
+
         # Paginate
         page_items, total_filtered = paginate_cached_results(filtered_results, page, per_page)
-        
-        # Fetch full documents for this page only
+
+        # Stage 7: Fetch full documents for this page only
         t_fetch = time.time()
         page_ids = [item['id'] for item in page_items]
         results = fetch_full_documents(page_ids, query)
         times['fetch_docs'] = round((time.time() - t_fetch) * 1000, 2)
-        
-        # ★ Reattach AI overview on page 1
+
+        # Reattach AI overview on page 1
         if results and page == 1 and ai_overview:
             results[0]['humanized_summary'] = ai_overview
-        
+
         times['total'] = round((time.time() - t0) * 1000, 2)
-        
+
         print(f"⏱️ FAST PATH TIMING: {times}")
         print(f"🔍 FAST PATH | Total: {facet_total} | Filtered: {total_filtered} | Page: {len(results)} | Images: {total_image_count}")
-        
+
         # Build return dict using cached metadata
         signals = metadata.get('signals', {})
-        city_names = metadata.get('city_names', [])
-        state_names = metadata.get('state_names', [])
-        
+
         return {
             'query': query,
             'corrected_query': metadata.get('corrected_query', query),
@@ -1800,23 +1958,23 @@ def execute_full_search(
             'signals': signals,
             'profile': metadata.get('profile', {}),
         }
-    
+
     # =========================================================================
-    # ★ FULL PATH: No finished cache. Run the entire pipeline.
+    # ★ FULL PATH: No finished cache. Run the pipeline.
     # =========================================================================
     print(f"🔬 FULL PATH: '{query}' (no finished cache for stable_key={stable_key[:12]}...)")
-    
+
     is_keyword_path = (alt_mode == 'n') or search_source in ('dropdown', 'keyword', 'suggestion', 'autocomplete')
-    
+
     # =========================================================================
-    # KEYWORD PATH (full pipeline)
+    # KEYWORD PATH:  Stage 1 → 5 → 6 → 7
     # =========================================================================
-    
+
     if is_keyword_path:
-        print(f"⚡ KEYWORD PIPELINE: '{query}' | page={page} | per_page={per_page} | alt_mode={alt_mode} | search_source={search_source}")
-        
+        print(f"⚡ KEYWORD PIPELINE: '{query}'")
+
         intent = detect_query_intent(query, pos_tags)
-        
+
         profile = {
             'search_terms': query.split(),
             'cities': [],
@@ -1831,26 +1989,21 @@ def execute_full_search(
                 'document_title': 3,
             },
         }
-        
-        # Stage 1: Fetch ALL candidates
+
+        # ── Stage 1: Fetch uuids + metadata in one call (no pruning) ──
         t1 = time.time()
-        all_results = fetch_candidate_ids(query, profile)
+        all_results = fetch_candidates_with_metadata(query, profile)
         times['stage1'] = round((time.time() - t1) * 1000, 2)
-        times['cache'] = 'miss (full path - keyword)'
-        
-        # Facets from ALL results
-        all_facets = count_facets_from_cache(all_results)
-        facet_total = len(all_results)
-        
-        # ★ Count DOCUMENTS with images (not URLs)
-        total_image_count = _count_images_from_candidates(all_results)
-        
-        # ★ CACHE THE FINAL PACKAGE
+
+        # ── Stage 5: ONE count pass ──
+        counts = count_all(all_results)
+
+        # ── Stage 6: Cache the final package ──
         _set_cached_results(stable_key, {
             'all_results': all_results,
-            'all_facets': all_facets,
-            'facet_total': facet_total,
-            'total_image_count': total_image_count,
+            'all_facets': counts['facets'],
+            'facet_total': counts['facet_total'],
+            'total_image_count': counts['total_image_count'],
             'ai_overview': None,
             'metadata': {
                 'corrected_query': query,
@@ -1884,9 +2037,9 @@ def execute_full_search(
                 },
             },
         })
-        print(f"💾 Cached final keyword package: {facet_total} results, {total_image_count} images (stable_key={stable_key[:12]}...)")
-        
-        # Filter → Paginate → Fetch for THIS request
+        print(f"💾 Cached keyword package: {counts['facet_total']} results, {counts['total_image_count']} image docs")
+
+        # ── Stage 7: Filter → Paginate → Fetch full docs ──
         filtered_results = filter_cached_results(
             all_results,
             data_type=active_data_type,
@@ -1894,24 +2047,23 @@ def execute_full_search(
             schema=active_schema
         )
         page_items, total_filtered = paginate_cached_results(filtered_results, page, per_page)
-        
+
         t2 = time.time()
         page_ids = [item['id'] for item in page_items]
         results = fetch_full_documents(page_ids, query)
         times['fetch_docs'] = round((time.time() - t2) * 1000, 2)
         times['total'] = round((time.time() - t0) * 1000, 2)
-        
-        print(f"⏱️ TIMING: {times}")
-        print(f"🔍 KEYWORD PATH | Total: {facet_total} | Filtered: {total_filtered} | Page: {len(results)} | Images: {total_image_count}")
-        
+
+        print(f"⏱️ KEYWORD TIMING: {times}")
+
         return {
             'query': query,
             'corrected_query': query,
             'intent': intent,
             'results': results,
             'total': total_filtered,
-            'facet_total': facet_total,
-            'total_image_count': total_image_count,
+            'facet_total': counts['facet_total'],
+            'total_image_count': counts['total_image_count'],
             'page': page,
             'per_page': per_page,
             'search_time': round(time.time() - t0, 3),
@@ -1923,11 +2075,11 @@ def execute_full_search(
             'search_source': search_source or 'dropdown',
             'valid_terms': query.split(),
             'unknown_terms': [],
-            'data_type_facets': all_facets.get('data_type', []),
-            'category_facets': all_facets.get('category', []),
-            'schema_facets': all_facets.get('schema', []),
+            'data_type_facets': counts['facets'].get('data_type', []),
+            'category_facets': counts['facets'].get('category', []),
+            'schema_facets': counts['facets'].get('schema', []),
             'related_searches': [],
-            'facets': all_facets,
+            'facets': counts['facets'],
             'word_discovery': {
                 'valid_count': len(query.split()),
                 'unknown_count': 0,
@@ -1948,18 +2100,18 @@ def execute_full_search(
                 'local_search_strength': 'none',
             }
         }
-    
+
     # =========================================================================
-    # SEMANTIC PATH (full pipeline)
+    # SEMANTIC PATH:  Stage 1 → 2 → 3 → 4 → 5 → 6 → 7
     # =========================================================================
-    
+
     print(f"🔬 SEMANTIC PIPELINE: '{query}'")
-    
+
     # --- Word discovery + embedding in parallel ---
     t1 = time.time()
     discovery, query_embedding = run_parallel_prep(query, skip_embedding=skip_embedding)
     times['parallel_prep'] = round((time.time() - t1) * 1000, 2)
-    
+
     # --- Intent detection ---
     signals = {}
     if INTENT_DETECT_AVAILABLE:
@@ -1977,16 +2129,16 @@ def execute_full_search(
                   f"domains={signals.get('domains_detected', [])[:3]}")
         except Exception as e:
             print(f"   ⚠️ intent_detect error: {e}")
-    
+
     corrected_query = discovery.get('corrected_query', query)
     semantic_enabled = query_embedding is not None
     query_mode = signals.get('query_mode', 'explore')
-    
+
     # --- Build profile ---
     t2 = time.time()
     profile = build_query_profile(discovery, signals=signals)
     times['build_profile'] = round((time.time() - t2) * 1000, 2)
-    
+
     # --- Apply corrections to search terms ---
     corrections = discovery.get('corrections', [])
     if corrections:
@@ -2002,35 +2154,40 @@ def execute_full_search(
         ]
         if original_terms != profile['search_terms']:
             print(f"   ✅ Applied corrections to search terms: {original_terms} → {profile['search_terms']}")
-    
+
     intent = profile.get('primary_intent', 'general')
     city_names = [c['name'] for c in profile.get('cities', [])]
     state_names = [s['name'] for s in profile.get('states', [])]
-    
+
     print(f"   Intent: {intent} | Mode: {query_mode}")
     print(f"   Cities: {city_names}")
     print(f"   States: {state_names}")
-    print(f"   Search Terms (POS-filtered): {profile.get('search_terms', [])}")
-    print(f"   Location Terms (stripped): {profile.get('location_terms', [])}")
+    print(f"   Search Terms: {profile.get('search_terms', [])}")
     print(f"   Field Boosts: {profile.get('field_boosts', {})}")
-    
-    # --- Stage 1: Fetch ALL candidates ---
+
+    # ── Stage 1: Fetch ONLY document_uuids ──
     t3 = time.time()
-    all_results = fetch_candidate_ids(corrected_query, profile, signals=signals)
-    times['stage1'] = round((time.time() - t3) * 1000, 2)
-    times['cache'] = 'miss (full path - semantic)'
-    
-    print(f"📊 Stage 1: {len(all_results)} candidates")
-    
-    # --- Stage 2: Semantic Rerank + Vector Distance Prune ---
-    if semantic_enabled and all_results:
+    candidate_uuids = fetch_candidate_uuids(corrected_query, profile, signals=signals)
+    times['stage1_uuids'] = round((time.time() - t3) * 1000, 2)
+    print(f"📊 Stage 1: {len(candidate_uuids)} candidate UUIDs")
+
+    # ── Stage 2: Vector rerank (only needs IDs + embedding) ──
+    survivor_uuids = candidate_uuids  # default if no embedding
+    vector_data = {}  # id → {vector_distance, semantic_rank}
+
+    if semantic_enabled and candidate_uuids:
         t4 = time.time()
-        candidate_ids = [item['id'] for item in all_results]
-        reranked = semantic_rerank_candidates(candidate_ids, query_embedding, max_to_rerank=500)
-        all_results = apply_semantic_ranking(all_results, reranked, signals=signals)
-        times['stage2'] = round((time.time() - t4) * 1000, 2)
-        
-        # Vector distance hard filter
+        reranked = semantic_rerank_candidates(candidate_uuids, query_embedding, max_to_rerank=500)
+        times['stage2_rerank'] = round((time.time() - t4) * 1000, 2)
+
+        # Build lookup: id → vector data
+        for item in reranked:
+            vector_data[item['id']] = {
+                'vector_distance': item.get('vector_distance', 1.0),
+                'semantic_rank': item.get('semantic_rank', 999999),
+            }
+
+        # ── Stage 3: Vector prune — remove IDs below cutoff ──
         DISTANCE_THRESHOLDS = {
             'answer':  0.60,
             'explore': 0.70,
@@ -2040,51 +2197,93 @@ def execute_full_search(
             'shop':    0.80,
         }
         threshold = DISTANCE_THRESHOLDS.get(query_mode, 0.75)
-        
-        before_filter = len(all_results)
-        all_results = [
-            r for r in all_results
-            if r.get('vector_distance', 1.0) <= threshold
+
+        before_prune = len(candidate_uuids)
+        survivor_uuids = [
+            uuid for uuid in candidate_uuids
+            if vector_data.get(uuid, {}).get('vector_distance', 1.0) <= threshold
         ]
-        after_filter = len(all_results)
-        
-        if before_filter != after_filter:
-            print(f"   🔪 Vector prune ({query_mode}, threshold={threshold}): {before_filter} → {after_filter} ({before_filter - after_filter} removed)")
+        after_prune = len(survivor_uuids)
+
+        if before_prune != after_prune:
+            print(f"   🔪 Stage 3 prune ({query_mode}, threshold={threshold}): {before_prune} → {after_prune} ({before_prune - after_prune} removed)")
+        times['stage3_prune'] = f"{before_prune} → {after_prune}"
     else:
-        print(f"⚠️ Skipping Stage 2: semantic={semantic_enabled}, candidates={len(all_results)}")
-    
-    # --- Facets from the FINAL pruned set ---
-    all_facets = count_facets_from_cache(all_results)
-    facet_total = len(all_results)
-    print(f"📊 Facets (final): {[(f['value'], f['count']) for f in all_facets.get('data_type', [])]}")
-    
-    # ★ Count DOCUMENTS with images (not URLs)
-    total_image_count = _count_images_from_candidates(all_results)
-    
-    # --- AI Overview (generate from page 1 full docs) ---
+        print(f"⚠️ Skipping Stages 2-3: semantic={semantic_enabled}, candidates={len(candidate_uuids)}")
+
+    # ── Stage 4: Fetch metadata for SURVIVORS ONLY ──
+    t5 = time.time()
+    all_results = fetch_candidate_metadata(survivor_uuids)
+    times['stage4_metadata'] = round((time.time() - t5) * 1000, 2)
+
+    # Attach vector data and compute blended scores
+    if vector_data:
+        total_candidates = len(all_results)
+        max_sem_rank = len(vector_data)
+        blend = BLEND_RATIOS.get(query_mode, BLEND_RATIOS['explore']).copy()
+
+        if query_mode == 'answer' and signals.get('wants_single_result'):
+            blend = {'text_match': 0.70, 'semantic': 0.30, 'authority': 0.00}
+
+        if signals.get('has_unknown_terms', False):
+            shift = min(0.15, blend['text_match'])
+            blend['text_match'] -= shift
+            blend['semantic'] += shift
+
+        if signals.get('has_superlative', False):
+            shift = min(0.10, blend['semantic'])
+            blend['semantic'] -= shift
+            blend['authority'] += shift
+
+        print(f"   📊 Blend ratios ({query_mode}): text={blend['text_match']:.2f} sem={blend['semantic']:.2f} auth={blend['authority']:.2f}")
+
+        for idx, item in enumerate(all_results):
+            item_id = item.get('id')
+            vd = vector_data.get(item_id, {})
+            item['vector_distance'] = vd.get('vector_distance', 1.0)
+            item['semantic_rank'] = vd.get('semantic_rank', 999999)
+
+            authority = item.get('authority_score', 0)
+            text_score = 1.0 - (idx / max(total_candidates, 1))
+            sem_score = 1.0 - (item['semantic_rank'] / max(max_sem_rank, 1)) if item['semantic_rank'] < 999999 else 0.0
+            auth_score = min(authority / 100.0, 1.0)
+
+            item['blended_score'] = (
+                blend['text_match'] * text_score +
+                blend['semantic'] * sem_score +
+                blend['authority'] * auth_score
+            )
+
+        # Sort by blended score
+        all_results.sort(key=lambda x: -x.get('blended_score', 0))
+        for i, item in enumerate(all_results):
+            item['rank'] = i
+
+    # ── Stage 5: ONE count pass ──
+    counts = count_all(all_results)
+
+    # --- AI Overview (from page 1 full docs) ---
     ai_overview = None
     if all_results:
         preview_items, _ = paginate_cached_results(all_results, 1, per_page)
         preview_ids = [item['id'] for item in preview_items]
         preview_docs = fetch_full_documents(preview_ids, query)
-        
+
         if preview_docs and _should_trigger_ai_overview(signals, preview_docs, query):
             ai_overview = _build_ai_overview(signals, preview_docs, query)
             if ai_overview:
                 print(f"   💡 AI Overview: {ai_overview[:80]}...")
-    
+
     # --- Extract terms ---
     valid_terms = profile.get('search_terms', [])
     unknown_terms = [t['word'] for t in discovery.get('terms', []) if t.get('status') == 'unknown']
-    
-    # =========================================================================
-    # ★ CACHE THE FINAL PACKAGE
-    # =========================================================================
+
+    # ── Stage 6: Cache the final package ──
     _set_cached_results(stable_key, {
         'all_results': all_results,
-        'all_facets': all_facets,
-        'facet_total': facet_total,
-        'total_image_count': total_image_count,
+        'all_facets': counts['facets'],
+        'facet_total': counts['facet_total'],
+        'total_image_count': counts['total_image_count'],
         'ai_overview': ai_overview,
         'metadata': {
             'corrected_query': corrected_query,
@@ -2128,41 +2327,41 @@ def execute_full_search(
             },
         },
     })
-    print(f"💾 Cached final semantic package: {facet_total} results, {total_image_count} images (stable_key={stable_key[:12]}...)")
-    
-    # --- Filter → Paginate → Fetch for THIS request ---
+    print(f"💾 Cached semantic package: {counts['facet_total']} results, {counts['total_image_count']} image docs")
+
+    # ── Stage 7: Filter → Paginate → Fetch full docs ──
     filtered_results = filter_cached_results(
         all_results,
         data_type=active_data_type,
         category=active_category,
         schema=active_schema
     )
-    
+
     page_items, total_filtered = paginate_cached_results(filtered_results, page, per_page)
-    
-    t5 = time.time()
+
+    t6 = time.time()
     page_ids = [item['id'] for item in page_items]
     results = fetch_full_documents(page_ids, query)
-    times['fetch_docs'] = round((time.time() - t5) * 1000, 2)
-    
+    times['fetch_docs'] = round((time.time() - t6) * 1000, 2)
+
     # Attach AI overview on page 1
     if results and page == 1 and ai_overview:
         results[0]['humanized_summary'] = ai_overview
-    
-    # Store query embedding for popular queries
+
+    # Store query embedding
     if query_embedding:
         try:
-            store_query_embedding(corrected_query, query_embedding, result_count=facet_total)
+            store_query_embedding(corrected_query, query_embedding, result_count=counts['facet_total'])
         except Exception as e:
             print(f"⚠️ store_query_embedding error: {e}")
-    
+
     times['total'] = round((time.time() - t0) * 1000, 2)
-    
+
     strategy = 'staged_semantic' if semantic_enabled else 'keyword_fallback'
-    
-    print(f"⏱️ TIMING: {times}")
-    print(f"🔍 {strategy.upper()} ({query_mode}) | Total: {facet_total} | Filtered: {total_filtered} | Page: {len(results)} | Images: {total_image_count}")
-    
+
+    print(f"⏱️ SEMANTIC TIMING: {times}")
+    print(f"🔍 {strategy.upper()} ({query_mode}) | Total: {counts['facet_total']} | Filtered: {total_filtered} | Page: {len(results)} | Images: {counts['total_image_count']}")
+
     return {
         'query': query,
         'corrected_query': corrected_query,
@@ -2170,8 +2369,8 @@ def execute_full_search(
         'query_mode': query_mode,
         'results': results,
         'total': total_filtered,
-        'facet_total': facet_total,
-        'total_image_count': total_image_count,
+        'facet_total': counts['facet_total'],
+        'total_image_count': counts['total_image_count'],
         'page': page,
         'per_page': per_page,
         'search_time': round(time.time() - t0, 3),
@@ -2184,10 +2383,10 @@ def execute_full_search(
         'valid_terms': valid_terms,
         'unknown_terms': unknown_terms,
         'related_searches': [],
-        'data_type_facets': all_facets.get('data_type', []),
-        'category_facets': all_facets.get('category', []),
-        'schema_facets': all_facets.get('schema', []),
-        'facets': all_facets,
+        'data_type_facets': counts['facets'].get('data_type', []),
+        'category_facets': counts['facets'].get('category', []),
+        'schema_facets': counts['facets'].get('schema', []),
+        'facets': counts['facets'],
         'word_discovery': {
             'valid_count': discovery.get('stats', {}).get('valid_words', 0),
             'unknown_count': discovery.get('stats', {}).get('unknown_words', 0),
@@ -2220,8 +2419,6 @@ def execute_full_search(
         'signals': signals,
         'profile': profile,
     }
-
-
 # ============================================================================
 # CONVENIENCE FUNCTIONS (for compatibility with views.py imports)
 # ============================================================================
