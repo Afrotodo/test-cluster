@@ -1261,16 +1261,37 @@ from .trending import get_trending_results, cache_trending_result
 def home(request):
     city = get_user_city(request)
     
-    # Get city from IP geolocation for trending (same source as search view)
+    # Get location from IP geolocation
     client_info = get_full_client_info(request)
-    trending_city = ''
-    if client_info.get('location'):
-        trending_city = client_info['location'].get('city', '')
+    location = client_info.get('location') or {}
+    
+    # Try most specific to least specific
+    location_levels = [
+        (location.get('city', ''), 'city'),
+        (location.get('region', ''), 'region'),
+        (location.get('country', ''), 'country'),
+    ]
+    
+    trending_results = []
+    trending_label = 'Your Area'
+    
+    for loc_value, loc_type in location_levels:
+        if loc_value:
+            trending_results = get_trending_results(city=loc_value, limit=6)
+            if trending_results:
+                trending_label = loc_value.title()
+                break
+    
+    # Fallback to general
+    if not trending_results:
+        trending_results = get_trending_results(city=None, limit=6)
+        trending_label = 'Your Area'
     
     context = {
-        'city': trending_city or city,
+        'city': city,
+        'trending_label': trending_label,
+        'trending_results': trending_results,
         'supported_cities': list(SUPPORTED_CITIES),
-        'trending_results': get_trending_results(city=trending_city, limit=6),
     }
     
     return render(request, 'home3.html', context)
@@ -4769,11 +4790,25 @@ def search(request):
     if not filters and total_results > 0:
         safe_cache_set(cache_key, context, SEARCH_CONFIG['cache_timeout'])
 
+
+
+    # In your search view, replace the single cache_trending_result call:
     if results and len(results) > 0:
-        trending_city = location.get('city', '') if location else ''
-        cache_trending_result(query=params.query, top_result=results[0], city=trending_city)
-    
-    return render(request, 'results2.html', context)
+        top_result = results[0]
+        
+        # Cache at each location level
+        loc_city = location.get('city', '') if location else ''
+        loc_region = location.get('region', '') if location else ''
+        loc_country = location.get('country', '') if location else ''
+        
+        for loc_value in [loc_city, loc_region, loc_country]:
+            if loc_value:
+                cache_trending_result(query=params.query, top_result=top_result, city=loc_value)
+        
+        # Always cache to general
+        cache_trending_result(query=params.query, top_result=top_result, city=None)
+        
+        return render(request, 'results2.html', context)
 
 # =============================================================================
 # VIEW: CATEGORY ROUTER
