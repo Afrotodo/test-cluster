@@ -4751,6 +4751,10 @@ def search(request):
     # === 16. CACHE RESULTS ===
     if not filters and total_results > 0:
         safe_cache_set(cache_key, context, SEARCH_CONFIG['cache_timeout'])
+        
+    if results and len(results) > 0:
+        trending_city = location.get('city', '') if location else ''
+        cache_trending_result(query=params.query, top_result=results[0], city=trending_city)
     
     return render(request, 'results2.html', context)
 
