@@ -1102,7 +1102,7 @@
                                     class="search-box" 
                                     id="search-input" 
                                     name="query" 
-                                    placeholder="Coffee shops near me?"
+                                    placeholder=""
                                     autocomplete="off"
                                 >
                                 <input type="hidden" id="session-id-field" name="session_id" value="">
@@ -1710,10 +1710,149 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     });
+// ==================== CYLINDER PLACEHOLDER ====================
+    const rollerPhrases = [
+        'Restaurants near me',
+        'Genealogy and history',
+        'Book reviews and clubs',
+        'Running groups',
+        'Travel groups'
+    ];
+
+    let rollerIndex = 0;
+    let rollerTimer = null;
+    let rollerRunning = false;
+
+    const inputWrapper = searchInput.parentElement;
+    inputWrapper.style.position = 'relative';
+
+    const roller = document.createElement('div');
+    roller.id = 'placeholder-roller';
+    roller.style.cssText = `
+        position: absolute; left: 60px; top: 0; right: 60px; height: 100%;
+        display: flex; align-items: center; pointer-events: none;
+        z-index: 1; overflow: hidden;
+    `;
+
+    const track = document.createElement('div');
+    track.style.cssText = 'position: relative; height: 1.8em; overflow: hidden; width: 100%;';
+
+    const inner = document.createElement('div');
+    inner.id = 'roller-inner';
+    inner.style.cssText = 'position: relative;';
+
+    // Only two spans — current and next, swap them each roll
+    const spanA = document.createElement('span');
+    const spanB = document.createElement('span');
+
+    const spanStyle = `
+        display: block; height: 1.8em; line-height: 1.8em;
+        font-family: var(--font-body); font-size: 17px; font-style: italic;
+        color: var(--gray-500); white-space: nowrap;
+        transition: transform 0.7s cubic-bezier(0.23, 1, 0.32, 1),
+                    opacity 0.7s cubic-bezier(0.23, 1, 0.32, 1);
+    `;
+
+    spanA.style.cssText = spanStyle;
+    spanB.style.cssText = spanStyle + 'position: absolute; top: 0; left: 0; width: 100%;';
+
+    spanA.textContent = rollerPhrases[0];
+    spanB.textContent = rollerPhrases[1];
+    spanB.style.transform = 'translateY(100%)';
+    spanB.style.opacity = '0';
+
+    inner.appendChild(spanA);
+    inner.appendChild(spanB);
+    track.appendChild(inner);
+    roller.appendChild(track);
+    inputWrapper.appendChild(roller);
+
+    searchInput.style.position = 'relative';
+    searchInput.style.zIndex = '2';
+    searchInput.style.background = 'transparent';
+
+    let currentSpan = spanA;
+    let nextSpan = spanB;
+
+    function rollToNext() {
+        if (!rollerRunning) return;
+
+        rollerIndex = (rollerIndex + 1) % rollerPhrases.length;
+        const upcomingIndex = (rollerIndex + 1) % rollerPhrases.length;
+
+        // Set next span text and starting position
+        nextSpan.textContent = rollerPhrases[rollerIndex];
+        nextSpan.style.transition = 'none';
+        nextSpan.style.transform = 'translateY(100%)';
+        nextSpan.style.opacity = '0';
+
+        // Force reflow so the starting position registers
+        nextSpan.offsetHeight;
+
+        // Animate both
+        nextSpan.style.transition = `
+            transform 0.7s cubic-bezier(0.23, 1, 0.32, 1),
+            opacity 0.7s cubic-bezier(0.23, 1, 0.32, 1)
+        `;
+        currentSpan.style.transform = 'translateY(-100%)';
+        currentSpan.style.opacity = '0';
+        nextSpan.style.transform = 'translateY(0)';
+        nextSpan.style.opacity = '1';
+
+        // Swap references
+        const temp = currentSpan;
+        currentSpan = nextSpan;
+        nextSpan = temp;
+
+        scheduleNextRoll();
+    }
+
+    function scheduleNextRoll() {
+        if (!rollerRunning) return;
+        rollerTimer = setTimeout(rollToNext, 3200);
+    }
+
+    function startRoller() {
+        if (rollerRunning) return;
+        rollerRunning = true;
+        scheduleNextRoll();
+    }
+
+    function stopRoller() {
+        rollerRunning = false;
+        if (rollerTimer) {
+            clearTimeout(rollerTimer);
+            rollerTimer = null;
+        }
+    }
+
+    function updateRollerVisibility() {
+        if (searchInput.value.length > 0) {
+            roller.style.opacity = '0';
+            roller.style.transition = 'opacity 0.15s ease';
+            stopRoller();
+        } else {
+            roller.style.opacity = '1';
+            roller.style.transition = 'opacity 0.15s ease';
+            startRoller();
+        }
+    }
+
+    searchInput.addEventListener('input', updateRollerVisibility);
+    searchInput.addEventListener('focus', updateRollerVisibility);
+    searchInput.addEventListener('blur', function () {
+        if (searchInput.value.length === 0) {
+            roller.style.opacity = '1';
+            startRoller();
+        }
+    });
+
+    startRoller();
 
     // ==================== CLEANUP ====================
     window.addEventListener('beforeunload', function() {
         clearTimeout(debounceTimer);
+        stopRoller();
     });
 
     window._searchDebug = {

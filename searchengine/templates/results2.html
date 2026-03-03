@@ -452,10 +452,70 @@
             </div>
             {% endif %}
 
+            {# ═══════════ IMAGE VIEW WITH PAGINATION ═══════════ #}
             {% if show_images %}
-                {% if image_results %}<div class="image-filters"><button class="image-filter-chip active" data-filter="all">All</button><button class="image-filter-chip" data-filter="photo">Photos</button><button class="image-filter-chip" data-filter="logo">Logos</button></div>
-                <div class="image-grid">{% for img in image_results %}<div class="image-card" data-index="{{ forloop.counter0 }}" data-url="{{ img.url }}" data-title="{{ img.title }}" data-source="{{ img.source_url }}" data-source-name="{{ img.source_name }}" data-type="{{ img.image_type }}" onclick="openLightbox(this)"><img src="{{ img.url }}" alt="{{ img.title }}" loading="lazy" onerror="this.parentElement.style.display='none'">{% if img.image_type %}<span class="image-card-type">{{ img.image_type }}</span>{% endif %}<div class="image-card-overlay"><div class="image-card-title">{{ img.title|truncatewords:8 }}</div><div class="image-card-source">{{ img.source_name|truncatewords:4 }}</div></div></div>{% endfor %}</div>
-                {% else %}<div class="no-images" style="text-align:center;padding:48px;color:var(--gray-600);"><h3 style="font-family:var(--font-display);margin-bottom:8px;">No images found for "{{ query }}"</h3><p>Try a different search.</p></div>{% endif %}
+                {% if image_results %}
+                    <div class="image-filters">
+                        <button class="image-filter-chip active" data-filter="all">All</button>
+                        <button class="image-filter-chip" data-filter="photo">Photos</button>
+                        <button class="image-filter-chip" data-filter="logo">Logos</button>
+                    </div>
+                    <div class="image-grid">
+                        {% for img in image_results %}
+                        <div class="image-card" data-index="{{ forloop.counter0 }}" data-url="{{ img.url }}" data-title="{{ img.title }}" data-source="{{ img.source_url }}" data-source-name="{{ img.source_name }}" data-type="{{ img.image_type }}" onclick="openLightbox(this)">
+                            <img src="{{ img.url }}" alt="{{ img.title }}" loading="lazy" onerror="this.parentElement.style.display='none'">
+                            {% if img.image_type %}<span class="image-card-type">{{ img.image_type }}</span>{% endif %}
+                            <div class="image-card-overlay">
+                                <div class="image-card-title">{{ img.title|truncatewords:8 }}</div>
+                                <div class="image-card-source">{{ img.source_name|truncatewords:4 }}</div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+
+                    {# ── Image Pagination ── #}
+                    {% if image_pagination and image_pagination.total_pages > 1 %}
+                    <nav class="pagination">
+                        <div class="pagination-info">
+                            Showing {{ image_pagination.start_result }}-{{ image_pagination.end_result }} of {{ image_pagination.total_images }} images
+                        </div>
+                        <div class="pagination-controls">
+                            {% if image_pagination.has_previous %}
+                            <a href="?query={{ query|urlencode }}&view=images&page={{ image_pagination.previous_page }}&session_id={{ session_id }}" class="pagination-btn">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>Prev
+                            </a>
+                            {% else %}
+                            <span class="pagination-btn disabled"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>Prev</span>
+                            {% endif %}
+
+                            <div class="pagination-pages">
+                                {% for p in image_pagination.page_range %}
+                                    {% if p == image_pagination.current_page %}
+                                    <span class="pagination-page active">{{ p }}</span>
+                                    {% else %}
+                                    <a href="?query={{ query|urlencode }}&view=images&page={{ p }}&session_id={{ session_id }}" class="pagination-page">{{ p }}</a>
+                                    {% endif %}
+                                {% endfor %}
+                            </div>
+
+                            {% if image_pagination.has_next %}
+                            <a href="?query={{ query|urlencode }}&view=images&page={{ image_pagination.next_page }}&session_id={{ session_id }}" class="pagination-btn">
+                                Next<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+                            </a>
+                            {% else %}
+                            <span class="pagination-btn disabled">Next<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg></span>
+                            {% endif %}
+                        </div>
+                    </nav>
+                    {% endif %}
+
+                {% else %}
+                    <div class="no-images" style="text-align:center;padding:48px;color:var(--gray-600);">
+                        <h3 style="font-family:var(--font-display);margin-bottom:8px;">No images found for "{{ query }}"</h3>
+                        <p>Try a different search.</p>
+                    </div>
+                {% endif %}
+
             {% elif has_results %}
                 {% for item in results %}
                 <article class="result-item{% if address_map and item.id == address_map.id %} has-map-card{% endif %}" data-position="{{ forloop.counter }}" data-result-id="{{ item.id|default:'' }}" data-url="{{ item.url|default:'#' }}" data-title="{{ item.title|default:'Untitled' }}" data-source="{{ item.source|default:item.site_name|default:'' }}" data-data-type="{{ item.data_type|default:'' }}" data-schema="{{ item.schema|default:'' }}">

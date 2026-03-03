@@ -27,7 +27,7 @@ from django.http import Http404, HttpResponseBadRequest, JsonResponse
 from django.shortcuts import redirect, render
 from django.utils.html import escape
 from django.views.decorators.http import require_GET, require_http_methods
-
+from .typesense_discovery_bridge import _generate_stable_cache_key, _get_cached_results, fetch_full_documents
 
 from decouple import config
 
@@ -4618,9 +4618,60 @@ def search(request):
                 # Extract images from results
                 # image_results = extract_images_from_results(results)
                 # image_count = len(image_results)
-                image_results = extract_images_from_results(results)
-                image_count = len(image_results)
-                
+                # image_results = extract_images_from_results(results)
+                # image_count = result.get('total_image_count', len(image_results))
+                # Extract images from results
+# Extract images from results
+                if show_images:
+                    from .typesense_discovery_bridge import (
+                        _generate_stable_cache_key, _get_cached_results, fetch_full_documents
+                    )
+                    
+                    stable_key = _generate_stable_cache_key(params.session_id, params.query)
+                    finished = _get_cached_results(stable_key)
+                    
+                    if finished:
+                        all_candidates = finished['all_results']
+                        # Only candidates that actually have images
+                        has_image = [r for r in all_candidates if r.get('image_url') or r.get('logo_url')]
+                        
+                        # Paginate the image-bearing documents (40 per page)
+                        img_per_page = 40
+                        img_total = len(has_image)
+                        img_start = (page - 1) * img_per_page
+                        img_end = img_start + img_per_page
+                        page_slice = has_image[img_start:img_end]
+                        
+                        # Fetch full docs for this page only
+                        page_ids = [item['id'] for item in page_slice]
+                        full_docs = fetch_full_documents(page_ids, params.query)
+                        image_results = extract_images_from_results(full_docs)
+                        image_count = finished.get('total_image_count', img_total)
+                        
+                        # Build image pagination
+                        img_total_pages = (img_total + img_per_page - 1) // img_per_page
+                        image_pagination = {
+                            'current_page': page,
+                            'total_pages': img_total_pages,
+                            'has_previous': page > 1,
+                            'previous_page': page - 1,
+                            'has_next': page < img_total_pages,
+                            'next_page': page + 1,
+                            'page_range': range(max(1, page - 3), min(img_total_pages + 1, page + 4)),
+                            'total_images': img_total,
+                            'start_result': img_start + 1,
+                            'end_result': min(img_end, img_total),
+                        }
+                    else:
+                        # Fallback — no cache yet, use current page results
+                        image_results = extract_images_from_results(results)
+                        image_count = len(image_results)
+                        image_pagination = None
+                else:
+                    image_results = extract_images_from_results(results)
+                    image_count = result.get('total_image_count', len(image_results))
+                    image_pagination = None
+                                
             except Exception as e:
                 logger.error(f"Search execution error: {e}")
     # === 9. TRACK SEARCH (Analytics) ===
@@ -4744,6 +4795,8 @@ def search(request):
         'show_images': show_images,
         'image_results': image_results,
         'image_count': image_count,
+        # In the context dict, add:
+        'image_pagination': image_pagination,
         
         # Filters
         'filters': filters,

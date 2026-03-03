@@ -1235,7 +1235,8 @@ def fetch_candidate_ids(
             'query_by_weights': params.get('query_by_weights', '10,8,6,4,3'),
             'per_page': PAGE_SIZE,
             'page': current_page,
-            'include_fields': 'document_uuid,document_data_type,document_category,document_schema,authority_score',
+            # 'include_fields': 'document_uuid,document_data_type,document_category,document_schema,authority_score',
+            'include_fields': 'document_uuid,document_data_type,document_category,document_schema,authority_score,image_url,logo_url',
             'num_typos': params.get('num_typos', 0),
             'prefix': params.get('prefix', 'no'),
             'drop_tokens_threshold': params.get('drop_tokens_threshold', 0),
@@ -1263,6 +1264,8 @@ def fetch_candidate_ids(
                     'authority_score': doc.get('authority_score', 0),
                     'service_phone': doc.get('service_phone'),
                     'text_match': hit.get('text_match', 0),
+                    'image_url': doc.get('image_url', []),
+                    'logo_url': doc.get('logo_url', []),
                 })
             
             if len(all_results) >= found or len(hits) < PAGE_SIZE:
@@ -2166,9 +2169,82 @@ def _generate_stable_cache_key(session_id: str, query: str) -> str:
     key_string = f"final|{session_id or 'nosession'}|{normalized}"
     return hashlib.md5(key_string.encode()).hexdigest()
 
+def _count_images_from_candidates(all_results):
+    """Count total images and logos from lightweight candidate data."""
+    count = 0
+    for item in all_results:
+        image_urls = item.get('image_url', [])
+        if isinstance(image_urls, str):
+            image_urls = [image_urls]
+        count += len([u for u in image_urls if u])
+        
+        logo_urls = item.get('logo_url', [])
+        if isinstance(logo_urls, str):
+            logo_urls = [logo_urls]
+        count += len([u for u in logo_urls if u])
+    return count
 
 # ============================================================================
 # MAIN ENTRY POINT (restructured — cache-last)
+# ============================================================================
+
+# ============================================================================
+# ADD THIS HELPER next to _generate_stable_cache_key
+# ============================================================================
+
+def _count_images_from_candidates(all_results):
+    """Count total images and logos from lightweight candidate data."""
+    count = 0
+    for item in all_results:
+        image_urls = item.get('image_url', [])
+        if isinstance(image_urls, str):
+            image_urls = [image_urls]
+        count += len([u for u in image_urls if u])
+        
+        logo_urls = item.get('logo_url', [])
+        if isinstance(logo_urls, str):
+            logo_urls = [logo_urls]
+        count += len([u for u in logo_urls if u])
+    return count
+
+
+# ============================================================================
+# IN fetch_candidate_ids — REPLACE the include_fields line AND the append block
+# ============================================================================
+# 
+# OLD include_fields line:
+#   'include_fields': 'document_uuid,document_data_type,document_category,document_schema,authority_score',
+#
+# NEW include_fields line:
+#   'include_fields': 'document_uuid,document_data_type,document_category,document_schema,authority_score,image_url,logo_url',
+#
+# OLD append block:
+#   all_results.append({
+#       'id': doc.get('document_uuid'),
+#       'data_type': doc.get('document_data_type', ''),
+#       'category': doc.get('document_category', ''),
+#       'schema': doc.get('document_schema', ''),
+#       'authority_score': doc.get('authority_score', 0),
+#       'service_phone': doc.get('service_phone'),
+#       'text_match': hit.get('text_match', 0),
+#   })
+#
+# NEW append block:
+#   all_results.append({
+#       'id': doc.get('document_uuid'),
+#       'data_type': doc.get('document_data_type', ''),
+#       'category': doc.get('document_category', ''),
+#       'schema': doc.get('document_schema', ''),
+#       'authority_score': doc.get('authority_score', 0),
+#       'service_phone': doc.get('service_phone'),
+#       'text_match': hit.get('text_match', 0),
+#       'image_url': doc.get('image_url', []),
+#       'logo_url': doc.get('logo_url', []),
+#   })
+
+
+# ============================================================================
+# MAIN ENTRY POINT (with total_image_count)
 # ============================================================================
 
 def execute_full_search(
@@ -2214,8 +2290,6 @@ def execute_full_search(
     
     # =========================================================================
     # ★ FAST PATH: Check for finished cache FIRST
-    # If we already ran the full pipeline for this query+session,
-    # just filter/paginate/return. No discovery, no embedding, no rerank.
     # =========================================================================
     stable_key = _generate_stable_cache_key(session_id, query)
     finished = _get_cached_results(stable_key)
@@ -2227,6 +2301,7 @@ def execute_full_search(
         all_facets = finished['all_facets']
         facet_total = finished['facet_total']
         ai_overview = finished.get('ai_overview')
+        total_image_count = finished.get('total_image_count', 0)
         metadata = finished['metadata']
         times['cache'] = 'hit (fast path)'
         
@@ -2254,7 +2329,7 @@ def execute_full_search(
         times['total'] = round((time.time() - t0) * 1000, 2)
         
         print(f"⏱️ FAST PATH TIMING: {times}")
-        print(f"🔍 FAST PATH | Total: {facet_total} | Filtered: {total_filtered} | Page: {len(results)}")
+        print(f"🔍 FAST PATH | Total: {facet_total} | Filtered: {total_filtered} | Page: {len(results)} | Images: {total_image_count}")
         
         # Build return dict using cached metadata
         signals = metadata.get('signals', {})
@@ -2269,6 +2344,7 @@ def execute_full_search(
             'results': results,
             'total': total_filtered,
             'facet_total': facet_total,
+            'total_image_count': total_image_count,
             'page': page,
             'per_page': per_page,
             'search_time': round(time.time() - t0, 3),
@@ -2349,11 +2425,15 @@ def execute_full_search(
         all_facets = count_facets_from_cache(all_results)
         facet_total = len(all_results)
         
-        # ★ CACHE THE FINAL PACKAGE (keyword path has no reranking/pruning)
+        # ★ Count images from ALL candidates
+        total_image_count = _count_images_from_candidates(all_results)
+        
+        # ★ CACHE THE FINAL PACKAGE
         _set_cached_results(stable_key, {
             'all_results': all_results,
             'all_facets': all_facets,
             'facet_total': facet_total,
+            'total_image_count': total_image_count,
             'ai_overview': None,
             'metadata': {
                 'corrected_query': query,
@@ -2387,7 +2467,7 @@ def execute_full_search(
                 },
             },
         })
-        print(f"💾 Cached final keyword package: {facet_total} results (stable_key={stable_key[:12]}...)")
+        print(f"💾 Cached final keyword package: {facet_total} results, {total_image_count} images (stable_key={stable_key[:12]}...)")
         
         # Filter → Paginate → Fetch for THIS request
         filtered_results = filter_cached_results(
@@ -2405,7 +2485,7 @@ def execute_full_search(
         times['total'] = round((time.time() - t0) * 1000, 2)
         
         print(f"⏱️ TIMING: {times}")
-        print(f"🔍 KEYWORD PATH | Total: {facet_total} | Filtered: {total_filtered} | Page: {len(results)}")
+        print(f"🔍 KEYWORD PATH | Total: {facet_total} | Filtered: {total_filtered} | Page: {len(results)} | Images: {total_image_count}")
         
         return {
             'query': query,
@@ -2414,6 +2494,7 @@ def execute_full_search(
             'results': results,
             'total': total_filtered,
             'facet_total': facet_total,
+            'total_image_count': total_image_count,
             'page': page,
             'per_page': per_page,
             'search_time': round(time.time() - t0, 3),
@@ -2453,7 +2534,6 @@ def execute_full_search(
     
     # =========================================================================
     # SEMANTIC PATH (full pipeline)
-    # discovery → embed → candidates → rerank → prune → AI overview → cache
     # =========================================================================
     
     print(f"🔬 SEMANTIC PIPELINE: '{query}'")
@@ -2561,6 +2641,9 @@ def execute_full_search(
     facet_total = len(all_results)
     print(f"📊 Facets (final): {[(f['value'], f['count']) for f in all_facets.get('data_type', [])]}")
     
+    # ★ Count images from ALL candidates (after pruning)
+    total_image_count = _count_images_from_candidates(all_results)
+    
     # --- AI Overview (generate from page 1 full docs) ---
     ai_overview = None
     if all_results:
@@ -2579,13 +2662,12 @@ def execute_full_search(
     
     # =========================================================================
     # ★ CACHE THE FINAL PACKAGE
-    # All done: reranked, pruned, AI overview generated.
-    # Next tab click / pagination hits the fast path at the top.
     # =========================================================================
     _set_cached_results(stable_key, {
         'all_results': all_results,
         'all_facets': all_facets,
         'facet_total': facet_total,
+        'total_image_count': total_image_count,
         'ai_overview': ai_overview,
         'metadata': {
             'corrected_query': corrected_query,
@@ -2629,7 +2711,7 @@ def execute_full_search(
             },
         },
     })
-    print(f"💾 Cached final semantic package: {facet_total} results (stable_key={stable_key[:12]}...)")
+    print(f"💾 Cached final semantic package: {facet_total} results, {total_image_count} images (stable_key={stable_key[:12]}...)")
     
     # --- Filter → Paginate → Fetch for THIS request ---
     filtered_results = filter_cached_results(
@@ -2662,7 +2744,7 @@ def execute_full_search(
     strategy = 'staged_semantic' if semantic_enabled else 'keyword_fallback'
     
     print(f"⏱️ TIMING: {times}")
-    print(f"🔍 {strategy.upper()} ({query_mode}) | Total: {facet_total} | Filtered: {total_filtered} | Page: {len(results)}")
+    print(f"🔍 {strategy.upper()} ({query_mode}) | Total: {facet_total} | Filtered: {total_filtered} | Page: {len(results)} | Images: {total_image_count}")
     
     return {
         'query': query,
@@ -2672,6 +2754,7 @@ def execute_full_search(
         'results': results,
         'total': total_filtered,
         'facet_total': facet_total,
+        'total_image_count': total_image_count,
         'page': page,
         'per_page': per_page,
         'search_time': round(time.time() - t0, 3),
