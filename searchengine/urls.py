@@ -1,5 +1,7 @@
 from django.urls import path
 from . import views
+from .word_discovery_edge_cases import debug_word_discovery
+
 from .views import track_click, click_redirect
 from . import searchapi
 from . import cache_views  # ← Add this
@@ -88,7 +90,8 @@ urlpatterns = [
     # path('debug/schema/', views.debug_schema, name='debug_schema'),
     # path('debug/stage2/', views.debug_stage2_view, name='debug_stage2'),
     # path('debug/batch/', views.debug_batch_view, name='debug_batch'),
-    path('debug/bridge/', views.debug_bridge_view, name='debug_bridge'),
+
+    path('debug/word-discovery/', debug_word_discovery, name='debug_word_discovery')
     # If you want to test the fixed view:
     # path('business-test/', views.business_category_fixed, name='business_test'),
 

@@ -2284,7 +2284,7 @@
 
 
 """
-word_discovery_v2.py
+word_discovery_fulltest.py
 ====================
 Optimized word discovery with POS-aware selection and n-gram detection.
 
@@ -3074,6 +3074,160 @@ def get_fuzzy_suggestions(word: str, limit: int = 10, max_distance: int = 2) -> 
         print(f"Error getting suggestions for '{word}': {e}")
         return []
 
+def get_fuzzy_suggestions_batch(
+        words: List[str], 
+        limit: int = 10, 
+        max_distance: int = 2
+    ) -> Dict[str, List[Dict[str, Any]]]:
+        """
+        Get fuzzy suggestions for ALL words in ONE Redis pipeline call.
+        Returns dict of {word: [suggestions]}
+        """
+        client = RedisClient.get_client()
+        if not client:
+            return {word: [] for word in words}
+
+        unique_words = list({w.lower().strip() for w in words if len(w.strip()) >= 2})
+        
+        if not unique_words:
+            return {}
+
+        # -------------------------------------------------------------------------
+        # Build ONE pipeline with ALL fuzzy searches at once
+        # -------------------------------------------------------------------------
+        pipe = client.pipeline(transaction=False)  # transaction=False = faster
+
+        for word in unique_words:
+            query = f"%{word}%"
+            pipe.execute_command(
+                'FT.SEARCH', 'terms_idx', query,
+                'SORTBY', 'rank', 'DESC',
+                'LIMIT', '0', str(limit * 3)
+            )
+
+        # ONE round trip to Redis for ALL words
+        try:
+            all_results = pipe.execute()
+        except Exception as e:
+            print(f"Pipeline batch error: {e}")
+            return {word: [] for word in unique_words}
+
+        # -------------------------------------------------------------------------
+        # Map results back to each word
+        # -------------------------------------------------------------------------
+        batch_suggestions = {}
+
+        for word, result in zip(unique_words, all_results):
+            suggestions = []
+
+            if not result or len(result) <= 1:
+                batch_suggestions[word] = []
+                continue
+
+            i = 1
+            while i < len(result):
+                key = result[i]
+                fields = result[i + 1] if i + 1 < len(result) else []
+
+                metadata = {}
+                for j in range(0, len(fields), 2):
+                    if j + 1 < len(fields):
+                        metadata[fields[j]] = fields[j + 1]
+
+                if metadata:
+                    term = metadata.get('term', '')
+                    distance = damerau_levenshtein_distance(word, term.lower())
+
+                    if distance <= max_distance and distance > 0:
+                        rank = metadata.get('rank', 0)
+                        try:
+                            rank = int(float(rank))
+                        except (ValueError, TypeError):
+                            rank = 0
+
+                        pos = metadata.get('pos', 'unknown')
+                        if isinstance(pos, str) and pos.startswith('['):
+                            try:
+                                parsed = json.loads(pos)
+                                pos = parsed[0] if parsed else 'unknown'
+                            except:
+                                pass
+                        pos = str(pos).lower()
+
+                        suggestions.append({
+                            'term': term,
+                            'display': metadata.get('display', term),
+                            'category': metadata.get('category', ''),
+                            'description': metadata.get('description', ''),
+                            'pos': pos,
+                            'entity_type': metadata.get('entity_type', 'unigram'),
+                            'rank': rank,
+                            'distance': distance,
+                        })
+
+                i += 2
+
+            # If % fuzzy found nothing, try %% (wider fuzzy)
+            if not suggestions:
+                try:
+                    wider_result = client.execute_command(
+                        'FT.SEARCH', 'terms_idx', f"%%{word}%%",
+                        'SORTBY', 'rank', 'DESC',
+                        'LIMIT', '0', str(limit * 3)
+                    )
+                    i = 1
+                    while i < len(wider_result):
+                        fields = wider_result[i + 1] if i + 1 < len(wider_result) else []
+                        metadata = {}
+                        for j in range(0, len(fields), 2):
+                            if j + 1 < len(fields):
+                                metadata[fields[j]] = fields[j + 1]
+                        if metadata:
+                            term = metadata.get('term', '')
+                            distance = damerau_levenshtein_distance(word, term.lower())
+                            if distance <= max_distance and distance > 0:
+                                rank = metadata.get('rank', 0)
+                                try:
+                                    rank = int(float(rank))
+                                except (ValueError, TypeError):
+                                    rank = 0
+                                pos = metadata.get('pos', 'unknown')
+                                if isinstance(pos, str) and pos.startswith('['):
+                                    try:
+                                        parsed = json.loads(pos)
+                                        pos = parsed[0] if parsed else 'unknown'
+                                    except:
+                                        pass
+                                pos = str(pos).lower()
+                                suggestions.append({
+                                    'term': term,
+                                    'display': metadata.get('display', term),
+                                    'category': metadata.get('category', ''),
+                                    'description': metadata.get('description', ''),
+                                    'pos': pos,
+                                    'entity_type': metadata.get('entity_type', 'unigram'),
+                                    'rank': rank,
+                                    'distance': distance,
+                                })
+                        i += 2
+                except Exception as e:
+                    print(f"Wider fuzzy search error for '{word}': {e}")
+
+            # Sort by distance then rank
+            suggestions.sort(key=lambda x: (x['distance'], -x['rank']))
+
+            # Deduplicate
+            seen = set()
+            unique = []
+            for s in suggestions:
+                if s['term'].lower() not in seen:
+                    seen.add(s['term'].lower())
+                    unique.append(s)
+
+            batch_suggestions[word] = unique[:limit]
+
+        return batch_suggestions
+
 
 # =============================================================================
 # MAIN WORD DISCOVERY CLASS
@@ -3335,74 +3489,83 @@ class WordDiscovery:
     # =========================================================================
     
     def _step3_determine_pos(
-        self, 
-        word_data: List[Dict[str, Any]], 
-        consumed_positions: Set[int]
+    self,
+    word_data: List[Dict[str, Any]],
+    consumed_positions: Set[int]
     ) -> None:
-        """Determine POS for ALL words using grammar rules."""
+        """Determine POS for ALL words using grammar rules — multi-pass for adjacent unknowns."""
         if self.verbose:
             print("\n" + "-" * 70)
-            print("🧠 STEP 3: Determine POS (Grammar Rules)")
+            print("🧠 STEP 3: Determine POS (Grammar Rules — Multi-Pass)")
             print("-" * 70)
-        
-        for i, wd in enumerate(word_data):
+
+        def get_nearest_known_pos(index: int, direction: int) -> Optional[str]:
+            """
+            Walk the array left (direction=-1) or right (direction=1)
+            past unknown words until a known POS is found.
+            Returns that POS as the context anchor, or None if not found.
+            """
+            i = index + direction
+            while 0 <= i < len(word_data):
+                wd = word_data[i]
+                if wd['is_stopword']:
+                    return wd['pos']
+                if wd.get('pos'):
+                    return wd['pos']
+                if wd.get('predicted_pos'):
+                    return wd['predicted_pos']
+                if wd['all_matches']:
+                    return normalize_pos_string(wd['all_matches'][0]['pos'])
+                i += direction
+            return None
+
+        def resolve_word(i: int, wd: Dict[str, Any]) -> bool:
+            """
+            Try to resolve POS for a single word using its nearest known neighbors.
+            Returns True if a prediction was made, False if neighbors were still unknown.
+            """
             position = wd['position']
-            
             pos_index = position - 1
             wd['part_of_ngram'] = pos_index in consumed_positions
-            
+
             if wd['is_stopword']:
                 wd['predicted_pos'] = wd['pos']
                 wd['predicted_pos_list'] = [(wd['pos'], 1.0)]
-                if self.verbose:
-                    print(f"  [{position}] '{wd['word']}' → Stopword ({wd['pos']})")
-                continue
-            
-            # Get left neighbor POS
+                return True
+
+            # Walk left to find nearest known POS
             left_pos = None
-            if i > 0:
-                left_wd = word_data[i - 1]
-                if left_wd['is_stopword']:
-                    left_pos = left_wd['pos']
-                elif left_wd.get('predicted_pos'):
-                    pred = left_wd['predicted_pos']
-                    if isinstance(pred, tuple):
-                        left_pos = pred[0]
-                    else:
-                        left_pos = pred
-                elif left_wd['all_matches']:
-                    raw_pos = left_wd['all_matches'][0]['pos']
-                    left_pos = normalize_pos_string(raw_pos)
-            else:
+            if i == 0:
                 left_pos = 'start'
-            
-            # Get right neighbor POS
-            right_pos = None
-            if i < len(word_data) - 1:
-                right_wd = word_data[i + 1]
-                if right_wd['is_stopword']:
-                    right_pos = right_wd['pos']
-                elif right_wd['all_matches']:
-                    raw_pos = right_wd['all_matches'][0]['pos']
-                    right_pos = normalize_pos_string(raw_pos)
             else:
+                left_pos = get_nearest_known_pos(i, direction=-1)
+
+            # Walk right to find nearest known POS
+            right_pos = None
+            if i == len(word_data) - 1:
                 right_pos = 'end'
-            
-            # Apply grammar rules
+            else:
+                right_pos = get_nearest_known_pos(i, direction=1)
+
+            # If both neighbors are still unknown, we cannot resolve yet
+            if left_pos is None and right_pos is None:
+                return False
+
+            # Apply grammar rules with whatever context we have
             predicted_pos = None
-            
+
             if left_pos and right_pos:
                 predicted_pos = GRAMMAR_RULES.get((left_pos, right_pos))
-            
+
             if not predicted_pos and left_pos:
                 predicted_pos = GRAMMAR_RULES.get((left_pos, None))
-            
+
             if not predicted_pos and right_pos:
                 predicted_pos = GRAMMAR_RULES.get((None, right_pos))
-            
+
             if not predicted_pos:
                 predicted_pos = [('noun', 0.75)]
-            
+
             # Passive voice lookahead
             has_be_before = any(
                 word_data[j]['is_stopword'] and word_data[j]['pos'] == 'be'
@@ -3426,21 +3589,167 @@ class WordDiscovery:
                         ('adverb', 0.3),
                     ]
                     if self.verbose:
-                        print(f"       ⚡ Passive voice detected: [be]..._{wd['word']}_...[-ed] → noun (0.95)")
+                        print(f"       ⚡ Passive voice: [be]..._{wd['word']}_...[-ed] → noun (0.95)")
 
-            # Store both formats
             if isinstance(predicted_pos, list):
                 wd['predicted_pos_list'] = predicted_pos
                 wd['predicted_pos'] = predicted_pos[0][0] if predicted_pos else 'noun'
             else:
                 wd['predicted_pos_list'] = [(predicted_pos, 0.90)]
                 wd['predicted_pos'] = predicted_pos
-            
+
             if self.verbose:
                 context = f"[{left_pos or '???'}] _{wd['word']}_ [{right_pos or '???'}]"
                 ngram_note = " (in n-gram)" if wd['part_of_ngram'] else ""
                 print(f"  [{position}] '{wd['word']}' → Predicted: {wd['predicted_pos_list']}{ngram_note}")
                 print(f"       Context: {context}")
+
+            return True
+
+        # -------------------------------------------------------------------------
+        # Multi-pass loop
+        # Pass 1: resolve words with at least one known neighbor
+        # Pass 2+: resolved words from previous pass become known neighbors
+        #          for remaining unknowns
+        # Stop when no progress is made (truly isolated unknowns default to noun)
+        # -------------------------------------------------------------------------
+        max_passes = len(word_data)
+        resolved = set()
+
+        for pass_num in range(max_passes):
+            progress = False
+
+            if self.verbose and pass_num > 0:
+                print(f"\n  ── Pass {pass_num + 1} ──")
+
+            for i, wd in enumerate(word_data):
+                if i in resolved:
+                    continue
+
+                success = resolve_word(i, wd)
+
+                if success:
+                    resolved.add(i)
+                    progress = True
+
+            # Stop when all resolved or no progress made
+            if not progress or len(resolved) == len(word_data):
+                break
+
+        # Any word still unresolved (fully surrounded by unknowns) defaults to noun
+        for i, wd in enumerate(word_data):
+            if i not in resolved:
+                if self.verbose:
+                    print(f"  [{wd['position']}] '{wd['word']}' → No context found, defaulting to noun")
+                wd['predicted_pos'] = 'noun'
+                wd['predicted_pos_list'] = [('noun', 0.75)]
+    # def _step3_determine_pos(
+    #     self, 
+    #     word_data: List[Dict[str, Any]], 
+    #     consumed_positions: Set[int]
+    # ) -> None:
+    #     """Determine POS for ALL words using grammar rules."""
+    #     if self.verbose:
+    #         print("\n" + "-" * 70)
+    #         print("🧠 STEP 3: Determine POS (Grammar Rules)")
+    #         print("-" * 70)
+        
+    #     for i, wd in enumerate(word_data):
+    #         position = wd['position']
+            
+    #         pos_index = position - 1
+    #         wd['part_of_ngram'] = pos_index in consumed_positions
+            
+    #         if wd['is_stopword']:
+    #             wd['predicted_pos'] = wd['pos']
+    #             wd['predicted_pos_list'] = [(wd['pos'], 1.0)]
+    #             if self.verbose:
+    #                 print(f"  [{position}] '{wd['word']}' → Stopword ({wd['pos']})")
+    #             continue
+            
+    #         # Get left neighbor POS
+    #         left_pos = None
+    #         if i > 0:
+    #             left_wd = word_data[i - 1]
+    #             if left_wd['is_stopword']:
+    #                 left_pos = left_wd['pos']
+    #             elif left_wd.get('predicted_pos'):
+    #                 pred = left_wd['predicted_pos']
+    #                 if isinstance(pred, tuple):
+    #                     left_pos = pred[0]
+    #                 else:
+    #                     left_pos = pred
+    #             elif left_wd['all_matches']:
+    #                 raw_pos = left_wd['all_matches'][0]['pos']
+    #                 left_pos = normalize_pos_string(raw_pos)
+    #         else:
+    #             left_pos = 'start'
+            
+    #         # Get right neighbor POS
+    #         right_pos = None
+    #         if i < len(word_data) - 1:
+    #             right_wd = word_data[i + 1]
+    #             if right_wd['is_stopword']:
+    #                 right_pos = right_wd['pos']
+    #             elif right_wd['all_matches']:
+    #                 raw_pos = right_wd['all_matches'][0]['pos']
+    #                 right_pos = normalize_pos_string(raw_pos)
+    #         else:
+    #             right_pos = 'end'
+            
+    #         # Apply grammar rules
+    #         predicted_pos = None
+            
+    #         if left_pos and right_pos:
+    #             predicted_pos = GRAMMAR_RULES.get((left_pos, right_pos))
+            
+    #         if not predicted_pos and left_pos:
+    #             predicted_pos = GRAMMAR_RULES.get((left_pos, None))
+            
+    #         if not predicted_pos and right_pos:
+    #             predicted_pos = GRAMMAR_RULES.get((None, right_pos))
+            
+    #         if not predicted_pos:
+    #             predicted_pos = [('noun', 0.75)]
+            
+    #         # Passive voice lookahead
+    #         has_be_before = any(
+    #             word_data[j]['is_stopword'] and word_data[j]['pos'] == 'be'
+    #             for j in range(0, i)
+    #         )
+    #         next_ends_ed = False
+    #         if i + 1 < len(word_data):
+    #             next_word_clean = word_data[i + 1]['word'].rstrip('?!.,;:')
+    #             next_ends_ed = next_word_clean.endswith('ed')
+
+    #         if has_be_before and next_ends_ed and not wd['is_stopword']:
+    #             is_known_adverb = any(
+    #                 m['pos'] in ('adverb',)
+    #                 for m in wd.get('all_matches', [])
+    #             )
+    #             if not is_known_adverb:
+    #                 predicted_pos = [
+    #                     ('noun', 0.95),
+    #                     ('proper_noun', 0.85),
+    #                     ('adjective', 0.4),
+    #                     ('adverb', 0.3),
+    #                 ]
+    #                 if self.verbose:
+    #                     print(f"       ⚡ Passive voice detected: [be]..._{wd['word']}_...[-ed] → noun (0.95)")
+
+    #         # Store both formats
+    #         if isinstance(predicted_pos, list):
+    #             wd['predicted_pos_list'] = predicted_pos
+    #             wd['predicted_pos'] = predicted_pos[0][0] if predicted_pos else 'noun'
+    #         else:
+    #             wd['predicted_pos_list'] = [(predicted_pos, 0.90)]
+    #             wd['predicted_pos'] = predicted_pos
+            
+    #         if self.verbose:
+    #             context = f"[{left_pos or '???'}] _{wd['word']}_ [{right_pos or '???'}]"
+    #             ngram_note = " (in n-gram)" if wd['part_of_ngram'] else ""
+    #             print(f"  [{position}] '{wd['word']}' → Predicted: {wd['predicted_pos_list']}{ngram_note}")
+    #             print(f"       Context: {context}")
 
     # =========================================================================
     # STEP 3.5: Refine POS from Word Suffixes
@@ -3669,31 +3978,194 @@ class WordDiscovery:
                 
                 if self.verbose:
                     print(f"  [{position}] '{wd['word']}' → Fallback: {best['category']} (no POS match, using rank){ngram_note}")
- 
+
+
     # =========================================================================
     # STEP 5: Correct Unknown Words (REDIS - only Redis step)
     # =========================================================================
     
-    def _step5_correct_unknowns(self, word_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Correct unknown/misspelled words using Redis fuzzy search."""
+    # def _step5_correct_unknowns(self, word_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    #     """Correct unknown/misspelled words using Redis fuzzy search."""
         
+    #     unknowns = []
+    #     pos_mismatches = []
+        
+    #     for wd in word_data:
+    #         if wd['status'] == 'unknown':
+    #             unknowns.append(wd)
+    #         # elif (
+    #         #     wd['status'] == 'valid'
+    #         #     and not wd['is_stopword']
+    #         #     and wd.get('predicted_pos')
+    #         #     and wd.get('pos')
+    #         #     and wd['predicted_pos'] != wd['pos']
+    #         # ):
+    #         #     predicted_list = wd.get('predicted_pos_list', [])
+    #         #     top_confidence = predicted_list[0][1] if predicted_list else 0
+    #         #     if top_confidence >= 0.90:
+    #         #         pos_mismatches.append(wd)
+    #         elif (
+    #             wd['status'] == 'valid'
+    #             and not wd['is_stopword']
+    #             and wd.get('predicted_pos')
+    #             and wd.get('pos')
+    #             and wd['predicted_pos'] != wd['pos']
+    #         ):
+    #             predicted_list = wd.get('predicted_pos_list', [])
+    #             top_confidence = predicted_list[0][1] if predicted_list else 0
+    #             word_rank = wd.get('selected_match', {}).get('rank', 0) or 0
+    #             # Only POS-correct low-rank words (likely typos, not real words)
+    #             # High-rank words are common in our corpus — trust them
+    #             if top_confidence >= 0.90 and word_rank < 200:
+    #                 pos_mismatches.append(wd)
+        
+    #     if not unknowns and not pos_mismatches:
+    #         if self.verbose:
+    #             print("\n" + "-" * 70)
+    #             print("🔧 STEP 5: Correct Unknowns")
+    #             print("-" * 70)
+    #             print("  (no unknown words)")
+    #         return []
+        
+    #     if self.verbose:
+    #         print("\n" + "-" * 70)
+    #         print("🔧 STEP 5: Correct Unknowns (Redis Fuzzy)")
+    #         print("-" * 70)
+        
+    #     corrections = []
+        
+    #     # Process unknowns
+    #     for wd in unknowns:
+    #         word = wd['word']
+    #         position = wd['position']
+    #         predicted_pos = wd['predicted_pos'] or 'noun'
+            
+    #         suggestions = get_fuzzy_suggestions(word, limit=10, max_distance=2)
+            
+    #         if not suggestions:
+    #             if self.verbose:
+    #                 print(f"  [{position}] '{word}' → No suggestions found")
+    #             continue
+            
+    #         compatible = [s for s in suggestions if is_pos_compatible(s['pos'], predicted_pos)]
+            
+    #         if compatible:
+    #             compatible.sort(key=lambda x: (x['distance'], -x['rank']))
+    #             best = compatible[0]
+    #         else:
+    #             best = suggestions[0]
+            
+    #         wd['status'] = 'corrected'
+    #         wd['corrected'] = best['term']
+    #         wd['corrected_display'] = best['display']
+    #         wd['pos'] = best['pos']
+    #         wd['distance'] = best['distance']
+    #         wd['selected_match'] = {
+    #             'term': best['term'],
+    #             'display': best['display'],
+    #             'category': best['category'],
+    #             'description': best['description'],
+    #             'pos': best['pos'],
+    #             'entity_type': best['entity_type'],
+    #             'rank': best['rank'],
+    #         }
+            
+    #         corrections.append({
+    #             'position': position,
+    #             'original': word,
+    #             'corrected': best['term'],
+    #             'distance': best['distance'],
+    #             'pos': best['pos'],
+    #             'category': best['category'],
+    #         })
+            
+    #         if self.verbose:
+    #             print(f"  [{position}] '{word}' → '{best['term']}' (distance={best['distance']}, pos={best['pos']})")
+    #             if len(suggestions) > 1:
+    #                 others = [s['term'] for s in suggestions[1:4] if s['term'] != best['term']]
+    #                 if others:
+    #                     print(f"       Other options: {others}")
+        
+    #     # Process POS mismatches
+    #     for wd in pos_mismatches:
+    #         word = wd['word']
+    #         position = wd['position']
+    #         predicted_pos = wd['predicted_pos']
+    #         original_pos = wd['pos']
+            
+    #         suggestions = get_fuzzy_suggestions(word, limit=10, max_distance=2)
+            
+    #         if not suggestions:
+    #             if self.verbose:
+    #                 print(f"  [{position}] '{word}' → POS mismatch ({original_pos}→{predicted_pos}), no suggestions found")
+    #             continue
+            
+    #         # compatible = [
+    #         #     s for s in suggestions
+    #         #     if is_pos_compatible(s['pos'], predicted_pos)
+    #         #     and s['term'] != word
+    #         #     and s['distance'] <= 2
+    #         # ]
+    #         compatible = [
+    #             s for s in suggestions
+    #             if is_pos_compatible(s['pos'], predicted_pos)
+    #             and s['term'] != word
+    #             and s['distance'] <= 1
+    #             and s['rank'] > word_rank * 3
+    #         ]
+            
+    #         if not compatible:
+    #             if self.verbose:
+    #                 print(f"  [{position}] '{word}' → POS mismatch ({original_pos}→{predicted_pos}), no compatible alternative found")
+    #             continue
+            
+    #         compatible.sort(key=lambda x: (x['distance'], -x['rank']))
+    #         best = compatible[0]
+            
+    #         wd['status'] = 'pos_corrected'
+    #         wd['corrected'] = best['term']
+    #         wd['corrected_display'] = best['display']
+    #         wd['original_pos'] = original_pos
+    #         wd['pos'] = best['pos']
+    #         wd['distance'] = best['distance']
+    #         wd['selected_match'] = {
+    #             'term': best['term'],
+    #             'display': best['display'],
+    #             'category': best['category'],
+    #             'description': best['description'],
+    #             'pos': best['pos'],
+    #             'entity_type': best['entity_type'],
+    #             'rank': best['rank'],
+    #         }
+            
+    #         corrections.append({
+    #             'position': position,
+    #             'original': word,
+    #             'corrected': best['term'],
+    #             'distance': best['distance'],
+    #             'pos': best['pos'],
+    #             'category': best['category'],
+    #             'correction_type': 'pos_mismatch',
+    #         })
+            
+    #         if self.verbose:
+    #             print(f"  [{position}] '{word}' → '{best['term']}' (POS: {original_pos}→{best['pos']}, distance={best['distance']})")
+    #             if len(compatible) > 1:
+    #                 others = [s['term'] for s in compatible[1:4] if s['term'] != best['term']]
+    #                 if others:
+    #                     print(f"       Other options: {others}")
+        
+    #     return corrections
+
+    def _step5_correct_unknowns(self, word_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    
+
         unknowns = []
         pos_mismatches = []
-        
+
         for wd in word_data:
             if wd['status'] == 'unknown':
                 unknowns.append(wd)
-            # elif (
-            #     wd['status'] == 'valid'
-            #     and not wd['is_stopword']
-            #     and wd.get('predicted_pos')
-            #     and wd.get('pos')
-            #     and wd['predicted_pos'] != wd['pos']
-            # ):
-            #     predicted_list = wd.get('predicted_pos_list', [])
-            #     top_confidence = predicted_list[0][1] if predicted_list else 0
-            #     if top_confidence >= 0.90:
-            #         pos_mismatches.append(wd)
             elif (
                 wd['status'] == 'valid'
                 and not wd['is_stopword']
@@ -3704,11 +4176,9 @@ class WordDiscovery:
                 predicted_list = wd.get('predicted_pos_list', [])
                 top_confidence = predicted_list[0][1] if predicted_list else 0
                 word_rank = wd.get('selected_match', {}).get('rank', 0) or 0
-                # Only POS-correct low-rank words (likely typos, not real words)
-                # High-rank words are common in our corpus — trust them
                 if top_confidence >= 0.90 and word_rank < 200:
                     pos_mismatches.append(wd)
-        
+
         if not unknowns and not pos_mismatches:
             if self.verbose:
                 print("\n" + "-" * 70)
@@ -3716,36 +4186,86 @@ class WordDiscovery:
                 print("-" * 70)
                 print("  (no unknown words)")
             return []
-        
+
         if self.verbose:
             print("\n" + "-" * 70)
-            print("🔧 STEP 5: Correct Unknowns (Redis Fuzzy)")
+            print("🔧 STEP 5: Correct Unknowns (Redis — TRUE Pipeline Batch)")
             print("-" * 70)
+            print(f"  Unknowns:      {len(unknowns)}")
+            print(f"  POS mismatches: {len(pos_mismatches)}")
+
+        all_words_to_correct = [
+            {
+                'wd': wd,
+                'word': wd['word'],
+                'predicted_pos': wd.get('predicted_pos') or 'noun',
+                'correction_type': 'unknown'
+            }
+            for wd in unknowns
+        ] + [
+            {
+                'wd': wd,
+                'word': wd['word'],
+                'predicted_pos': wd.get('predicted_pos') or 'noun',
+                'correction_type': 'pos_mismatch',
+                'word_rank': wd.get('selected_match', {}).get('rank', 0) or 0
+            }
+            for wd in pos_mismatches
+        ]
+
+        # -------------------------------------------------------------------------
+        # ONE true Redis pipeline batch call for ALL unknown words simultaneously
+        # -------------------------------------------------------------------------
+        words_to_fetch = [item['word'] for item in all_words_to_correct]
         
+        if self.verbose:
+            print(f"  Sending to Redis pipeline: {words_to_fetch}")
+
+        batch_suggestions = get_fuzzy_suggestions_batch(
+            words_to_fetch, limit=10, max_distance=2
+        )
+
+        # -------------------------------------------------------------------------
+        # Map results back to positions in word_data
+        # -------------------------------------------------------------------------
         corrections = []
-        
-        # Process unknowns
-        for wd in unknowns:
-            word = wd['word']
+
+        for item in all_words_to_correct:
+            wd = item['wd']
+            word = item['word']
             position = wd['position']
-            predicted_pos = wd['predicted_pos'] or 'noun'
-            
-            suggestions = get_fuzzy_suggestions(word, limit=10, max_distance=2)
-            
+            predicted_pos = item['predicted_pos']
+            correction_type = item['correction_type']
+
+            suggestions = batch_suggestions.get(word.lower().strip(), [])
+
             if not suggestions:
                 if self.verbose:
                     print(f"  [{position}] '{word}' → No suggestions found")
                 continue
-            
-            compatible = [s for s in suggestions if is_pos_compatible(s['pos'], predicted_pos)]
-            
+
+            compatible = [
+                s for s in suggestions
+                if is_pos_compatible(s['pos'], predicted_pos)
+            ]
+
+            if correction_type == 'pos_mismatch':
+                word_rank = item.get('word_rank', 0)
+                compatible = [
+                    s for s in compatible
+                    if s['term'] != word
+                    and s['distance'] <= 1
+                    and s['rank'] > word_rank * 3
+                ]
+
             if compatible:
                 compatible.sort(key=lambda x: (x['distance'], -x['rank']))
                 best = compatible[0]
             else:
                 best = suggestions[0]
-            
-            wd['status'] = 'corrected'
+
+            status = 'corrected' if correction_type == 'unknown' else 'pos_corrected'
+            wd['status'] = status
             wd['corrected'] = best['term']
             wd['corrected_display'] = best['display']
             wd['pos'] = best['pos']
@@ -3759,7 +4279,7 @@ class WordDiscovery:
                 'entity_type': best['entity_type'],
                 'rank': best['rank'],
             }
-            
+
             corrections.append({
                 'position': position,
                 'original': word,
@@ -3767,84 +4287,13 @@ class WordDiscovery:
                 'distance': best['distance'],
                 'pos': best['pos'],
                 'category': best['category'],
+                'correction_type': correction_type,
             })
-            
+
             if self.verbose:
-                print(f"  [{position}] '{word}' → '{best['term']}' (distance={best['distance']}, pos={best['pos']})")
-                if len(suggestions) > 1:
-                    others = [s['term'] for s in suggestions[1:4] if s['term'] != best['term']]
-                    if others:
-                        print(f"       Other options: {others}")
-        
-        # Process POS mismatches
-        for wd in pos_mismatches:
-            word = wd['word']
-            position = wd['position']
-            predicted_pos = wd['predicted_pos']
-            original_pos = wd['pos']
-            
-            suggestions = get_fuzzy_suggestions(word, limit=10, max_distance=2)
-            
-            if not suggestions:
-                if self.verbose:
-                    print(f"  [{position}] '{word}' → POS mismatch ({original_pos}→{predicted_pos}), no suggestions found")
-                continue
-            
-            # compatible = [
-            #     s for s in suggestions
-            #     if is_pos_compatible(s['pos'], predicted_pos)
-            #     and s['term'] != word
-            #     and s['distance'] <= 2
-            # ]
-            compatible = [
-                s for s in suggestions
-                if is_pos_compatible(s['pos'], predicted_pos)
-                and s['term'] != word
-                and s['distance'] <= 1
-                and s['rank'] > word_rank * 3
-            ]
-            
-            if not compatible:
-                if self.verbose:
-                    print(f"  [{position}] '{word}' → POS mismatch ({original_pos}→{predicted_pos}), no compatible alternative found")
-                continue
-            
-            compatible.sort(key=lambda x: (x['distance'], -x['rank']))
-            best = compatible[0]
-            
-            wd['status'] = 'pos_corrected'
-            wd['corrected'] = best['term']
-            wd['corrected_display'] = best['display']
-            wd['original_pos'] = original_pos
-            wd['pos'] = best['pos']
-            wd['distance'] = best['distance']
-            wd['selected_match'] = {
-                'term': best['term'],
-                'display': best['display'],
-                'category': best['category'],
-                'description': best['description'],
-                'pos': best['pos'],
-                'entity_type': best['entity_type'],
-                'rank': best['rank'],
-            }
-            
-            corrections.append({
-                'position': position,
-                'original': word,
-                'corrected': best['term'],
-                'distance': best['distance'],
-                'pos': best['pos'],
-                'category': best['category'],
-                'correction_type': 'pos_mismatch',
-            })
-            
-            if self.verbose:
-                print(f"  [{position}] '{word}' → '{best['term']}' (POS: {original_pos}→{best['pos']}, distance={best['distance']})")
-                if len(compatible) > 1:
-                    others = [s['term'] for s in compatible[1:4] if s['term'] != best['term']]
-                    if others:
-                        print(f"       Other options: {others}")
-        
+                print(f"  [{position}] '{word}' → '{best['term']}' "
+                    f"(distance={best['distance']}, pos={best['pos']})")
+
         return corrections
 
     # =========================================================================
