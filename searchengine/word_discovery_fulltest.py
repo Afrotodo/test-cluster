@@ -4214,6 +4214,38 @@ class WordDiscovery:
         ]
 
         # -------------------------------------------------------------------------
+        # STOPWORD PRE-CHECK: Before Redis, check edit distance against all known
+        # stopwords directly in RAM. Stopwords have rank=0 in Redis so they lose
+        # to real terms. Checking here bypasses that problem entirely.
+        # -------------------------------------------------------------------------
+        for item in all_words_to_correct:
+            word = item['word']
+            predicted_pos = item['predicted_pos']
+
+            stopword_candidates = []
+            for sw, sw_pos in STOPWORD_POS.items():
+                dist = damerau_levenshtein_distance(word.lower(), sw)
+                if dist <= 2 and is_pos_compatible(sw_pos, predicted_pos):
+                    stopword_candidates.append({
+                        'term': sw,
+                        'display': sw,
+                        'pos': sw_pos,
+                        'category': 'stopword',
+                        'entity_type': 'stopword',
+                        'rank': 0,
+                        'distance': dist,
+                    })
+
+            if stopword_candidates:
+                stopword_candidates.sort(key=lambda x: (
+                    x['distance'],
+                    abs(len(x['term']) - len(word))  # prefer closer length
+                ))
+                item['stopword_override'] = stopword_candidates[0]
+            else:
+                item['stopword_override'] = None
+
+        # -------------------------------------------------------------------------
         # ONE true Redis pipeline batch call for ALL unknown words simultaneously
         # -------------------------------------------------------------------------
         words_to_fetch = [item['word'] for item in all_words_to_correct]
@@ -4237,28 +4269,20 @@ class WordDiscovery:
             predicted_pos = item['predicted_pos']
             correction_type = item['correction_type']
 
-            suggestions = batch_suggestions.get(word.lower().strip(), [])
-
-            if not suggestions:
+            # Use stopword override if found — skip Redis result entirely
+            if item.get('stopword_override'):
+                best = item['stopword_override']
                 if self.verbose:
-                    print(f"  [{position}] '{word}' → No suggestions found")
-                continue
-
-            # ---------------------------------------------------------------------
-            # RAM FIRST: Check if any Redis suggestion is a known stopword.
-            # Redis may return non-stopword matches (e.g. "nz" for "iz") before
-            # the correct stopword ("is"). Prefer stopwords that match predicted POS.
-            # ---------------------------------------------------------------------
-            stopword_hits = [
-                s for s in suggestions
-                if s['term'].lower() in STOPWORD_POS
-                and is_pos_compatible(STOPWORD_POS[s['term'].lower()], predicted_pos)
-            ]
-
-            if stopword_hits:
-                stopword_hits.sort(key=lambda x: x['distance'])
-                best = stopword_hits[0]
+                    print(f"  [{position}] '{word}' → '{best['term']}' "
+                        f"(stopword override, distance={best['distance']})")
             else:
+                suggestions = batch_suggestions.get(word.lower().strip(), [])
+
+                if not suggestions:
+                    if self.verbose:
+                        print(f"  [{position}] '{word}' → No suggestions found")
+                    continue
+
                 compatible = [
                     s for s in suggestions
                     if is_pos_compatible(s['pos'], predicted_pos)
@@ -4278,6 +4302,10 @@ class WordDiscovery:
                     best = compatible[0]
                 else:
                     best = suggestions[0]
+
+                if self.verbose:
+                    print(f"  [{position}] '{word}' → '{best['term']}' "
+                        f"(distance={best['distance']}, pos={best['pos']})")
 
             status = 'corrected' if correction_type == 'unknown' else 'pos_corrected'
             wd['status'] = status
@@ -4304,10 +4332,6 @@ class WordDiscovery:
                 'category': best['category'],
                 'correction_type': correction_type,
             })
-
-            if self.verbose:
-                print(f"  [{position}] '{word}' → '{best['term']}' "
-                    f"(distance={best['distance']}, pos={best['pos']})")
 
         return corrections
 
