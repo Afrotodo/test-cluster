@@ -2332,6 +2332,7 @@ import time
 import redis
 from typing import Dict, Any, List, Optional, Tuple, Set
 from decouple import config
+from .vocabulary_cache import vocab_cache, STOPWORD_POS
 
 
 # =============================================================================
@@ -4158,7 +4159,6 @@ class WordDiscovery:
     #     return corrections
 
     def _step5_correct_unknowns(self, word_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    
 
         unknowns = []
         pos_mismatches = []
@@ -4191,7 +4191,7 @@ class WordDiscovery:
             print("\n" + "-" * 70)
             print("🔧 STEP 5: Correct Unknowns (Redis — TRUE Pipeline Batch)")
             print("-" * 70)
-            print(f"  Unknowns:      {len(unknowns)}")
+            print(f"  Unknowns:       {len(unknowns)}")
             print(f"  POS mismatches: {len(pos_mismatches)}")
 
         all_words_to_correct = [
@@ -4217,7 +4217,7 @@ class WordDiscovery:
         # ONE true Redis pipeline batch call for ALL unknown words simultaneously
         # -------------------------------------------------------------------------
         words_to_fetch = [item['word'] for item in all_words_to_correct]
-        
+
         if self.verbose:
             print(f"  Sending to Redis pipeline: {words_to_fetch}")
 
@@ -4244,25 +4244,40 @@ class WordDiscovery:
                     print(f"  [{position}] '{word}' → No suggestions found")
                 continue
 
-            compatible = [
+            # ---------------------------------------------------------------------
+            # RAM FIRST: Check if any Redis suggestion is a known stopword.
+            # Redis may return non-stopword matches (e.g. "nz" for "iz") before
+            # the correct stopword ("is"). Prefer stopwords that match predicted POS.
+            # ---------------------------------------------------------------------
+            stopword_hits = [
                 s for s in suggestions
-                if is_pos_compatible(s['pos'], predicted_pos)
+                if s['term'].lower() in STOPWORD_POS
+                and is_pos_compatible(STOPWORD_POS[s['term'].lower()], predicted_pos)
             ]
 
-            if correction_type == 'pos_mismatch':
-                word_rank = item.get('word_rank', 0)
+            if stopword_hits:
+                stopword_hits.sort(key=lambda x: x['distance'])
+                best = stopword_hits[0]
+            else:
                 compatible = [
-                    s for s in compatible
-                    if s['term'] != word
-                    and s['distance'] <= 1
-                    and s['rank'] > word_rank * 3
+                    s for s in suggestions
+                    if is_pos_compatible(s['pos'], predicted_pos)
                 ]
 
-            if compatible:
-                compatible.sort(key=lambda x: (x['distance'], -x['rank']))
-                best = compatible[0]
-            else:
-                best = suggestions[0]
+                if correction_type == 'pos_mismatch':
+                    word_rank = item.get('word_rank', 0)
+                    compatible = [
+                        s for s in compatible
+                        if s['term'] != word
+                        and s['distance'] <= 1
+                        and s['rank'] > word_rank * 3
+                    ]
+
+                if compatible:
+                    compatible.sort(key=lambda x: (x['distance'], -x['rank']))
+                    best = compatible[0]
+                else:
+                    best = suggestions[0]
 
             status = 'corrected' if correction_type == 'unknown' else 'pos_corrected'
             wd['status'] = status
