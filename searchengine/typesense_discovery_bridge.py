@@ -220,7 +220,7 @@ client = typesense.Client({
     'connection_timeout_seconds': 5
 })
 
-COLLECTION_NAME = 'documents'
+COLLECTION_NAME = 'document'
 
 
 # ============================================================================

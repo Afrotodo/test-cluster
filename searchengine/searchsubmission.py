@@ -214,30 +214,182 @@
     
 #     print("=" * 50)
 
+# """
+# searchsubmission.py
+# Handles form submissions and uses word discovery for spelling correction.
+
+# Updated: Now uses word_discovery_optimized.py
+# """
+
+# from typing import Dict, Any, List
+
+# from .word_discovery import process_query_optimized, word_discovery_multi
+# from .searchapi import RedisLookupTable
+
+
+# def process_search_submission(query: str, session_id: str = '') -> Dict[str, Any]:
+#     """
+#     Process a search form submission.
+    
+#     Args:
+#         query: The search query from the form
+#         session_id: Optional session identifier
+    
+#     Returns:
+#         Dict containing processed results
+#     """
+#     result = {
+#         'success': True,
+#         'original_query': query,
+#         'corrected_query': '',
+#         'corrections': [],
+#         'tuple_array': [],
+#         'session_id': session_id,
+#         'error': None
+#     }
+    
+#     # Validate input
+#     if not query or not query.strip():
+#         result['success'] = False
+#         result['error'] = 'Empty query'
+#         return result
+    
+#     # Get Redis client
+#     redis_client = RedisLookupTable.get_client()
+    
+#     if not redis_client:
+#         result['success'] = False
+#         result['error'] = 'Redis connection failed'
+#         return result
+    
+#     try:
+#         # Process query with optimized word discovery
+#         # Note: prefix parameter removed - searchapi.py uses "term:" prefix
+#         corrections, tuple_array, corrected_query = word_discovery_multi(
+#             query,
+#             redis_client=redis_client,
+#             verbose=False
+#         )
+        
+#         result['corrected_query'] = corrected_query
+#         result['corrections'] = corrections
+#         result['tuple_array'] = tuple_array
+        
+#         # Print results for debugging
+#         _print_results(result)
+        
+#         return result
+        
+#     except Exception as e:
+#         result['success'] = False
+#         result['error'] = str(e)
+#         return result
+
+
+# def process_search_submission_full(query: str, session_id: str = '') -> Dict[str, Any]:
+#     """
+#     Process search submission with full word discovery results.
+    
+#     Returns categorized terms for search strategy decisions.
+    
+#     Args:
+#         query: The search query from the form
+#         session_id: Optional session identifier
+    
+#     Returns:
+#         Dict containing:
+#         - valid_terms: Words found in dictionary
+#         - unknown_terms: Words not in dictionary
+#         - search_strategy: 'strict', 'mixed', or 'semantic'
+#         - corrected_query: Query with corrections applied
+#     """
+#     result = {
+#         'success': True,
+#         'original_query': query,
+#         'session_id': session_id,
+#         'error': None
+#     }
+    
+#     # Validate input
+#     if not query or not query.strip():
+#         result['success'] = False
+#         result['error'] = 'Empty query'
+#         return result
+    
+#     # Get Redis client
+#     redis_client = RedisLookupTable.get_client()
+    
+#     if not redis_client:
+#         result['success'] = False
+#         result['error'] = 'Redis connection failed'
+#         return result
+    
+#     try:
+#         # Use the full optimized processing
+#         discovery = process_query_optimized(query, verbose=False)
+        
+#         # Merge results
+#         result.update(discovery)
+        
+#         # Print results for debugging
+#         _print_full_results(result)
+        
+#         return result
+        
+#     except Exception as e:
+#         result['success'] = False
+#         result['error'] = str(e)
+#         return result
+
+
+# def _print_results(result: Dict[str, Any]) -> None:
+#     """Print processing results to terminal for debugging."""
+#     print("=" * 50)
+#     print("SEARCH SUBMISSION PROCESSED:")
+#     print(f"  Original Query: {result['original_query']}")
+#     print(f"  Corrected Query: {result['corrected_query']}")
+#     print(f"  Session ID: {result['session_id']}")
+    
+#     if result['corrections']:
+#         print("  Corrections Made:")
+#         for c in result['corrections']:
+#             if c.get('is_bigram'):
+#                 print(f"    [BIGRAM] '{c.get('original', '')}' → '{c.get('corrected', '')}' (distance: {c.get('distance', 0)})")
+#             else:
+#                 print(f"    [WORD]   '{c.get('original', '')}' → '{c.get('corrected', '')}' (distance: {c.get('distance', 0)})")
+    
+#     print("=" * 50)
+
+
+# def _print_full_results(result: Dict[str, Any]) -> None:
+#     """Print full processing results to terminal for debugging."""
+#     print("=" * 50)
+#     print("SEARCH SUBMISSION PROCESSED (FULL):")
+#     print(f"  Original Query: {result.get('original_query', '')}")
+#     print(f"  Corrected Query: {result.get('corrected_query', '')}")
+#     print(f"  Search Strategy: {result.get('search_strategy', 'unknown')}")
+#     print(f"  Valid Terms: {[t['search_word'] for t in result.get('valid_terms', [])]}")
+#     print(f"  Unknown Terms: {[t['word'] for t in result.get('unknown_terms', [])]}")
+#     print(f"  Session ID: {result.get('session_id', '')}")
+    
+#     if result.get('corrected_terms'):
+#         print("  Corrections Made:")
+#         for c in result['corrected_terms']:
+#             print(f"    '{c.get('original', '')}' → '{c.get('corrected', '')}'")
+    
+#     print("=" * 50)
+
 """
 searchsubmission.py
 Handles form submissions and uses word discovery for spelling correction.
-
-Updated: Now uses word_discovery_optimized.py
 """
 
-from typing import Dict, Any, List
-
-from .word_discovery import process_query_optimized, word_discovery_multi
-from .searchapi import RedisLookupTable
+from typing import Dict, Any
+from .word_discovery_fulltest import WordDiscovery
 
 
 def process_search_submission(query: str, session_id: str = '') -> Dict[str, Any]:
-    """
-    Process a search form submission.
-    
-    Args:
-        query: The search query from the form
-        session_id: Optional session identifier
-    
-    Returns:
-        Dict containing processed results
-    """
+    """Process a search form submission."""
     result = {
         'success': True,
         'original_query': query,
@@ -247,39 +399,25 @@ def process_search_submission(query: str, session_id: str = '') -> Dict[str, Any
         'session_id': session_id,
         'error': None
     }
-    
-    # Validate input
+
     if not query or not query.strip():
         result['success'] = False
         result['error'] = 'Empty query'
         return result
-    
-    # Get Redis client
-    redis_client = RedisLookupTable.get_client()
-    
-    if not redis_client:
-        result['success'] = False
-        result['error'] = 'Redis connection failed'
-        return result
-    
+
     try:
-        # Process query with optimized word discovery
-        # Note: prefix parameter removed - searchapi.py uses "term:" prefix
-        corrections, tuple_array, corrected_query = word_discovery_multi(
-            query,
-            redis_client=redis_client,
-            verbose=False
-        )
-        
-        result['corrected_query'] = corrected_query
-        result['corrections'] = corrections
-        result['tuple_array'] = tuple_array
-        
-        # Print results for debugging
+        discovery = WordDiscovery(verbose=False)
+        output = discovery.process(query)
+
+        result['corrected_query'] = output['corrected_query']
+        result['corrections'] = output['corrections']
+        result['terms'] = output['terms']
+        result['stats'] = output['stats']
+        result['ngrams'] = output['ngrams']
+
         _print_results(result)
-        
         return result
-        
+
     except Exception as e:
         result['success'] = False
         result['error'] = str(e)
@@ -287,55 +425,27 @@ def process_search_submission(query: str, session_id: str = '') -> Dict[str, Any
 
 
 def process_search_submission_full(query: str, session_id: str = '') -> Dict[str, Any]:
-    """
-    Process search submission with full word discovery results.
-    
-    Returns categorized terms for search strategy decisions.
-    
-    Args:
-        query: The search query from the form
-        session_id: Optional session identifier
-    
-    Returns:
-        Dict containing:
-        - valid_terms: Words found in dictionary
-        - unknown_terms: Words not in dictionary
-        - search_strategy: 'strict', 'mixed', or 'semantic'
-        - corrected_query: Query with corrections applied
-    """
+    """Process search submission with full word discovery results."""
     result = {
         'success': True,
         'original_query': query,
         'session_id': session_id,
         'error': None
     }
-    
-    # Validate input
+
     if not query or not query.strip():
         result['success'] = False
         result['error'] = 'Empty query'
         return result
-    
-    # Get Redis client
-    redis_client = RedisLookupTable.get_client()
-    
-    if not redis_client:
-        result['success'] = False
-        result['error'] = 'Redis connection failed'
-        return result
-    
+
     try:
-        # Use the full optimized processing
-        discovery = process_query_optimized(query, verbose=False)
-        
-        # Merge results
-        result.update(discovery)
-        
-        # Print results for debugging
+        discovery = WordDiscovery(verbose=False)
+        output = discovery.process(query)
+        result.update(output)
+
         _print_full_results(result)
-        
         return result
-        
+
     except Exception as e:
         result['success'] = False
         result['error'] = str(e)
@@ -343,38 +453,31 @@ def process_search_submission_full(query: str, session_id: str = '') -> Dict[str
 
 
 def _print_results(result: Dict[str, Any]) -> None:
-    """Print processing results to terminal for debugging."""
     print("=" * 50)
     print("SEARCH SUBMISSION PROCESSED:")
     print(f"  Original Query: {result['original_query']}")
     print(f"  Corrected Query: {result['corrected_query']}")
     print(f"  Session ID: {result['session_id']}")
-    
+
     if result['corrections']:
         print("  Corrections Made:")
         for c in result['corrections']:
-            if c.get('is_bigram'):
-                print(f"    [BIGRAM] '{c.get('original', '')}' → '{c.get('corrected', '')}' (distance: {c.get('distance', 0)})")
-            else:
-                print(f"    [WORD]   '{c.get('original', '')}' → '{c.get('corrected', '')}' (distance: {c.get('distance', 0)})")
-    
+            print(f"    '{c.get('original', '')}' → '{c.get('corrected', '')}' (distance: {c.get('distance', 0)})")
+
     print("=" * 50)
 
 
 def _print_full_results(result: Dict[str, Any]) -> None:
-    """Print full processing results to terminal for debugging."""
     print("=" * 50)
     print("SEARCH SUBMISSION PROCESSED (FULL):")
     print(f"  Original Query: {result.get('original_query', '')}")
     print(f"  Corrected Query: {result.get('corrected_query', '')}")
-    print(f"  Search Strategy: {result.get('search_strategy', 'unknown')}")
-    print(f"  Valid Terms: {[t['search_word'] for t in result.get('valid_terms', [])]}")
-    print(f"  Unknown Terms: {[t['word'] for t in result.get('unknown_terms', [])]}")
+    print(f"  Stats: {result.get('stats', {})}")
     print(f"  Session ID: {result.get('session_id', '')}")
-    
-    if result.get('corrected_terms'):
+
+    if result.get('corrections'):
         print("  Corrections Made:")
-        for c in result['corrected_terms']:
+        for c in result['corrections']:
             print(f"    '{c.get('original', '')}' → '{c.get('corrected', '')}'")
-    
+
     print("=" * 50)

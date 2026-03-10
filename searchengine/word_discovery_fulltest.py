@@ -2332,9 +2332,48 @@ import time
 import redis
 from typing import Dict, Any, List, Optional, Tuple, Set
 from decouple import config
-from .vocabulary_cache import vocab_cache, STOPWORD_POS
 
 
+
+STOPWORD_POS = {
+    'a': 'determiner', 'an': 'determiner', 'the': 'determiner',
+    'this': 'determiner', 'that': 'determiner',
+    'these': 'determiner', 'those': 'determiner',
+    'some': 'determiner', 'any': 'determiner',
+    'each': 'determiner', 'every': 'determiner',
+    'all': 'determiner', 'both': 'determiner',
+    'no': 'determiner', 'few': 'determiner',
+    'more': 'determiner', 'most': 'determiner',
+    'other': 'determiner', 'such': 'determiner',
+    'own': 'determiner', 'my': 'determiner', 'your': 'determiner',
+    'his': 'determiner', 'its': 'determiner', 'our': 'determiner',
+    'their': 'determiner', 'her': 'determiner',
+    'in': 'preposition', 'on': 'preposition', 'at': 'preposition',
+    'to': 'preposition', 'for': 'preposition', 'of': 'preposition',
+    'from': 'preposition', 'by': 'preposition', 'with': 'preposition',
+    'into': 'preposition', 'through': 'preposition',
+    'during': 'preposition', 'before': 'preposition', 'after': 'preposition',
+    'about': 'preposition', 'between': 'preposition', 'under': 'preposition',
+    'above': 'preposition', 'below': 'preposition',
+    'and': 'conjunction', 'or': 'conjunction', 'but': 'conjunction',
+    'so': 'conjunction', 'than': 'conjunction',
+    'i': 'pronoun', 'you': 'pronoun', 'he': 'pronoun', 'she': 'pronoun',
+    'it': 'pronoun', 'we': 'pronoun', 'they': 'pronoun',
+    'me': 'pronoun', 'him': 'pronoun', 'us': 'pronoun', 'them': 'pronoun',
+    'what': 'pronoun', 'which': 'pronoun', 'who': 'pronoun', 'whom': 'pronoun',
+    'is': 'be', 'are': 'be', 'was': 'be', 'were': 'be',
+    'be': 'be', 'been': 'be', 'being': 'be', 'am': 'be',
+    'have': 'auxiliary', 'has': 'auxiliary', 'had': 'auxiliary',
+    'do': 'auxiliary', 'does': 'auxiliary', 'did': 'auxiliary',
+    'will': 'modal', 'would': 'modal', 'could': 'modal',
+    'should': 'modal', 'may': 'modal', 'might': 'modal',
+    'must': 'modal', 'can': 'modal',
+    'where': 'adverb', 'when': 'adverb', 'why': 'adverb', 'how': 'adverb',
+    'here': 'adverb', 'there': 'adverb', 'then': 'adverb', 'now': 'adverb',
+    'too': 'adverb', 'very': 'adverb', 'just': 'adverb', 'also': 'adverb',
+    'only': 'adverb', 'not': 'adverb', 'same': 'adverb', 'once': 'adverb',
+    'so': 'adverb',
+}
 # =============================================================================
 # CONFIGURATION
 # =============================================================================
@@ -3325,6 +3364,7 @@ class WordDiscovery:
                     'pos': STOPWORDS[word_lower],
                     'predicted_pos': None,
                     'all_matches': [],
+
                     'selected_match': {
                         'term': word_lower,
                         'display': word_lower,
@@ -3377,6 +3417,7 @@ class WordDiscovery:
                     print(f"  [{position}] '{word_lower}' → UNKNOWN")
         
         return word_data
+
     
     # =========================================================================
     # STEP 2: Detect N-grams (RAM)
@@ -4214,39 +4255,7 @@ class WordDiscovery:
         ]
 
         # -------------------------------------------------------------------------
-        # STOPWORD PRE-CHECK: Before Redis, check edit distance against all known
-        # stopwords directly in RAM. Stopwords have rank=0 in Redis so they lose
-        # to real terms. Checking here bypasses that problem entirely.
-        # -------------------------------------------------------------------------
-        for item in all_words_to_correct:
-            word = item['word']
-            predicted_pos = item['predicted_pos']
-
-            stopword_candidates = []
-            for sw, sw_pos in STOPWORD_POS.items():
-                dist = damerau_levenshtein_distance(word.lower(), sw)
-                if dist <= 2 and is_pos_compatible(sw_pos, predicted_pos):
-                    stopword_candidates.append({
-                        'term': sw,
-                        'display': sw,
-                        'pos': sw_pos,
-                        'category': 'stopword',
-                        'entity_type': 'stopword',
-                        'rank': 0,
-                        'distance': dist,
-                    })
-
-            if stopword_candidates:
-                stopword_candidates.sort(key=lambda x: (
-                    x['distance'],
-                    abs(len(x['term']) - len(word))  # prefer closer length
-                ))
-                item['stopword_override'] = stopword_candidates[0]
-            else:
-                item['stopword_override'] = None
-
-        # -------------------------------------------------------------------------
-        # ONE true Redis pipeline batch call for ALL unknown words simultaneously
+        # REDIS: All unknowns sent as ONE batch pipeline call
         # -------------------------------------------------------------------------
         words_to_fetch = [item['word'] for item in all_words_to_correct]
 
@@ -4258,7 +4267,7 @@ class WordDiscovery:
         )
 
         # -------------------------------------------------------------------------
-        # Map results back to positions in word_data
+        # Map results back to word_data
         # -------------------------------------------------------------------------
         corrections = []
 
@@ -4269,43 +4278,42 @@ class WordDiscovery:
             predicted_pos = item['predicted_pos']
             correction_type = item['correction_type']
 
-            # Use stopword override if found — skip Redis result entirely
-            if item.get('stopword_override'):
-                best = item['stopword_override']
+            suggestions = batch_suggestions.get(word.lower().strip(), [])
+
+            # Mark compatible and save onto wd for debug output
+            for s in suggestions:
+                s['compatible'] = is_pos_compatible(s['pos'], predicted_pos)
+            wd['redis_suggestions'] = suggestions
+
+            if not suggestions:
                 if self.verbose:
-                    print(f"  [{position}] '{word}' → '{best['term']}' "
-                        f"(stopword override, distance={best['distance']})")
-            else:
-                suggestions = batch_suggestions.get(word.lower().strip(), [])
+                    print(f"  [{position}] '{word}' → No suggestions found")
+                continue
 
-                if not suggestions:
-                    if self.verbose:
-                        print(f"  [{position}] '{word}' → No suggestions found")
-                    continue
+            compatible = [s for s in suggestions if s['compatible']]
 
+            if correction_type == 'pos_mismatch':
+                word_rank = item.get('word_rank', 0)
                 compatible = [
-                    s for s in suggestions
-                    if is_pos_compatible(s['pos'], predicted_pos)
+                    s for s in compatible
+                    if s['term'] != word
+                    and s['distance'] <= 1
+                    and s['rank'] > word_rank * 3
                 ]
 
-                if correction_type == 'pos_mismatch':
-                    word_rank = item.get('word_rank', 0)
-                    compatible = [
-                        s for s in compatible
-                        if s['term'] != word
-                        and s['distance'] <= 1
-                        and s['rank'] > word_rank * 3
-                    ]
+            if compatible:
+                compatible.sort(key=lambda x: (
+                    x['distance'],
+                    self._pos_match_score(x['pos'], predicted_pos),
+                    -x['rank']
+                ))
+                best = compatible[0]
+            else:
+                best = suggestions[0]
 
-                if compatible:
-                    compatible.sort(key=lambda x: (x['distance'], -x['rank']))
-                    best = compatible[0]
-                else:
-                    best = suggestions[0]
-
-                if self.verbose:
-                    print(f"  [{position}] '{word}' → '{best['term']}' "
-                        f"(distance={best['distance']}, pos={best['pos']})")
+            if self.verbose:
+                print(f"  [{position}] '{word}' → '{best['term']}' "
+                    f"(distance={best['distance']}, pos={best['pos']}, rank={best['rank']})")
 
             status = 'corrected' if correction_type == 'unknown' else 'pos_corrected'
             wd['status'] = status
@@ -4334,6 +4342,31 @@ class WordDiscovery:
             })
 
         return corrections
+
+
+    def _pos_match_score(self, pos_value: Any, predicted_pos: str) -> int:
+        """
+        Returns 0 if pos_value exactly matches predicted_pos,
+        1 if compatible but not exact.
+        Used to sort Redis suggestions — POS exactness before rank.
+        """
+        if isinstance(pos_value, list):
+            pos_list = pos_value
+        elif isinstance(pos_value, str) and pos_value.startswith('['):
+            import ast
+            try:
+                pos_list = ast.literal_eval(pos_value)
+            except:
+                pos_list = [pos_value]
+        else:
+            pos_list = [pos_value]
+
+        for p in pos_list:
+            if p == predicted_pos:
+                return 0  # exact match
+        return 1  # compatible but not exact
+
+
 
     # =========================================================================
     # STEP 6: Re-check N-grams After Correction (RAM)

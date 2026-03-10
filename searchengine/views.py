@@ -539,7 +539,7 @@ def reset_analytics_client():
 typesense_manager = TypesenseManager()
 
 # Collection name constant
-COLLECTION_NAME = 'documents'
+COLLECTION_NAME = 'document'
 
 
 # =============================================================================
