@@ -1521,6 +1521,52 @@ def fetch_full_documents(document_ids: List[str], query: str = '') -> List[Dict]
         print(f"❌ fetch_full_documents error: {e}")
         return []
 
+def fetch_documents_by_semantic_uuid(
+    semantic_uuid: str,
+    exclude_uuid: str = None,
+    limit: int = 5
+) -> List[Dict]:
+    """
+    Fetch documents that share the same semantic group.
+    Used for related searches on the question direct path.
+    """
+    if not semantic_uuid:
+        return []
+
+    filter_str = f'semantic_uuid:={semantic_uuid}'
+    if exclude_uuid:
+        filter_str += f' && document_uuid:!={exclude_uuid}'
+
+    params = {
+        'q': '*',
+        'filter_by': filter_str,
+        'per_page': limit,
+        'include_fields': 'document_uuid,document_title,document_url',
+        'sort_by': 'authority_score:desc',
+    }
+
+    try:
+        search_requests = {'searches': [{'collection': COLLECTION_NAME, **params}]}
+        response = client.multi_search.perform(search_requests, {})
+        result = response['results'][0]
+        hits = result.get('hits', [])
+
+        related = []
+        for hit in hits:
+            doc = hit.get('document', {})
+            related.append({
+                'title': doc.get('document_title', ''),
+                'url': doc.get('document_url', ''),
+                'id': doc.get('document_uuid', ''),
+            })
+
+        print(f"🔗 Related searches: {len(related)} found for semantic_uuid={semantic_uuid[:12]}...")
+        return related
+
+    except Exception as e:
+        print(f"❌ fetch_documents_by_semantic_uuid error: {e}")
+        return []
+
 
 def format_result(hit: Dict, query: str = '') -> Dict:
     """Transform Typesense hit into response format."""
@@ -1869,11 +1915,116 @@ def execute_full_search(
     # =========================================================================
 # ★ QUESTION DIRECT PATH: bypass all stages, fetch single document
 # =========================================================================
+    # if document_uuid and search_source == 'question':
+    #     print(f"❓ QUESTION PATH: document_uuid={document_uuid} query='{query}'")
+    #     t_fetch = time.time()
+    #     results = fetch_full_documents([document_uuid], query)
+    #     times['fetch_docs'] = round((time.time() - t_fetch) * 1000, 2)
+    #     times['total'] = round((time.time() - t0) * 1000, 2)
+
+    #     return {
+    #         'query': query,
+    #         'corrected_query': query,
+    #         'intent': 'answer',
+    #         'query_mode': 'answer',
+    #         'results': results,
+    #         'total': len(results),
+    #         'facet_total': len(results),
+    #         'total_image_count': 0,
+    #         'page': 1,
+    #         'per_page': per_page,
+    #         'search_time': round(time.time() - t0, 3),
+    #         'session_id': session_id,
+    #         'semantic_enabled': False,
+    #         'search_strategy': 'question_direct',
+    #         'alt_mode': alt_mode,
+    #         'skip_embedding': True,
+    #         'search_source': 'question',
+    #         'valid_terms': query.split(),
+    #         'unknown_terms': [],
+    #         'data_type_facets': [],
+    #         'category_facets': [],
+    #         'schema_facets': [],
+    #         'related_searches': [],
+    #         'facets': {},
+    #         'word_discovery': {
+    #             'valid_count': len(query.split()),
+    #             'unknown_count': 0,
+    #             'corrections': [],
+    #             'filters': [],
+    #             'locations': [],
+    #             'sort': None,
+    #             'total_score': 0,
+    #             'average_score': 0,
+    #             'max_score': 0,
+    #         },
+    #         'timings': times,
+    #         'filters_applied': {
+    #             'data_type': None,
+    #             'category': None,
+    #             'schema': None,
+    #             'is_local_search': False,
+    #             'local_search_strength': 'none',
+    #         },
+    #         'signals': {},
+    #         'profile': {},
+    #     }
+    
+    # =========================================================================
+# ★ QUESTION DIRECT PATH: bypass all stages, fetch single document
+# =========================================================================
     if document_uuid and search_source == 'question':
         print(f"❓ QUESTION PATH: document_uuid={document_uuid} query='{query}'")
         t_fetch = time.time()
         results = fetch_full_documents([document_uuid], query)
         times['fetch_docs'] = round((time.time() - t_fetch) * 1000, 2)
+
+        # ── AI Overview: always trigger on question path ──
+        ai_overview = None
+        if results and results[0].get('key_facts'):
+
+            # Derive question_word from query since we skipped intent detection
+            question_word = None
+            q_lower = query.lower().strip()
+            for word in ('who', 'what', 'where', 'when', 'why', 'how'):
+                if q_lower.startswith(word):
+                    question_word = word
+                    break
+
+            question_signals = {
+                'query_mode': 'answer',
+                'wants_single_result': True,
+                'question_word': question_word,
+            }
+
+            ai_overview = _build_ai_overview(question_signals, results, query)
+            if ai_overview:
+                print(f"   💡 AI Overview (question path): {ai_overview[:80]}...")
+                results[0]['humanized_summary'] = ai_overview
+
+                # ── Related searches via semantic group ──
+        related_searches = []
+        if results:
+            semantic_uuid = results[0].get('semantic_uuid')
+            if semantic_uuid:
+                try:
+                    related_docs = fetch_documents_by_semantic_uuid(
+                        semantic_uuid,
+                        exclude_uuid=document_uuid,
+                        limit=5
+                    )
+                    related_searches = [
+                        {
+                            'query': doc.get('title', ''),
+                            'url': doc.get('url', '')
+                        }
+                        for doc in related_docs
+                        if doc.get('title')
+                    ]
+                except Exception as e:
+                    print(f"⚠️ Related searches error: {e}")
+
+
         times['total'] = round((time.time() - t0) * 1000, 2)
 
         return {
@@ -1901,6 +2052,7 @@ def execute_full_search(
             'schema_facets': [],
             'related_searches': [],
             'facets': {},
+            'related_searches': related_searches,  # was []
             'word_discovery': {
                 'valid_count': len(query.split()),
                 'unknown_count': 0,
@@ -1920,10 +2072,9 @@ def execute_full_search(
                 'is_local_search': False,
                 'local_search_strength': 'none',
             },
-            'signals': {},
+            'signals': question_signals,  # ← updated from {}
             'profile': {},
         }
-
     # =========================================================================
     # ★ FAST PATH: Check for finished cache FIRST
     # =========================================================================
