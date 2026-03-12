@@ -1233,140 +1233,6 @@
         </footer>
     </main>
 
-<!-- ==================== SESSION MANAGEMENT (UNCHANGED) ==================== -->
-<script>
-class SessionManager {
-    constructor() {
-        this.sessionId = null;
-        this.isInitialized = false;
-    }
-
-    initSession() {
-        if (this.isInitialized) return this.sessionId;
-
-        const existingSessionId = localStorage.getItem('sessionId');
-        
-        if (existingSessionId) {
-            this.sessionId = existingSessionId;
-            this.updateSessionActivity();
-        } else {
-            this.createNewSession();
-        }
-
-        this.isInitialized = true;
-        return this.sessionId;
-    }
-
-    createNewSession() {
-        this.sessionId = this.generateSessionId();
-        
-        const sessionData = {
-            session_id: this.sessionId,
-            device_type: this.getDeviceType(),
-            browser: navigator.userAgent,
-            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-            url: window.location.href,
-            referrer: document.referrer || 'direct',
-            created_at: new Date().toISOString(),
-            page_views: 1
-        };
-
-        localStorage.setItem('sessionId', this.sessionId);
-        localStorage.setItem('sessionData', JSON.stringify(sessionData));
-        this.sendSessionToServer(sessionData);
-    }
-
-    updateSessionActivity() {
-        const existingData = JSON.parse(localStorage.getItem('sessionData') || '{}');
-        const updateData = {
-            session_id: this.sessionId,
-            url: window.location.href,
-            referrer: document.referrer || 'direct',
-            last_activity: new Date().toISOString(),
-            page_views: (existingData.page_views || 0) + 1
-        };
-
-        const updatedSessionData = { ...existingData, ...updateData };
-        localStorage.setItem('sessionData', JSON.stringify(updatedSessionData));
-        this.sendSessionUpdate(updateData);
-    }
-
-    generateSessionId() {
-        if (self.crypto && self.crypto.randomUUID) {
-            return self.crypto.randomUUID();
-        }
-        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-            const r = Math.random() * 16 | 0;
-            const v = c == 'x' ? r : (r & 0x3 | 0x8);
-            return v.toString(16);
-        });
-    }
-
-    getDeviceType() {
-        if (/tablet|ipad/i.test(navigator.userAgent)) return 'tablet';
-        if (/mobile|android|iphone/i.test(navigator.userAgent)) return 'mobile';
-        return 'desktop';
-    }
-
-    async sendSessionToServer(sessionData) {
-        try {
-            await fetch('/api/cache-redis-session/', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': this.getCsrfToken()
-                },
-                body: JSON.stringify(sessionData)
-            });
-        } catch (error) {
-            console.warn('Session creation error:', error);
-        }
-    }
-
-    async sendSessionUpdate(updateData) {
-        try {
-            await fetch('/api/update-session-activity/', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': this.getCsrfToken()
-                },
-                body: JSON.stringify(updateData)
-            });
-        } catch (error) {
-            console.warn('Session update error:', error);
-        }
-    }
-
-    getCsrfToken() {
-        const match = document.cookie.match(/csrftoken=([^;]+)/);
-        return match ? match[1] : '';
-    }
-
-    getSessionId() { return this.sessionId; }
-    hasSession() { return !!this.sessionId; }
-    
-    clearSession() {
-        localStorage.removeItem('sessionId');
-        localStorage.removeItem('sessionData');
-        this.sessionId = null;
-        this.isInitialized = false;
-    }
-}
-
-const sessionManager = new SessionManager();
-
-document.addEventListener('DOMContentLoaded', function() {
-    const sessionId = sessionManager.initSession();
-    const sessionField = document.getElementById('session-id-field');
-    if (sessionField && sessionId) {
-        sessionField.value = sessionId;
-    }
-});
-
-window.sessionManager = sessionManager;
-</script>
-
 <!-- ==================== SEARCH & UI SCRIPT ==================== -->
 <script>
 document.addEventListener('DOMContentLoaded', function() {
@@ -1448,7 +1314,6 @@ document.addEventListener('DOMContentLoaded', function() {
         deviceType: SearchSecurity.getDeviceType(),
         clientFingerprint: SearchSecurity.getClientFingerprint(),
 
-        // ── NEW: track question UUID from Redis ──
         questionUUID: null,
         isQuestion: false,
 
@@ -1501,7 +1366,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const searchInput = document.getElementById('search-input');
     const searchResults = document.getElementById('search-results');
     const searchForm = document.getElementById('search-form');
-    
+
     if (!searchInput || !searchResults || !searchForm) return;
 
     let debounceTimer = null;
@@ -1517,23 +1382,21 @@ document.addEventListener('DOMContentLoaded', function() {
 
     searchInput.addEventListener('input', function() {
         clearTimeout(debounceTimer);
-        
+
         if (isSelectingSuggestion) {
             return;
         }
-        
+
         const query = this.value.trim();
         SearchState.selectedFromDropdown = false;
-
-        // Clear question state when user types manually
         SearchState.questionUUID = null;
         SearchState.isQuestion = false;
-        
+
         if (query.length < 2) {
             hideDropdown();
             return;
         }
-        
+
         debounceTimer = setTimeout(() => fetchSuggestions(query), 150);
     });
 
@@ -1541,7 +1404,7 @@ document.addEventListener('DOMContentLoaded', function() {
         try {
             const response = await fetch(`/api/search/?q=${encodeURIComponent(query)}`);
             if (!response.ok) throw new Error('Search failed');
-            
+
             const data = await response.json();
             currentSuggestions = data.suggestions || [];
             SearchState.resultCount = currentSuggestions.length;
@@ -1553,8 +1416,6 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // ==================== RENDER DROPDOWN ====================
-    // FIX 1: Differentiate question items visually
-    // FIX 2: Use display || term (not .text which doesn't exist)
     function renderDropdown(suggestions) {
         if (!suggestions.length) {
             searchResults.innerHTML = '<div class="suggestion-item no-results">No results found</div>';
@@ -1564,20 +1425,21 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
-        searchResults.innerHTML = suggestions.map((s, i) => `
-            <div class="suggestion-item ${s.entity_type === 'question' ? 'suggestion-question' : ''}" 
-                 data-index="${i}">
-                ${s.entity_type === 'question'
-                    ? `<span class="suggestion-question-icon">?</span>`
-                    : ''}
-                <span class="suggestion-display">${escapeHtml(s.display || s.term || '')}</span>
-                ${s.description ? `<span class="suggestion-desc">${escapeHtml(s.description)}</span>` : ''}
-            </div>
-        `).join('');
-        
+        searchResults.innerHTML = suggestions.map((s, i) => {
+            const displayText = escapeHtml(s.display || s.term || '');
+            const isQuestion = s.entity_type === 'question';
+            return `
+                <div class="suggestion-item${isQuestion ? ' suggestion-question' : ''}" data-index="${i}">
+                    
+                    <span class="suggestion-display">${displayText}</span>
+                    ${s.description ? `<span class="suggestion-desc">${escapeHtml(s.description)}</span>` : ''}
+                </div>
+            `;
+        }).join('');
+
         searchResults.style.display = 'block';
         selectedIndex = -1;
-        
+
         searchResults.querySelectorAll('.suggestion-item[data-index]').forEach(item => {
             item.addEventListener('click', () => selectSuggestion(parseInt(item.dataset.index)));
             item.addEventListener('mouseenter', function() {
@@ -1589,19 +1451,14 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // ==================== SELECT SUGGESTION ====================
-    // FIX 3: Use display || term (not .text)
-    // FIX 4: If question, capture document_uuid and set isQuestion flag
     function selectSuggestion(index) {
         if (index >= 0 && index < currentSuggestions.length) {
             isSelectingSuggestion = true;
             SearchState.selectedFromDropdown = true;
 
             const suggestion = currentSuggestions[index];
+            searchInput.value = suggestion.display || suggestion.term || suggestion.text || '';
 
-            // FIX: use display || term — .text does not exist
-            searchInput.value = suggestion.display || suggestion.term || '';
-
-            // If it's a question, store the document_uuid for direct fetch
             if (suggestion.entity_type === 'question' && suggestion.document_uuid) {
                 SearchState.questionUUID = suggestion.document_uuid;
                 SearchState.isQuestion = true;
@@ -1612,14 +1469,14 @@ document.addEventListener('DOMContentLoaded', function() {
 
             hideDropdown();
             submitSearch();
-            
+
             isSelectingSuggestion = false;
         }
     }
 
     searchInput.addEventListener('keydown', function(e) {
         const items = searchResults.querySelectorAll('.suggestion-item[data-index]');
-        
+
         if (e.key === 'ArrowDown' && items.length && searchResults.style.display !== 'none') {
             e.preventDefault();
             selectedIndex = (selectedIndex + 1) % items.length;
@@ -1679,7 +1536,6 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // ==================== SUBMIT SEARCH ====================
-    // FIX 5: Pass document_uuid + search_source='question' when question selected
     function submitSearch() {
         const query = searchInput.value.trim();
         if (!query) return;
@@ -1697,14 +1553,12 @@ document.addEventListener('DOMContentLoaded', function() {
             req_seq: SearchState.incrementSequence(),
         };
 
-        // ── Question path: pass uuid + override search_source ──
         if (SearchState.isQuestion && SearchState.questionUUID) {
             params.search_source = 'question';
             params.document_uuid = SearchState.questionUUID;
-            params.alt_mode = 'n';  // always keyword path for questions
+            params.alt_mode = 'n';
         } else {
             params.search_source = SearchState.source;
-            // Clear any stale document_uuid from a previous question click
             addHiddenField('document_uuid', '');
         }
 
@@ -1718,14 +1572,14 @@ document.addEventListener('DOMContentLoaded', function() {
 
     searchForm.addEventListener('submit', function(e) {
         e.preventDefault();
-        
+
         const query = searchInput.value.trim();
         if (!query) return false;
 
         if (!SearchState.selectedFromDropdown) {
             SearchState.selectedFromDropdown = false;
         }
-        
+
         submitSearch();
     });
 
@@ -1750,7 +1604,6 @@ document.addEventListener('DOMContentLoaded', function() {
             if (query) {
                 searchInput.value = query;
                 SearchState.selectedFromDropdown = false;
-                // Question cards don't have a uuid — fall through to normal search
                 SearchState.questionUUID = null;
                 SearchState.isQuestion = false;
                 submitSearch();
@@ -1760,11 +1613,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // ==================== CYLINDER PLACEHOLDER ====================
     const rollerPhrases = [
-        'Black genealogy, history & DNA documents',
+        'Black genealogy and history',
         "Top restaurants near me",
         "Top books, authors & book clubs",
         "Hiking & running groups near me",
-        "Travel groups for singles & couples"
+        "Travel groups for singles"
     ];
 
     let rollerIndex = 0;
@@ -1882,7 +1735,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     searchInput.addEventListener('input', updateRollerVisibility);
     searchInput.addEventListener('focus', updateRollerVisibility);
-    searchInput.addEventListener('blur', function () {
+    searchInput.addEventListener('blur', function() {
         if (searchInput.value.length === 0) {
             roller.style.opacity = '1';
             startRoller();
