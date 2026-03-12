@@ -1324,6 +1324,8 @@ def search_suggestions(request):
                 'text': item.get('term', ''),
                 'display': item.get('display', ''),
                 'description': item.get('description', ''),
+                'entity_type': item.get('entity_type', ''),        # ← NEW
+                'document_uuid': item.get('document_uuid', ''),    # ← NEW
             }
             for item in results
             if item.get('term')
@@ -4943,6 +4945,10 @@ def search(request):
     params = SearchParams(request)
     page = validate_page(request.GET.get('page', 1))
     per_page = validate_per_page(request.GET.get('per_page', 10))
+    # === 1B. EXTRACT QUESTION PATH FIELDS ===
+    document_uuid = request.GET.get('document_uuid', '').strip()
+    search_source = request.GET.get('search_source', '').strip()
+    is_question_path = (search_source == 'question' and bool(document_uuid))
     
     # Check for images view
     view_mode = request.GET.get('view', '')
@@ -5234,7 +5240,9 @@ def search(request):
                 alt_mode=params.alt_mode,
                 user_location=user_location,
                 pos_tags=tuple_array if params.is_semantic_search else [],
-                safe_search=safe_search
+                safe_search=safe_search,
+                search_source=search_source,           # ← NEW
+                document_uuid=document_uuid if is_question_path else None,  # ← NEW
             )
             
             results = result.get('results', [])
@@ -5465,6 +5473,11 @@ def search(request):
         # Label mappings
         'data_type_labels': DATA_TYPE_LABELS,
         'category_labels': CATEGORY_LABELS,
+
+        # Question path tracking
+        'search_source': search_source,
+        'document_uuid': document_uuid,
+        'is_question_path': is_question_path,
     }
     
     # === 16. CACHE RESULTS ===

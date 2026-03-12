@@ -1784,17 +1784,7 @@ def get_exact_term_matches(term: str) -> List[Dict[str, Any]]:
 def get_question_matches(prefix: str, limit: int = 5) -> List[Dict[str, Any]]:
     """
     Find question hashes whose term starts with the given prefix.
-
-    Uses direct key scan on question:* rather than RediSearch so this
-    works even before the index is rebuilt with the question: prefix.
-
-    Key pattern : question:{slugified-question}
-    Returns     : list of dicts with entity_type='question' and
-                  document_uuid / semantic_uuid / cluster_uuid populated.
-
-    NOTE: This is intentionally kept on the keyword path only.
-          No fuzzy / semantic matching — questions are pre-generated
-          and an exact prefix scan is sufficient.
+    Key pattern : questions:{slugified-question}  (plural, underscore-separated)
     """
     client = RedisLookupTable.get_client()
     if not client or not prefix:
@@ -1804,20 +1794,19 @@ def get_question_matches(prefix: str, limit: int = 5) -> List[Dict[str, Any]]:
     if len(prefix_lower) < 2:
         return []
 
-    # Build a slug-style prefix the same way insert_questions_to_redis() does
-    import re
-    slug_prefix = re.sub(r'[^a-z0-9\s-]', '', prefix_lower)
-    slug_prefix = re.sub(r'\s+', '-', slug_prefix.strip())
+    # Match exactly how push script builds the slug
+    slug_prefix = prefix_lower.replace(' ', '_')
+    slug_prefix = ''.join(c if c.isalnum() or c == '_' else '' for c in slug_prefix)[:120]
 
     try:
-        pattern = f"question:{slug_prefix}*"
+        pattern = f"questions:{slug_prefix}*"   # plural — matches push script
         keys = client.keys(pattern)
 
         if not keys:
             return []
 
         matches = []
-        for key in keys[:limit * 2]:   # fetch a few extra, trim after sort
+        for key in keys[:limit * 2]:
             metadata = client.hgetall(key)
             if not metadata:
                 continue
@@ -1828,19 +1817,19 @@ def get_question_matches(prefix: str, limit: int = 5) -> List[Dict[str, Any]]:
                 rank_val = 0
 
             matches.append({
-                'id': key,
-                'member': key,
-                'term': metadata.get('term', ''),
-                'display': metadata.get('display', ''),
-                'description': '',
-                'category': 'question',
-                'entity_type': 'question',
-                'pos': 'question',
-                'rank': rank_val,
-                'exists': True,
-                'document_uuid': metadata.get('document_uuid', ''),
-                'semantic_uuid': metadata.get('semantic_uuid', ''),
-                'cluster_uuid': metadata.get('cluster_uuid', ''),
+                'id':             key,
+                'member':         key,
+                'term':           metadata.get('question', ''),  # field is 'question'
+                'display':        metadata.get('question', ''),  # field is 'question'
+                'description':    '',
+                'category':       'question',
+                'entity_type':    'question',
+                'pos':            'question',
+                'rank':           rank_val,
+                'exists':         True,
+                'document_uuid':  metadata.get('document_uuid', ''),
+                'semantic_uuid':  '',
+                'cluster_uuid':   '',
             })
 
         matches.sort(key=lambda x: x.get('rank', 0), reverse=True)

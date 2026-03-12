@@ -1448,16 +1448,10 @@ document.addEventListener('DOMContentLoaded', function() {
         deviceType: SearchSecurity.getDeviceType(),
         clientFingerprint: SearchSecurity.getClientFingerprint(),
 
-        // ── NEW: track question UUID from Redis ──
-        questionUUID: null,
-        isQuestion: false,
-
         reset: function() {
             this.typingStartTime = null;
             this.selectedFromDropdown = false;
             this.resultCount = 0;
-            this.questionUUID = null;
-            this.isQuestion = false;
         },
 
         getTypingTime: function() {
@@ -1524,10 +1518,6 @@ document.addEventListener('DOMContentLoaded', function() {
         
         const query = this.value.trim();
         SearchState.selectedFromDropdown = false;
-
-        // Clear question state when user types manually
-        SearchState.questionUUID = null;
-        SearchState.isQuestion = false;
         
         if (query.length < 2) {
             hideDropdown();
@@ -1552,9 +1542,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // ==================== RENDER DROPDOWN ====================
-    // FIX 1: Differentiate question items visually
-    // FIX 2: Use display || term (not .text which doesn't exist)
     function renderDropdown(suggestions) {
         if (!suggestions.length) {
             searchResults.innerHTML = '<div class="suggestion-item no-results">No results found</div>';
@@ -1565,12 +1552,8 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         searchResults.innerHTML = suggestions.map((s, i) => `
-            <div class="suggestion-item ${s.entity_type === 'question' ? 'suggestion-question' : ''}" 
-                 data-index="${i}">
-                ${s.entity_type === 'question'
-                    ? `<span class="suggestion-question-icon">?</span>`
-                    : ''}
-                <span class="suggestion-display">${escapeHtml(s.display || s.term || '')}</span>
+            <div class="suggestion-item" data-index="${i}">
+                <span class="suggestion-display">${escapeHtml(s.display)}</span>
                 ${s.description ? `<span class="suggestion-desc">${escapeHtml(s.description)}</span>` : ''}
             </div>
         `).join('');
@@ -1588,28 +1571,13 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // ==================== SELECT SUGGESTION ====================
-    // FIX 3: Use display || term (not .text)
-    // FIX 4: If question, capture document_uuid and set isQuestion flag
     function selectSuggestion(index) {
         if (index >= 0 && index < currentSuggestions.length) {
             isSelectingSuggestion = true;
             SearchState.selectedFromDropdown = true;
-
-            const suggestion = currentSuggestions[index];
-
-            // FIX: use display || term — .text does not exist
-            searchInput.value = suggestion.display || suggestion.term || '';
-
-            // If it's a question, store the document_uuid for direct fetch
-            if (suggestion.entity_type === 'question' && suggestion.document_uuid) {
-                SearchState.questionUUID = suggestion.document_uuid;
-                SearchState.isQuestion = true;
-            } else {
-                SearchState.questionUUID = null;
-                SearchState.isQuestion = false;
-            }
-
+            
+            searchInput.value = currentSuggestions[index].text;
+            
             hideDropdown();
             submitSearch();
             
@@ -1678,8 +1646,6 @@ document.addEventListener('DOMContentLoaded', function() {
         field.value = value;
     }
 
-    // ==================== SUBMIT SEARCH ====================
-    // FIX 5: Pass document_uuid + search_source='question' when question selected
     function submitSearch() {
         const query = searchInput.value.trim();
         if (!query) return;
@@ -1690,23 +1656,13 @@ document.addEventListener('DOMContentLoaded', function() {
             timestamp: SearchSecurity.getTimestamp(),
             nonce: SearchSecurity.generateNonce(),
             alt_mode: SearchState.selectedFromDropdown ? 'n' : 'y',
+            search_source: SearchState.source,
             device_type: SearchState.deviceType,
             result_count: SearchState.resultCount,
             typing_time_ms: SearchState.getTypingTime(),
             client_fp: SearchState.clientFingerprint,
-            req_seq: SearchState.incrementSequence(),
+            req_seq: SearchState.incrementSequence()
         };
-
-        // ── Question path: pass uuid + override search_source ──
-        if (SearchState.isQuestion && SearchState.questionUUID) {
-            params.search_source = 'question';
-            params.document_uuid = SearchState.questionUUID;
-            params.alt_mode = 'n';  // always keyword path for questions
-        } else {
-            params.search_source = SearchState.source;
-            // Clear any stale document_uuid from a previous question click
-            addHiddenField('document_uuid', '');
-        }
 
         Object.entries(params).forEach(([name, value]) => {
             addHiddenField(name, value);
@@ -1750,22 +1706,22 @@ document.addEventListener('DOMContentLoaded', function() {
             if (query) {
                 searchInput.value = query;
                 SearchState.selectedFromDropdown = false;
-                // Question cards don't have a uuid — fall through to normal search
-                SearchState.questionUUID = null;
-                SearchState.isQuestion = false;
                 submitSearch();
             }
         });
     });
-
-    // ==================== CYLINDER PLACEHOLDER ====================
+// ==================== CYLINDER PLACEHOLDER ====================
     const rollerPhrases = [
+    
         'Black genealogy, history & DNA documents',
         "Top restaurants near me",
         "Top books, authors & book clubs",
         "Hiking & running groups near me",
         "Travel groups for singles & couples"
     ];
+
+
+
 
     let rollerIndex = 0;
     let rollerTimer = null;
@@ -1789,6 +1745,7 @@ document.addEventListener('DOMContentLoaded', function() {
     inner.id = 'roller-inner';
     inner.style.cssText = 'position: relative;';
 
+    // Only two spans — current and next, swap them each roll
     const spanA = document.createElement('span');
     const spanB = document.createElement('span');
 
@@ -1825,14 +1782,18 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!rollerRunning) return;
 
         rollerIndex = (rollerIndex + 1) % rollerPhrases.length;
+        const upcomingIndex = (rollerIndex + 1) % rollerPhrases.length;
 
+        // Set next span text and starting position
         nextSpan.textContent = rollerPhrases[rollerIndex];
         nextSpan.style.transition = 'none';
         nextSpan.style.transform = 'translateY(100%)';
         nextSpan.style.opacity = '0';
 
+        // Force reflow so the starting position registers
         nextSpan.offsetHeight;
 
+        // Animate both
         nextSpan.style.transition = `
             transform 0.7s cubic-bezier(0.23, 1, 0.32, 1),
             opacity 0.7s cubic-bezier(0.23, 1, 0.32, 1)
@@ -1842,6 +1803,7 @@ document.addEventListener('DOMContentLoaded', function() {
         nextSpan.style.transform = 'translateY(0)';
         nextSpan.style.opacity = '1';
 
+        // Swap references
         const temp = currentSpan;
         currentSpan = nextSpan;
         nextSpan = temp;

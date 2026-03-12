@@ -1840,6 +1840,7 @@ def execute_full_search(
     safe_search: bool = True,
     alt_mode: str = 'y',
     skip_embedding: bool = False,
+    document_uuid: str = None,        # ← NEW
     search_source: str = None
 ) -> Dict:
     """
@@ -1864,6 +1865,64 @@ def execute_full_search(
         active_filters = {k: v for k, v in filters.items() if v}
         if active_filters:
             print(f"🎛️ Active UI filters: {active_filters}")
+    
+    # =========================================================================
+# ★ QUESTION DIRECT PATH: bypass all stages, fetch single document
+# =========================================================================
+    if document_uuid and search_source == 'question':
+        print(f"❓ QUESTION PATH: document_uuid={document_uuid} query='{query}'")
+        t_fetch = time.time()
+        results = fetch_full_documents([document_uuid], query)
+        times['fetch_docs'] = round((time.time() - t_fetch) * 1000, 2)
+        times['total'] = round((time.time() - t0) * 1000, 2)
+
+        return {
+            'query': query,
+            'corrected_query': query,
+            'intent': 'answer',
+            'query_mode': 'answer',
+            'results': results,
+            'total': len(results),
+            'facet_total': len(results),
+            'total_image_count': 0,
+            'page': 1,
+            'per_page': per_page,
+            'search_time': round(time.time() - t0, 3),
+            'session_id': session_id,
+            'semantic_enabled': False,
+            'search_strategy': 'question_direct',
+            'alt_mode': alt_mode,
+            'skip_embedding': True,
+            'search_source': 'question',
+            'valid_terms': query.split(),
+            'unknown_terms': [],
+            'data_type_facets': [],
+            'category_facets': [],
+            'schema_facets': [],
+            'related_searches': [],
+            'facets': {},
+            'word_discovery': {
+                'valid_count': len(query.split()),
+                'unknown_count': 0,
+                'corrections': [],
+                'filters': [],
+                'locations': [],
+                'sort': None,
+                'total_score': 0,
+                'average_score': 0,
+                'max_score': 0,
+            },
+            'timings': times,
+            'filters_applied': {
+                'data_type': None,
+                'category': None,
+                'schema': None,
+                'is_local_search': False,
+                'local_search_strength': 'none',
+            },
+            'signals': {},
+            'profile': {},
+        }
 
     # =========================================================================
     # ★ FAST PATH: Check for finished cache FIRST
