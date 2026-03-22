@@ -1234,6 +1234,7 @@
     </main>
 
 <!-- ==================== SEARCH & UI SCRIPT ==================== -->
+<!-- ==================== SEARCH & UI SCRIPT ==================== -->
 <script>
 document.addEventListener('DOMContentLoaded', function() {
 
@@ -1316,6 +1317,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
         questionUUID: null,
         isQuestion: false,
+        questionAnswer: null,       // ← NEW
+        questionAnswerType: null,   // ← NEW
 
         reset: function() {
             this.typingStartTime = null;
@@ -1323,6 +1326,8 @@ document.addEventListener('DOMContentLoaded', function() {
             this.resultCount = 0;
             this.questionUUID = null;
             this.isQuestion = false;
+            this.questionAnswer = null;       // ← NEW
+            this.questionAnswerType = null;   // ← NEW
         },
 
         getTypingTime: function() {
@@ -1391,6 +1396,8 @@ document.addEventListener('DOMContentLoaded', function() {
         SearchState.selectedFromDropdown = false;
         SearchState.questionUUID = null;
         SearchState.isQuestion = false;
+        SearchState.questionAnswer = null;       // ← NEW
+        SearchState.questionAnswerType = null;   // ← NEW
 
         if (query.length < 2) {
             hideDropdown();
@@ -1430,7 +1437,6 @@ document.addEventListener('DOMContentLoaded', function() {
             const isQuestion = s.entity_type === 'question';
             return `
                 <div class="suggestion-item${isQuestion ? ' suggestion-question' : ''}" data-index="${i}">
-                    
                     <span class="suggestion-display">${displayText}</span>
                     ${s.description ? `<span class="suggestion-desc">${escapeHtml(s.description)}</span>` : ''}
                 </div>
@@ -1462,9 +1468,13 @@ document.addEventListener('DOMContentLoaded', function() {
             if (suggestion.entity_type === 'question' && suggestion.document_uuid) {
                 SearchState.questionUUID = suggestion.document_uuid;
                 SearchState.isQuestion = true;
+                SearchState.questionAnswer = suggestion.answer || '';           // ← NEW
+                SearchState.questionAnswerType = suggestion.answer_type || 'UNKNOWN'; // ← NEW
             } else {
                 SearchState.questionUUID = null;
                 SearchState.isQuestion = false;
+                SearchState.questionAnswer = null;       // ← NEW
+                SearchState.questionAnswerType = null;   // ← NEW
             }
 
             hideDropdown();
@@ -1556,10 +1566,14 @@ document.addEventListener('DOMContentLoaded', function() {
         if (SearchState.isQuestion && SearchState.questionUUID) {
             params.search_source = 'question';
             params.document_uuid = SearchState.questionUUID;
+            params.answer = SearchState.questionAnswer || '';                    // ← NEW
+            params.answer_type = SearchState.questionAnswerType || 'UNKNOWN';   // ← NEW
             params.alt_mode = 'n';
         } else {
             params.search_source = SearchState.source;
             addHiddenField('document_uuid', '');
+            addHiddenField('answer', '');           // ← NEW: clear on non-question path
+            addHiddenField('answer_type', '');      // ← NEW: clear on non-question path
         }
 
         Object.entries(params).forEach(([name, value]) => {
@@ -1606,6 +1620,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 SearchState.selectedFromDropdown = false;
                 SearchState.questionUUID = null;
                 SearchState.isQuestion = false;
+                SearchState.questionAnswer = null;       // ← NEW
+                SearchState.questionAnswerType = null;   // ← NEW
                 submitSearch();
             }
         });

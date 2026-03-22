@@ -1885,6 +1885,8 @@ def execute_full_search(
     pos_tags: List[Tuple] = None,
     safe_search: bool = True,
     alt_mode: str = 'y',
+    answer: str = None,           # ← NEW
+    answer_type: str = None,      # ← NEW
     skip_embedding: bool = False,
     document_uuid: str = None,        # ← NEW
     search_source: str = None
@@ -1901,6 +1903,7 @@ def execute_full_search(
     """
     times = {}
     t0 = time.time()
+    print(f"DEBUG execute answer={answer!r} answer_type={answer_type!r}")
 
     # Extract active filters
     active_data_type = filters.get('data_type') if filters else None
@@ -1912,65 +1915,8 @@ def execute_full_search(
         if active_filters:
             print(f"🎛️ Active UI filters: {active_filters}")
     
-    # =========================================================================
-# ★ QUESTION DIRECT PATH: bypass all stages, fetch single document
+  
 # =========================================================================
-    # if document_uuid and search_source == 'question':
-    #     print(f"❓ QUESTION PATH: document_uuid={document_uuid} query='{query}'")
-    #     t_fetch = time.time()
-    #     results = fetch_full_documents([document_uuid], query)
-    #     times['fetch_docs'] = round((time.time() - t_fetch) * 1000, 2)
-    #     times['total'] = round((time.time() - t0) * 1000, 2)
-
-    #     return {
-    #         'query': query,
-    #         'corrected_query': query,
-    #         'intent': 'answer',
-    #         'query_mode': 'answer',
-    #         'results': results,
-    #         'total': len(results),
-    #         'facet_total': len(results),
-    #         'total_image_count': 0,
-    #         'page': 1,
-    #         'per_page': per_page,
-    #         'search_time': round(time.time() - t0, 3),
-    #         'session_id': session_id,
-    #         'semantic_enabled': False,
-    #         'search_strategy': 'question_direct',
-    #         'alt_mode': alt_mode,
-    #         'skip_embedding': True,
-    #         'search_source': 'question',
-    #         'valid_terms': query.split(),
-    #         'unknown_terms': [],
-    #         'data_type_facets': [],
-    #         'category_facets': [],
-    #         'schema_facets': [],
-    #         'related_searches': [],
-    #         'facets': {},
-    #         'word_discovery': {
-    #             'valid_count': len(query.split()),
-    #             'unknown_count': 0,
-    #             'corrections': [],
-    #             'filters': [],
-    #             'locations': [],
-    #             'sort': None,
-    #             'total_score': 0,
-    #             'average_score': 0,
-    #             'max_score': 0,
-    #         },
-    #         'timings': times,
-    #         'filters_applied': {
-    #             'data_type': None,
-    #             'category': None,
-    #             'schema': None,
-    #             'is_local_search': False,
-    #             'local_search_strength': 'none',
-    #         },
-    #         'signals': {},
-    #         'profile': {},
-    #     }
-    
-    # =========================================================================
 # ★ QUESTION DIRECT PATH: bypass all stages, fetch single document
 # =========================================================================
     if document_uuid and search_source == 'question':
@@ -2032,6 +1978,8 @@ def execute_full_search(
             'corrected_query': query,
             'intent': 'answer',
             'query_mode': 'answer',
+            'answer': answer,                        # ← NEW
+            'answer_type': answer_type or 'UNKNOWN',
             'results': results,
             'total': len(results),
             'facet_total': len(results),
@@ -2075,9 +2023,9 @@ def execute_full_search(
             'signals': question_signals,  # ← updated from {}
             'profile': {},
         }
-    # =========================================================================
-    # ★ FAST PATH: Check for finished cache FIRST
-    # =========================================================================
+# =========================================================================
+# ★ FAST PATH: Check for finished cache FIRST
+# =========================================================================
     stable_key = _generate_stable_cache_key(session_id, query)
     finished = _get_cached_results(stable_key)
 
@@ -2169,16 +2117,16 @@ def execute_full_search(
             'profile': metadata.get('profile', {}),
         }
 
-    # =========================================================================
-    # ★ FULL PATH: No finished cache. Run the pipeline.
-    # =========================================================================
+# =========================================================================
+# ★ FULL PATH: No finished cache. Run the pipeline.
+# =========================================================================
     print(f"🔬 FULL PATH: '{query}' (no finished cache for stable_key={stable_key[:12]}...)")
 
     is_keyword_path = (alt_mode == 'n') or search_source in ('dropdown', 'keyword', 'suggestion', 'autocomplete')
 
-    # =========================================================================
-    # KEYWORD PATH:  Stage 1 → 5 → 6 → 7
-    # =========================================================================
+# =========================================================================
+# KEYWORD PATH:  Stage 1 → 5 → 6 → 7
+# =========================================================================
 
     if is_keyword_path:
         print(f"⚡ KEYWORD PIPELINE: '{query}'")
@@ -2311,9 +2259,9 @@ def execute_full_search(
             }
         }
 
-    # =========================================================================
-    # SEMANTIC PATH:  Stage 1 → 2 → 3 → 4 → 5 → 6 → 7
-    # =========================================================================
+# =========================================================================
+# SEMANTIC PATH:  Stage 1 → 2 → 3 → 4 → 5 → 6 → 7
+# =========================================================================
 
     print(f"🔬 SEMANTIC PIPELINE: '{query}'")
 
@@ -2629,6 +2577,7 @@ def execute_full_search(
         'signals': signals,
         'profile': profile,
     }
+
 # ============================================================================
 # CONVENIENCE FUNCTIONS (for compatibility with views.py imports)
 # ============================================================================

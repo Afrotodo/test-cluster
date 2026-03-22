@@ -398,8 +398,31 @@
             </div>
             {% if was_corrected %}<div class="spelling-correction"><div class="including-results"><span class="label">Showing results for </span><a href="{% url 'searchengine:search' %}?query={{ corrected_query|urlencode }}&session_id={{ session_id }}" class="corrected-link">{{ corrected_query }}</a></div><div class="search-instead">Search instead for <a href="{% url 'searchengine:search' %}?query={{ query|urlencode }}&session_id={{ session_id }}&no_correct=1">{{ query }}</a></div></div>{% endif %}
 
+{% if is_question_path and answer %}
+<div class="featured-snippet" style="background: var(--warm-white); border: 1px solid var(--gray-200); border-radius: 12px; padding: var(--space-lg); margin-bottom: var(--space-lg); box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
+    <div style="display: flex; align-items: center; gap: var(--space-sm); margin-bottom: var(--space-md);">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="flex-shrink:0;">
+            <circle cx="8" cy="8" r="7" stroke="var(--green)" stroke-width="1.5" fill="var(--green-soft)"/>
+            <circle cx="8" cy="8" r="3" fill="var(--green)">
+                <animate attributeName="r" values="3;4;3" dur="2s" repeatCount="indefinite"/>
+                <animate attributeName="opacity" values="1;0.6;1" dur="2s" repeatCount="indefinite"/>
+            </circle>
+        </svg>
+        <span style="font-family: var(--font-display); font-size: 15px; font-weight: 600; color: var(--black);">AfroTodo Answer</span>
+    </div>
+    <div style="font-size: 12px; font-weight: 600; color: var(--gray-500); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: var(--space-sm);"></div>
+    <div style="font-family: var(--font-display); font-size: 28px; font-weight: 700; color: var(--black); margin-bottom: var(--space-md);">{{ answer }}</div>
+    {% if results.0.url %}
+    <div style="display: flex; align-items: center; gap: var(--space-sm); padding-top: var(--space-sm); border-top: 1px solid var(--gray-200);">
+        <a href="{{ results.0.url }}" target="_blank" style="font-size: 13px; color: var(--green); font-weight: 500; text-decoration: none;">{{ results.0.site_name|default:results.0.source }}</a>
+        <span style="font-size: 12px; color: var(--gray-400);">·</span>
+        <a href="{{ results.0.url }}" target="_blank" style="font-size: 12px; color: var(--gray-400); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 300px;">{{ results.0.url|truncatechars:50 }}</a>
+    </div>
+    {% endif %}
+</div>
+{% endif %}
 
-            {% if results.0.humanized_summary and map_location_count < 2 and not show_images and not active_data_type and not active_category and not active_schema %}
+            <!-- {% if results.0.humanized_summary and map_location_count < 2 and not show_images and not active_data_type and not active_category and not active_schema %}
 <div class="featured-snippet" style="background: var(--warm-white); border: 1px solid var(--gray-200); border-radius: 12px; padding: var(--space-lg); margin-bottom: var(--space-lg); box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
                 <div style="display: flex; align-items: center; gap: var(--space-sm); margin-bottom: var(--space-md);">
                     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="flex-shrink:0;">
@@ -441,7 +464,7 @@
                 })();
                 </script>
             </div>
-            {% endif %}
+            {% endif %} -->
 
 
 

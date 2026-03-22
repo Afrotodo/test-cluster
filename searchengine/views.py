@@ -1318,14 +1318,19 @@ def search_suggestions(request):
     
     try:
         results = get_autocomplete(prefix=query, limit=8)
-        
+
+        for item in results:
+            print(f"DEBUG api item answer={item.get('answer', 'MISSING')!r} entity_type={item.get('entity_type')!r}")
+
         suggestions = [
             {
                 'text': item.get('term', ''),
                 'display': item.get('display', ''),
                 'description': item.get('description', ''),
-                'entity_type': item.get('entity_type', ''),        # ← NEW
-                'document_uuid': item.get('document_uuid', ''),    # ← NEW
+                'entity_type': item.get('entity_type', ''),
+                'document_uuid': item.get('document_uuid', ''),
+                'answer': item.get('answer', ''),
+                'answer_type': item.get('answer_type', ''),
             }
             for item in results
             if item.get('term')
@@ -5542,6 +5547,8 @@ def search(request):
     # === 1B. EXTRACT QUESTION PATH FIELDS ===
     document_uuid = request.GET.get('document_uuid', '').strip()
     search_source = request.GET.get('search_source', '').strip()
+    answer = request.GET.get('answer', '').strip()           # ← NEW
+    answer_type = request.GET.get('answer_type', '').strip() # ← NEW
     is_question_path = (search_source == 'question' and bool(document_uuid))
     
     # Check for images view
@@ -5836,6 +5843,8 @@ def search(request):
                 pos_tags=tuple_array if params.is_semantic_search else [],
                 safe_search=safe_search,
                 search_source=search_source,           # ← NEW
+                answer=answer if is_question_path else None,           # ← NEW
+                answer_type=answer_type if is_question_path else None,
                 document_uuid=document_uuid if is_question_path else None,  # ← NEW
             )
             
@@ -6019,6 +6028,8 @@ def search(request):
         'has_results': len(results) > 0,
         'featured': featured,
         'related_searches': related_searches,
+        'answer': result.get('answer', ''),
+        'answer_type': result.get('answer_type', ''),
         
         # Image results
         'show_images': show_images,
