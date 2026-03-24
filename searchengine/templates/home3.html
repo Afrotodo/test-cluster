@@ -854,7 +854,130 @@
 
 
 
+/* ==================== LOCATION ==================== */
+.location-indicator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--green);
+    font-weight: 500;
+    margin-top: var(--space-md);
+    opacity: 0;
+    transform: translateY(4px);
+    transition: opacity 0.4s ease, transform 0.4s ease;
+}
 
+.location-indicator.visible {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.location-indicator svg {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+}
+
+.location-indicator .loc-change {
+    color: var(--gray-500);
+    font-size: 12px;
+    font-weight: 400;
+    cursor: pointer;
+    margin-left: 4px;
+    text-decoration: underline;
+    text-decoration-color: transparent;
+    transition: text-decoration-color var(--transition-fast);
+}
+
+.location-indicator .loc-change:hover {
+    text-decoration-color: var(--gray-500);
+}
+
+/* Enable location banner (shown when no location) */
+.location-enable-banner {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    max-width: 640px;
+    width: 100%;
+    margin-top: var(--space-md);
+    padding: var(--space-sm) var(--space-md);
+    background: var(--warm-white);
+    border: 1px solid var(--gray-200);
+    border-radius: 10px;
+    font-size: 13px;
+    color: var(--gray-500);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    opacity: 0;
+    transform: translateY(4px);
+}
+
+.location-enable-banner.visible {
+    opacity: 1;
+    transform: translateY(0);
+    transition: opacity 0.4s ease 0.2s, transform 0.4s ease 0.2s;
+}
+
+.location-enable-banner:hover {
+    border-color: var(--green);
+    background: rgba(45, 106, 79, 0.03);
+}
+
+.location-enable-banner svg {
+    width: 16px;
+    height: 16px;
+    color: var(--gray-500);
+    flex-shrink: 0;
+}
+
+.location-enable-banner .loc-enable-text {
+    flex: 1;
+}
+
+.location-enable-banner .loc-enable-btn {
+    color: var(--green);
+    font-weight: 600;
+    font-size: 13px;
+    white-space: nowrap;
+}
+
+/* Trending section label with location */
+.trending-location-label {
+    color: var(--green);
+    font-weight: 600;
+}
+
+/* Distance badge on result cards */
+.distance-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 11px;
+    color: var(--gray-500);
+    flex-shrink: 0;
+    margin-left: auto;
+}
+
+.distance-badge svg {
+    width: 10px;
+    height: 10px;
+}
+
+/* Hide elements based on location state */
+.loc-only {
+    display: none;
+}
+
+body.has-location .loc-only {
+    display: flex;
+}
+
+body.has-location .no-loc-only {
+    display: none;
+}
 
 
 
@@ -1119,6 +1242,27 @@
             </section>
 
 
+            <!-- Location indicator (shown when location is available) -->
+<div class="location-indicator loc-only" id="location-indicator">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/>
+        <circle cx="12" cy="10" r="3"/>
+    </svg>
+    <span id="location-name">Locating...</span>
+    <span class="loc-change" id="location-change">change</span>
+</div>
+
+<!-- Enable location banner (shown when no location) -->
+<div class="location-enable-banner no-loc-only" id="location-enable-banner">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/>
+        <circle cx="12" cy="10" r="3"/>
+    </svg>
+    <span class="loc-enable-text">Enable location for nearby results</span>
+    <span class="loc-enable-btn">Enable</span>
+</div>
+
+
 
             <!-- Community Questions -->
             <!-- <section class="community-section">
@@ -1153,7 +1297,16 @@
                     <svg class="section-icon" viewBox="0 0 24 24" fill="currentColor" style="color: var(--red);">
                         <path d="M13.5.67s.74 2.65.74 4.8c0 2.06-1.35 3.73-3.41 3.73-2.07 0-3.63-1.67-3.63-3.73l.03-.36C5.21 7.51 4 10.62 4 14c0 4.42 3.58 8 8 8s8-3.58 8-8C20 8.61 17.41 3.8 13.5.67zM11.71 19c-1.78 0-3.22-1.4-3.22-3.14 0-1.62 1.05-2.76 2.81-3.12 1.77-.36 3.6-1.21 4.62-2.58.39 1.29.59 2.65.59 4.04 0 2.65-2.15 4.8-4.8 4.8z"/>
                     </svg>
-                    <span class="section-title">Trending in {{ trending_label }}</span>
+
+                    <!-- <span class="section-title">Trending in {{ trending_label }}</span> -->
+
+                    <span class="section-title">
+                    Trending
+                    <span id="trending-location-label">
+                        {% if trending_label %}in {{ trending_label }}{% else %}today{% endif %}
+                    </span>
+                    </span>
+
                 </div>
 
                 <div class="question-list">
@@ -1233,7 +1386,7 @@
         </footer>
     </main>
 
-<!-- ==================== SEARCH & UI SCRIPT ==================== -->
+
 <!-- ==================== SEARCH & UI SCRIPT ==================== -->
 <script>
 document.addEventListener('DOMContentLoaded', function() {
@@ -1366,6 +1519,258 @@ document.addEventListener('DOMContentLoaded', function() {
     document.querySelectorAll('.mobile-nav-item').forEach(item => {
         item.addEventListener('click', closeMobileSidebar);
     });
+
+
+
+
+// ==================== LOCATION ====================
+const LocationManager = {
+    // Config
+    COOKIE_NAME: 'afrotodo_location',
+    COOKIE_DAYS: 30,
+    GEOCODE_API: 'https://nominatim.openstreetmap.org/reverse',
+
+    // State
+    lat: null,
+    lng: null,
+    cityName: null,
+    state: null,
+
+    /**
+     * Initialize — check cookie first, otherwise show enable banner.
+     */
+    init: function() {
+        const saved = this.getCookie();
+        if (saved) {
+            this.lat = saved.lat;
+            this.lng = saved.lng;
+            this.cityName = saved.city;
+            this.state = saved.state;
+            this.applyLocation();
+        } else {
+            this.showEnableBanner();
+        }
+    },
+
+    /**
+     * Request location from browser Geolocation API.
+     * Only call this from a user gesture (click).
+     */
+    requestLocation: function() {
+        if (!navigator.geolocation) {
+            console.warn('Geolocation not supported');
+            return;
+        }
+
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                this.lat = position.coords.latitude;
+                this.lng = position.coords.longitude;
+                this.reverseGeocode();
+            },
+            (error) => {
+                console.warn('Location denied:', error.message);
+                // Optionally try IP-based fallback here
+                this.showEnableBanner();
+            },
+            {
+                enableHighAccuracy: false,
+                timeout: 8000,
+                maximumAge: 300000 // cache for 5 min
+            }
+        );
+    },
+
+    /**
+     * Convert lat/lng to city name using free Nominatim API.
+     * For production, consider caching or using your own endpoint.
+     */
+    reverseGeocode: async function() {
+        try {
+            const url = `${this.GEOCODE_API}?lat=${this.lat}&lon=${this.lng}&format=json`;
+            const resp = await fetch(url, {
+                headers: { 'Accept-Language': 'en' }
+            });
+            const data = await resp.json();
+
+            const addr = data.address || {};
+            this.cityName = addr.city || addr.town || addr.village || addr.county || 'Your area';
+            this.state = addr.state || '';
+
+            this.saveCookie();
+            this.applyLocation();
+        } catch (err) {
+            console.error('Reverse geocode failed:', err);
+            this.cityName = 'Your area';
+            this.applyLocation();
+        }
+    },
+
+    /**
+     * Apply location to the UI — update indicator, body class,
+     * trending label, and make coords available for search.
+     */
+    applyLocation: function() {
+        // Add body class to toggle loc-only / no-loc-only elements
+        document.body.classList.add('has-location');
+
+        // Update location indicator text
+        const nameEl = document.getElementById('location-name');
+        if (nameEl) {
+            const display = this.state
+                ? `${this.cityName}, ${this.getStateAbbr(this.state)}`
+                : this.cityName;
+            nameEl.textContent = display;
+        }
+
+        // Animate in the indicator
+        const indicator = document.getElementById('location-indicator');
+        if (indicator) {
+            setTimeout(() => indicator.classList.add('visible'), 100);
+        }
+
+        // Update trending label
+        const trendLabel = document.getElementById('trending-location-label');
+        if (trendLabel) {
+            trendLabel.textContent = `in ${this.cityName}`;
+        }
+
+        // Store coords in hidden fields for search form
+        this.addSearchCoords();
+    },
+
+    /**
+     * Add lat/lng as hidden fields in the search form
+     * so they're sent with every search request.
+     */
+    addSearchCoords: function() {
+        const form = document.getElementById('search-form');
+        if (!form) return;
+
+        let latField = form.querySelector('input[name="lat"]');
+        let lngField = form.querySelector('input[name="lng"]');
+
+        if (!latField) {
+            latField = document.createElement('input');
+            latField.type = 'hidden';
+            latField.name = 'lat';
+            form.appendChild(latField);
+        }
+        if (!lngField) {
+            lngField = document.createElement('input');
+            lngField.type = 'hidden';
+            lngField.name = 'lng';
+            form.appendChild(lngField);
+        }
+
+        latField.value = this.lat;
+        lngField.value = this.lng;
+    },
+
+    /**
+     * Show the "Enable location" banner with animation.
+     */
+    showEnableBanner: function() {
+        const banner = document.getElementById('location-enable-banner');
+        if (banner) {
+            setTimeout(() => banner.classList.add('visible'), 300);
+        }
+    },
+
+    // ── Cookie helpers ──
+
+    saveCookie: function() {
+        const data = JSON.stringify({
+            lat: this.lat,
+            lng: this.lng,
+            city: this.cityName,
+            state: this.state
+        });
+        const expires = new Date();
+        expires.setDate(expires.getDate() + this.COOKIE_DAYS);
+        document.cookie = `${this.COOKIE_NAME}=${encodeURIComponent(data)};expires=${expires.toUTCString()};path=/;SameSite=Lax`;
+    },
+
+    getCookie: function() {
+        const match = document.cookie.match(
+            new RegExp('(?:^|; )' + this.COOKIE_NAME + '=([^;]*)')
+        );
+        if (!match) return null;
+        try {
+            return JSON.parse(decodeURIComponent(match[1]));
+        } catch {
+            return null;
+        }
+    },
+
+    clearCookie: function() {
+        document.cookie = `${this.COOKIE_NAME}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`;
+    },
+
+    // ── US state abbreviation helper ──
+
+    getStateAbbr: function(state) {
+        const abbrs = {
+            'Alabama':'AL','Alaska':'AK','Arizona':'AZ','Arkansas':'AR',
+            'California':'CA','Colorado':'CO','Connecticut':'CT',
+            'Delaware':'DE','Florida':'FL','Georgia':'GA',
+            'Hawaii':'HI','Idaho':'ID','Illinois':'IL',
+            'Indiana':'IN','Iowa':'IA','Kansas':'KS',
+            'Kentucky':'KY','Louisiana':'LA','Maine':'ME',
+            'Maryland':'MD','Massachusetts':'MA','Michigan':'MI',
+            'Minnesota':'MN','Mississippi':'MS','Missouri':'MO',
+            'Montana':'MT','Nebraska':'NE','Nevada':'NV',
+            'New Hampshire':'NH','New Jersey':'NJ','New Mexico':'NM',
+            'New York':'NY','North Carolina':'NC','North Dakota':'ND',
+            'Ohio':'OH','Oklahoma':'OK','Oregon':'OR',
+            'Pennsylvania':'PA','Rhode Island':'RI','South Carolina':'SC',
+            'South Dakota':'SD','Tennessee':'TN','Texas':'TX',
+            'Utah':'UT','Vermont':'VT','Virginia':'VA',
+            'Washington':'WA','West Virginia':'WV','Wisconsin':'WI',
+            'Wyoming':'WY','District of Columbia':'DC'
+        };
+        return abbrs[state] || state;
+    }
+};
+
+// ── Wire up location UI ──
+
+// Enable banner click → request permission
+const enableBanner = document.getElementById('location-enable-banner');
+if (enableBanner) {
+    enableBanner.addEventListener('click', function() {
+        this.style.opacity = '0.5';
+        this.style.pointerEvents = 'none';
+        LocationManager.requestLocation();
+    });
+}
+
+// "change" link → re-request
+const changeBtn = document.getElementById('location-change');
+if (changeBtn) {
+    changeBtn.addEventListener('click', function() {
+        LocationManager.clearCookie();
+        LocationManager.requestLocation();
+    });
+}
+
+// Initialize on load
+LocationManager.init();
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     // ==================== SEARCH AUTOCOMPLETE ====================
     const searchInput = document.getElementById('search-input');
