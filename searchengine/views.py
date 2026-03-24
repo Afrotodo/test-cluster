@@ -7690,614 +7690,1062 @@ def contact(request):
     return render(request, 'contact.html')
 
 
-# =============================================================================
-# DEBUG VIEWS (REMOVE IN PRODUCTION)
-# =============================================================================
+# # =============================================================================
+# # DEBUG VIEWS (REMOVE IN PRODUCTION)
+# # =============================================================================
 
-def debug_schema(request):
-    """Diagnostic view to inspect Typesense schema and sample documents."""
+# def debug_schema(request):
+#     """Diagnostic view to inspect Typesense schema and sample documents."""
     
-    debug_info = {
-        'collection_schema': None,
-        'sample_businesses': [],
-        'all_fields_in_businesses': set(),
-        'location_fields_found': [],
-        'errors': [],
-    }
+#     debug_info = {
+#         'collection_schema': None,
+#         'sample_businesses': [],
+#         'all_fields_in_businesses': set(),
+#         'location_fields_found': [],
+#         'errors': [],
+#     }
     
-    try:
-        schema = typesense_manager._client.collections[COLLECTION_NAME].retrieve()
-        debug_info['collection_schema'] = {
-            'name': schema.get('name'),
-            'num_documents': schema.get('num_documents'),
-            'fields': [
-                {
-                    'name': f.get('name'),
-                    'type': f.get('type'),
-                    'facet': f.get('facet', False),
-                    'optional': f.get('optional', False),
-                }
-                for f in schema.get('fields', [])
-            ]
-        }
-    except Exception as e:
-        debug_info['errors'].append(f"Schema retrieval error: {e}")
+#     try:
+#         schema = typesense_manager._client.collections[COLLECTION_NAME].retrieve()
+#         debug_info['collection_schema'] = {
+#             'name': schema.get('name'),
+#             'num_documents': schema.get('num_documents'),
+#             'fields': [
+#                 {
+#                     'name': f.get('name'),
+#                     'type': f.get('type'),
+#                     'facet': f.get('facet', False),
+#                     'optional': f.get('optional', False),
+#                 }
+#                 for f in schema.get('fields', [])
+#             ]
+#         }
+#     except Exception as e:
+#         debug_info['errors'].append(f"Schema retrieval error: {e}")
     
-    try:
-        results = typesense_manager.search(COLLECTION_NAME, {
-            'q': '*',
-            'query_by': 'document_title',
-            'filter_by': 'document_schema:=business',
-            'per_page': 5,
-        })
+#     try:
+#         results = typesense_manager.search(COLLECTION_NAME, {
+#             'q': '*',
+#             'query_by': 'document_title',
+#             'filter_by': 'document_schema:=business',
+#             'per_page': 5,
+#         })
         
-        if results and results.get('hits'):
-            for hit in results['hits']:
-                doc = hit.get('document', {})
-                debug_info['all_fields_in_businesses'].update(doc.keys())
-                debug_info['sample_businesses'].append(doc)
+#         if results and results.get('hits'):
+#             for hit in results['hits']:
+#                 doc = hit.get('document', {})
+#                 debug_info['all_fields_in_businesses'].update(doc.keys())
+#                 debug_info['sample_businesses'].append(doc)
             
-            debug_info['all_fields_in_businesses'] = sorted(list(debug_info['all_fields_in_businesses']))
+#             debug_info['all_fields_in_businesses'] = sorted(list(debug_info['all_fields_in_businesses']))
             
-            location_keywords = ['city', 'state', 'location', 'address', 'lat', 'lng', 'geo', 'place', 'zip', 'postal', 'country', 'region']
-            for field in debug_info['all_fields_in_businesses']:
-                field_lower = field.lower()
-                if any(kw in field_lower for kw in location_keywords):
-                    debug_info['location_fields_found'].append(field)
+#             location_keywords = ['city', 'state', 'location', 'address', 'lat', 'lng', 'geo', 'place', 'zip', 'postal', 'country', 'region']
+#             for field in debug_info['all_fields_in_businesses']:
+#                 field_lower = field.lower()
+#                 if any(kw in field_lower for kw in location_keywords):
+#                     debug_info['location_fields_found'].append(field)
                     
-    except Exception as e:
-        debug_info['errors'].append(f"Sample documents error: {e}")
+#     except Exception as e:
+#         debug_info['errors'].append(f"Sample documents error: {e}")
     
-    vector_fields = []
-    if debug_info.get('collection_schema'):
-        for field in debug_info['collection_schema'].get('fields', []):
-            if 'vec' in field['name'].lower() or 'embed' in field['name'].lower() or field['type'].startswith('float'):
-                vector_fields.append(field)
-    debug_info['vector_fields'] = vector_fields
+#     vector_fields = []
+#     if debug_info.get('collection_schema'):
+#         for field in debug_info['collection_schema'].get('fields', []):
+#             if 'vec' in field['name'].lower() or 'embed' in field['name'].lower() or field['type'].startswith('float'):
+#                 vector_fields.append(field)
+#     debug_info['vector_fields'] = vector_fields
     
-    try:
-        test_results = typesense_manager.search(COLLECTION_NAME, {
-            'q': 'atlanta barbers',
-            'query_by': 'document_title,document_summary,keywords,primary_keywords',
-            'filter_by': 'document_schema:=business',
-            'per_page': 5,
-        })
+#     try:
+#         test_results = typesense_manager.search(COLLECTION_NAME, {
+#             'q': 'atlanta barbers',
+#             'query_by': 'document_title,document_summary,keywords,primary_keywords',
+#             'filter_by': 'document_schema:=business',
+#             'per_page': 5,
+#         })
         
-        debug_info['atlanta_barbers_test'] = {
-            'found': test_results.get('found', 0) if test_results else 0,
-            'results': [
-                {
-                    'title': hit.get('document', {}).get('document_title'),
-                    'keywords': hit.get('document', {}).get('keywords', [])[:5],
-                    'primary_keywords': hit.get('document', {}).get('primary_keywords', [])[:5],
-                }
-                for hit in (test_results.get('hits', []) if test_results else [])
-            ]
-        }
-    except Exception as e:
-        debug_info['errors'].append(f"Atlanta barbers test error: {e}")
+#         debug_info['atlanta_barbers_test'] = {
+#             'found': test_results.get('found', 0) if test_results else 0,
+#             'results': [
+#                 {
+#                     'title': hit.get('document', {}).get('document_title'),
+#                     'keywords': hit.get('document', {}).get('keywords', [])[:5],
+#                     'primary_keywords': hit.get('document', {}).get('primary_keywords', [])[:5],
+#                 }
+#                 for hit in (test_results.get('hits', []) if test_results else [])
+#             ]
+#         }
+#     except Exception as e:
+#         debug_info['errors'].append(f"Atlanta barbers test error: {e}")
     
-    try:
-        keyword_sample = typesense_manager.search(COLLECTION_NAME, {
-            'q': '*',
-            'query_by': 'document_title',
-            'filter_by': 'document_schema:=business',
-            'per_page': 10,
-        })
+#     try:
+#         keyword_sample = typesense_manager.search(COLLECTION_NAME, {
+#             'q': '*',
+#             'query_by': 'document_title',
+#             'filter_by': 'document_schema:=business',
+#             'per_page': 10,
+#         })
         
-        if keyword_sample and keyword_sample.get('hits'):
-            debug_info['keyword_samples'] = [
-                {
-                    'title': hit.get('document', {}).get('document_title', '')[:50],
-                    'keywords': hit.get('document', {}).get('keywords', []),
-                    'primary_keywords': hit.get('document', {}).get('primary_keywords', []),
-                    'document_brand': hit.get('document', {}).get('document_brand', ''),
-                }
-                for hit in keyword_sample['hits'][:5]
-            ]
-    except Exception as e:
-        debug_info['errors'].append(f"Keyword sample error: {e}")
+#         if keyword_sample and keyword_sample.get('hits'):
+#             debug_info['keyword_samples'] = [
+#                 {
+#                     'title': hit.get('document', {}).get('document_title', '')[:50],
+#                     'keywords': hit.get('document', {}).get('keywords', []),
+#                     'primary_keywords': hit.get('document', {}).get('primary_keywords', []),
+#                     'document_brand': hit.get('document', {}).get('document_brand', ''),
+#                 }
+#                 for hit in keyword_sample['hits'][:5]
+#             ]
+#     except Exception as e:
+#         debug_info['errors'].append(f"Keyword sample error: {e}")
     
-    return JsonResponse(debug_info, json_dumps_params={'indent': 2})
+#     return JsonResponse(debug_info, json_dumps_params={'indent': 2})
 
 
-def debug_business_search(request):
-    """Diagnostic endpoint to debug why businesses aren't showing."""
+# def debug_business_search(request):
+#     """Diagnostic endpoint to debug why businesses aren't showing."""
     
-    debug_info = {
-        'typesense_available': False,
-        'total_documents': 0,
-        'business_schema_count': 0,
-        'sample_documents': [],
-        'errors': [],
-        'schema_values': [],
-    }
+#     debug_info = {
+#         'typesense_available': False,
+#         'total_documents': 0,
+#         'business_schema_count': 0,
+#         'sample_documents': [],
+#         'errors': [],
+#         'schema_values': [],
+#     }
     
-    debug_info['typesense_available'] = typesense_manager.available
-    debug_info['collection_name'] = COLLECTION_NAME
+#     debug_info['typesense_available'] = typesense_manager.available
+#     debug_info['collection_name'] = COLLECTION_NAME
     
-    if not typesense_manager.available:
-        debug_info['errors'].append("Typesense is not connected")
-        return JsonResponse(debug_info, json_dumps_params={'indent': 2})
+#     if not typesense_manager.available:
+#         debug_info['errors'].append("Typesense is not connected")
+#         return JsonResponse(debug_info, json_dumps_params={'indent': 2})
     
-    try:
-        all_results = typesense_manager.search(COLLECTION_NAME, {
-            'q': '*',
-            'query_by': 'document_title',
-            'per_page': 10,
-            'facet_by': 'document_schema,document_category,document_brand',
-            'max_facet_values': 50,
-        })
+#     try:
+#         all_results = typesense_manager.search(COLLECTION_NAME, {
+#             'q': '*',
+#             'query_by': 'document_title',
+#             'per_page': 10,
+#             'facet_by': 'document_schema,document_category,document_brand',
+#             'max_facet_values': 50,
+#         })
         
-        if all_results:
-            debug_info['total_documents'] = all_results.get('found', 0)
-            debug_info['sample_documents'] = [
-                {
-                    'id': hit.get('document', {}).get('id'),
-                    'title': hit.get('document', {}).get('document_title'),
-                    'schema': hit.get('document', {}).get('document_schema'),
-                    'category': hit.get('document', {}).get('document_category'),
-                    'brand': hit.get('document', {}).get('document_brand'),
-                }
-                for hit in all_results.get('hits', [])
-            ]
+#         if all_results:
+#             debug_info['total_documents'] = all_results.get('found', 0)
+#             debug_info['sample_documents'] = [
+#                 {
+#                     'id': hit.get('document', {}).get('id'),
+#                     'title': hit.get('document', {}).get('document_title'),
+#                     'schema': hit.get('document', {}).get('document_schema'),
+#                     'category': hit.get('document', {}).get('document_category'),
+#                     'brand': hit.get('document', {}).get('document_brand'),
+#                 }
+#                 for hit in all_results.get('hits', [])
+#             ]
             
-            for facet in all_results.get('facet_counts', []):
-                field = facet.get('field_name')
-                counts = [{'value': c['value'], 'count': c['count']} for c in facet.get('counts', [])]
-                debug_info[f'{field}_values'] = counts
-        else:
-            debug_info['errors'].append("Search returned None")
+#             for facet in all_results.get('facet_counts', []):
+#                 field = facet.get('field_name')
+#                 counts = [{'value': c['value'], 'count': c['count']} for c in facet.get('counts', [])]
+#                 debug_info[f'{field}_values'] = counts
+#         else:
+#             debug_info['errors'].append("Search returned None")
                 
-    except Exception as e:
-        debug_info['errors'].append(f"Search error: {str(e)}")
+#     except Exception as e:
+#         debug_info['errors'].append(f"Search error: {str(e)}")
     
-    try:
-        business_results = typesense_manager.search(COLLECTION_NAME, {
-            'q': '*',
-            'query_by': 'document_title',
-            'filter_by': 'document_schema:=business',
-            'per_page': 5,
-        })
+#     try:
+#         business_results = typesense_manager.search(COLLECTION_NAME, {
+#             'q': '*',
+#             'query_by': 'document_title',
+#             'filter_by': 'document_schema:=business',
+#             'per_page': 5,
+#         })
         
-        if business_results:
-            debug_info['business_schema_count'] = business_results.get('found', 0)
-    except Exception as e:
-        debug_info['errors'].append(f"Business filter error: {str(e)}")
+#         if business_results:
+#             debug_info['business_schema_count'] = business_results.get('found', 0)
+#     except Exception as e:
+#         debug_info['errors'].append(f"Business filter error: {str(e)}")
     
-    return JsonResponse(debug_info, json_dumps_params={'indent': 2})
+#     return JsonResponse(debug_info, json_dumps_params={'indent': 2})
 
-"""
-Debug Search View
-=================
-Add to your urls.py:
-    from searchengine.debug_search import debug_search_view
-    path('debug/search/', debug_search_view, name='debug_search'),
+# """
+# Debug Search View
+# =================
+# Add to your urls.py:
+#     from searchengine.debug_search import debug_search_view
+#     path('debug/search/', debug_search_view, name='debug_search'),
 
-Usage:
-    /debug/search/?q=where+is+africa
-    /debug/search/?q=restaurants+in+atlanta
-    /debug/search/?q=black+owned+barbershops+in+houston
-"""
+# Usage:
+#     /debug/search/?q=where+is+africa
+#     /debug/search/?q=restaurants+in+atlanta
+#     /debug/search/?q=black+owned+barbershops+in+houston
+# """
 
-import os
-import sys
-import time
+# import os
+# import sys
+# import time
+# import json
+# from django.http import JsonResponse
+# from django.views.decorators.http import require_GET
+
+# # Import bridge components
+# from searchengine.typesense_discovery_bridge import (
+#     _run_word_discovery,
+#     build_query_profile,
+#     build_typesense_params,
+#     build_filter_string_without_data_type,
+#     fetch_full_documents,
+#     client,
+#     COLLECTION_NAME,
+#     BLEND_RATIOS,
+#     SEARCHABLE_POS,
+#     SIGNAL_POS,
+#     LOCATION_CATEGORIES,
+# )
+
+
+
+
+# from searchengine.intent_detect import detect_intent
+
+# @require_GET
+# def debug_search_view(request):
+#     """
+#     Debug endpoint that shows every step of the search pipeline.
+#     Returns JSON with full diagnostic output.
+    
+#     Usage: /debug/search/?q=where+is+africa
+#     """
+#     query = request.GET.get('q', '').strip()
+    
+#     if not query:
+#         return JsonResponse({
+#             'error': 'No query provided',
+#             'usage': '/debug/search/?q=your+search+query',
+#             'examples': [
+#                 '/debug/search/?q=where+is+africa',
+#                 '/debug/search/?q=restaurants+in+atlanta',
+#                 '/debug/search/?q=black+owned+barbershops+in+houston',
+#                 '/debug/search/?q=who+founded+morehouse',
+#                 '/debug/search/?q=billie+holiday',
+#             ]
+#         }, json_dumps_params={'indent': 2})
+    
+#     debug = {
+#         'query': query,
+#         'steps': {},
+#         'timings': {},
+#     }
+    
+#     # =========================================================================
+#     # STEP 1: WORD DISCOVERY
+#     # =========================================================================
+#     t0 = time.time()
+#     discovery = _run_word_discovery(query)
+#     debug['timings']['word_discovery_ms'] = round((time.time() - t0) * 1000, 2)
+    
+#     terms_debug = []
+#     for t in discovery.get('terms', []):
+#         terms_debug.append({
+#             'word': t.get('word'),
+#             'pos': t.get('pos'),
+#             'category': t.get('category'),
+#             'rank': t.get('rank', 0),
+#             'is_stopword': t.get('is_stopword', False),
+#             'display': t.get('display'),
+#             'is_searchable_pos': t.get('pos', '').lower() in SEARCHABLE_POS,
+#             'is_location_cat': t.get('category', '') in LOCATION_CATEGORIES,
+#         })
+    
+#     debug['steps']['1_word_discovery'] = {
+#         'corrected_query': discovery.get('corrected_query', query),
+#         'terms': terms_debug,
+#         'ngrams': discovery.get('ngrams', []),
+#         'corrections': discovery.get('corrections', []),
+#         'stats': discovery.get('stats', {}),
+#     }
+    
+#     # =========================================================================
+#     # STEP 2: INTENT DETECTION
+#     # =========================================================================
+#     t1 = time.time()
+#     discovery = detect_intent(discovery)
+#     signals = discovery.get('signals', {})
+#     debug['timings']['intent_detect_ms'] = round((time.time() - t1) * 1000, 2)
+    
+#     debug['steps']['2_intent_signals'] = {
+#         'query_mode': signals.get('query_mode'),
+#         'question_word': signals.get('question_word'),
+#         'has_question_word': signals.get('has_question_word'),
+#         'is_local_search': signals.get('is_local_search'),
+#         'has_location': signals.get('has_location'),
+#         'has_service_word': signals.get('has_service_word'),
+#         'has_black_owned': signals.get('has_black_owned'),
+#         'wants_single_result': signals.get('wants_single_result'),
+#         'wants_multiple_results': signals.get('wants_multiple_results'),
+#         'has_temporal': signals.get('has_temporal'),
+#         'temporal_direction': signals.get('temporal_direction'),
+#         'has_superlative': signals.get('has_superlative'),
+#         'has_negation': signals.get('has_negation'),
+#         'has_person': signals.get('has_person'),
+#         'has_organization': signals.get('has_organization'),
+#         'has_role_word': signals.get('has_role_word'),
+#         'has_plural_noun': signals.get('has_plural_noun'),
+#         'has_unknown_terms': signals.get('has_unknown_terms'),
+#         'unknown_term_count': signals.get('unknown_term_count'),
+#         'domains_detected': signals.get('domains_detected', []),
+#         'service_words': signals.get('service_words', []),
+#         'action_type': signals.get('action_type'),
+#     }
+    
+#     # =========================================================================
+#     # STEP 3: BUILD PROFILE
+#     # =========================================================================
+#     t2 = time.time()
+#     profile = build_query_profile(discovery, signals=signals)
+#     debug['timings']['build_profile_ms'] = round((time.time() - t2) * 1000, 2)
+    
+#     debug['steps']['3_query_profile'] = {
+#         'search_terms': profile.get('search_terms', []),
+#         'location_terms': profile.get('location_terms', []),
+#         'cities': [c['name'] for c in profile.get('cities', [])],
+#         'states': [s['name'] for s in profile.get('states', [])],
+#         'primary_intent': profile.get('primary_intent'),
+#         'has_person': profile.get('has_person'),
+#         'has_organization': profile.get('has_organization'),
+#         'has_location': profile.get('has_location'),
+#         'has_keyword': profile.get('has_keyword'),
+#         'has_media': profile.get('has_media'),
+#         'field_boosts': profile.get('field_boosts', {}),
+#         'preferred_data_types': profile.get('preferred_data_types', []),
+#     }
+    
+#     # =========================================================================
+#     # STEP 4: BUILD TYPESENSE PARAMS
+#     # =========================================================================
+#     params = build_typesense_params(profile, signals=signals)
+#     filter_str = build_filter_string_without_data_type(profile, signals=signals)
+    
+#     debug['steps']['4_typesense_params'] = {
+#         'q': params.get('q'),
+#         'query_by': params.get('query_by'),
+#         'query_by_weights': params.get('query_by_weights'),
+#         'filter_by': params.get('filter_by', filter_str or '(none)'),
+#         'sort_by': params.get('sort_by'),
+#         'num_typos': params.get('num_typos'),
+#         'prefix': params.get('prefix'),
+#         'drop_tokens_threshold': params.get('drop_tokens_threshold'),
+#         'blend_ratios': BLEND_RATIOS.get(signals.get('query_mode', 'explore')),
+#     }
+    
+#     # =========================================================================
+#     # STEP 5: STAGE 1 — TYPESENSE SEARCH (top 10 only)
+#     # =========================================================================
+#     t3 = time.time()
+    
+#     search_params = {
+#         'q': params.get('q', '*'),
+#         'query_by': params.get('query_by', 'document_title,primary_keywords,entity_names'),
+#         'query_by_weights': params.get('query_by_weights', '20,15,5'),
+#         'per_page': 10,
+#         'page': 1,
+#         'num_typos': params.get('num_typos', 0),
+#         'prefix': params.get('prefix', 'no'),
+#         'drop_tokens_threshold': params.get('drop_tokens_threshold', 0),
+#         'sort_by': params.get('sort_by', '_text_match:desc,authority_score:desc'),
+#         'include_fields': 'document_uuid,document_title,document_data_type,document_category,authority_score,document_url,primary_keywords,entity_names',
+#     }
+    
+#     if filter_str:
+#         search_params['filter_by'] = filter_str
+    
+#     stage1_debug = {
+#         'search_params_sent': search_params,
+#         'results': [],
+#         'found': 0,
+#         'error': None,
+#     }
+    
+#     try:
+#         response = client.collections[COLLECTION_NAME].documents.search(search_params)
+#         stage1_debug['found'] = response.get('found', 0)
+        
+#         for i, hit in enumerate(response.get('hits', []), 1):
+#             doc = hit.get('document', {})
+#             stage1_debug['results'].append({
+#                 'rank': i,
+#                 'title': doc.get('document_title', ''),
+#                 'data_type': doc.get('document_data_type', ''),
+#                 'category': doc.get('document_category', ''),
+#                 'authority_score': doc.get('authority_score', 0),
+#                 'url': doc.get('document_url', ''),
+#                 'text_match_score': hit.get('text_match', 0),
+#                 'text_match_info': hit.get('text_match_info', {}),
+#                 'primary_keywords': (doc.get('primary_keywords', []) or [])[:5],
+#                 'entity_names': (doc.get('entity_names', []) or [])[:5],
+#                 'highlights': [
+#                     {
+#                         'field': h.get('field'),
+#                         'snippet': h.get('snippet') or h.get('value', '')[:100],
+#                     }
+#                     for h in hit.get('highlights', [])
+#                 ],
+#             })
+#     except Exception as e:
+#         stage1_debug['error'] = str(e)
+    
+#     debug['timings']['stage1_search_ms'] = round((time.time() - t3) * 1000, 2)
+#     debug['steps']['5_stage1_results'] = stage1_debug
+    
+#     # =========================================================================
+#     # SUMMARY
+#     # =========================================================================
+#     debug['timings']['total_ms'] = round((time.time() - t0) * 1000, 2)
+    
+#     debug['summary'] = {
+#         'query': query,
+#         'corrected_query': discovery.get('corrected_query', query),
+#         'query_mode': signals.get('query_mode'),
+#         'q_sent_to_typesense': params.get('q'),
+#         'fields_searched': params.get('query_by'),
+#         'total_found': stage1_debug['found'],
+#         'top_result': stage1_debug['results'][0]['title'] if stage1_debug['results'] else '(none)',
+#         'wants_single_result': signals.get('wants_single_result'),
+#         'wants_multiple_results': signals.get('wants_multiple_results'),
+#     }
+    
+#     return JsonResponse(debug, json_dumps_params={'indent': 2})
+# """
+# Debug Bridge Endpoint
+# =====================
+# Calls execute_full_search() directly and returns raw counts as JSON.
+# Bypasses views.py entirely — shows exactly what the bridge produces.
+
+# Add to your urls.py:
+#     from searchengine.debug_bridge import debug_bridge_view
+#     path('debug/bridge/', debug_bridge_view, name='debug_bridge'),
+
+# Usage:
+#     /debug/bridge/?q=africa
+#     /debug/bridge/?q=africa&alt_mode=n          (keyword path)
+#     /debug/bridge/?q=africa&alt_mode=y          (semantic path)
+#     /debug/bridge/?q=africa&page=2
+#     /debug/bridge/?q=africa&data_type=article   (with filter)
+#     /debug/bridge/?q=africa&view=images         (image pagination)
+# """
+
+# import time
+# from django.http import JsonResponse
+# from django.views.decorators.http import require_GET
+
+# from searchengine.typesense_discovery_bridge import (
+#     execute_full_search,
+#     _has_real_images,
+#     _generate_stable_cache_key,
+#     _get_cached_results,
+# )
+
+
+# @require_GET
+# def debug_bridge_view(request):
+#     query = request.GET.get('q', '').strip()
+
+#     if not query:
+#         return JsonResponse({
+#             'error': 'No query provided',
+#             'usage': '/debug/bridge/?q=your+search+query',
+#             'examples': [
+#                 '/debug/bridge/?q=africa',
+#                 '/debug/bridge/?q=africa&alt_mode=n',
+#                 '/debug/bridge/?q=africa&alt_mode=y',
+#                 '/debug/bridge/?q=africa&view=images',
+#                 '/debug/bridge/?q=africa&data_type=article',
+#             ]
+#         }, json_dumps_params={'indent': 2})
+
+#     # Parameters
+#     alt_mode = request.GET.get('alt_mode', 'y')
+#     page = int(request.GET.get('page', 1))
+#     per_page = int(request.GET.get('per_page', 10))
+#     view_mode = request.GET.get('view', '')
+#     session_id = request.GET.get('session_id', 'debug-session')
+
+#     # Filters
+#     filters = {}
+#     data_type = request.GET.get('data_type', '')
+#     if data_type:
+#         filters['data_type'] = data_type
+#     category = request.GET.get('category', '')
+#     if category:
+#         filters['category'] = category
+
+#     # Call bridge directly
+#     t0 = time.time()
+#     result = execute_full_search(
+#         query=query,
+#         session_id=session_id,
+#         filters=filters,
+#         page=page,
+#         per_page=per_page,
+#         alt_mode=alt_mode,
+#         user_location=None,
+#         pos_tags=[],
+#         safe_search=True,
+#     )
+#     elapsed_ms = round((time.time() - t0) * 1000, 2)
+
+#     # Extract raw counts from bridge result
+#     facet_total = result.get('facet_total', 0)
+#     total_image_count = result.get('total_image_count', 0)
+#     total_filtered = result.get('total', 0)
+#     data_type_facets = result.get('data_type_facets', [])
+#     category_facets = result.get('category_facets', [])
+
+#     # Sum facets to verify
+#     facet_sum = sum(f.get('count', 0) for f in data_type_facets)
+
+#     # Check stable cache contents
+#     stable_key = _generate_stable_cache_key(session_id, query)
+#     cached = _get_cached_results(stable_key)
+#     cache_info = {}
+#     if cached:
+#         all_results = cached.get('all_results', [])
+#         docs_with_images = [r for r in all_results if _has_real_images(r)]
+#         cache_info = {
+#             'stable_key': stable_key[:16] + '...',
+#             'cached_total_results': len(all_results),
+#             'cached_facet_total': cached.get('facet_total', 0),
+#             'cached_total_image_count': cached.get('total_image_count', 0),
+#             'docs_with_real_images': len(docs_with_images),
+#             'sample_image_doc': docs_with_images[0] if docs_with_images else None,
+#             'sample_no_image_doc': next(
+#                 (r for r in all_results if not _has_real_images(r)), None
+#             ),
+#         }
+
+#     # Results for this page
+#     page_results = []
+#     for r in result.get('results', []):
+#         page_results.append({
+#             'id': r.get('id', '')[:20],
+#             'title': r.get('title', '')[:80],
+#             'data_type': r.get('data_type', ''),
+#             'category': r.get('category', ''),
+#             'authority_score': r.get('authority_score', 0),
+#             'image_url_count': len(r.get('image_url', []) or []),
+#             'logo_url_count': len(r.get('logo_url', []) or []),
+#             'has_real_images': _has_real_images(r),
+#             'url': r.get('url', '')[:80],
+#         })
+
+#     # Build response
+#     response = {
+#         'query': query,
+#         'alt_mode': alt_mode,
+#         'path': 'keyword' if alt_mode == 'n' else 'semantic',
+#         'page': page,
+#         'per_page': per_page,
+#         'filters': filters or None,
+#         'elapsed_ms': elapsed_ms,
+
+#         # === THE KEY NUMBERS ===
+#         'counts': {
+#             'facet_total': facet_total,
+#             'total_image_count': total_image_count,
+#             'total_filtered': total_filtered,
+#             'facet_sum': facet_sum,
+#             'facet_total_matches_sum': facet_total == facet_sum,
+#         },
+
+#         # === FACETS ===
+#         'data_type_facets': [
+#             {'type': f['value'], 'label': f.get('label', ''), 'count': f['count']}
+#             for f in data_type_facets
+#         ],
+#         'category_facets': [
+#             {'category': f['value'], 'count': f['count']}
+#             for f in category_facets[:10]
+#         ],
+
+#         # === WHAT THE TEMPLATE WOULD SHOW ===
+#         'template_would_show': {
+#             'all_tab': facet_total,
+#             'images_tab': total_image_count,
+#             'other_tabs': [
+#                 f"{f.get('label', f['value'])}: {f['count']}"
+#                 for f in data_type_facets
+#             ],
+#             'tab_sum_without_images': facet_sum,
+#             'tab_sum_with_images': facet_sum + total_image_count,
+#             'note': (
+#                 f"Images ({total_image_count}) is a cross-cut of the {facet_total} documents. "
+#                 f"Facet tabs sum to {facet_sum}. "
+#                 f"{'✅ matches facet_total' if facet_sum == facet_total else '⚠️ MISMATCH with facet_total'}"
+#             ),
+#         },
+
+#         # === CACHE INSPECTION ===
+#         'cache_inspection': cache_info,
+
+#         # === PAGE RESULTS ===
+#         'page_result_count': len(page_results),
+#         'page_results': page_results,
+
+#         # === BRIDGE METADATA ===
+#         'bridge_metadata': {
+#             'corrected_query': result.get('corrected_query', query),
+#             'search_strategy': result.get('search_strategy', ''),
+#             'query_mode': result.get('query_mode', ''),
+#             'semantic_enabled': result.get('semantic_enabled', False),
+#             'timings': result.get('timings', {}),
+#         },
+#     }
+
+#     return JsonResponse(response, json_dumps_params={'indent': 2})
+
+# ============================================================================
+# DEBUG VIEW — Add to views.py
+# ============================================================================
+# In urls.py, add:
+#   path('debug/search/', views.debug_search_view, name='debug_search'),
+# ============================================================================
+
 import json
+import time
 from django.http import JsonResponse
-from django.views.decorators.http import require_GET
-
-# Import bridge components
-from searchengine.typesense_discovery_bridge import (
-    _run_word_discovery,
-    build_query_profile,
-    build_typesense_params,
-    build_filter_string_without_data_type,
-    fetch_full_documents,
-    client,
-    COLLECTION_NAME,
-    BLEND_RATIOS,
-    SEARCHABLE_POS,
-    SIGNAL_POS,
-    LOCATION_CATEGORIES,
-)
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_http_methods
 
 
+def _fetch_questions_debug(
+    profile: dict,
+    query_embedding: list,
+    signals: dict = None,
+    max_results: int = 50,
+) -> dict:
+    """
+    Stage 1B with full debug output.
+    Returns matched questions with vector distance, question text,
+    answer, question_type, and the document_uuid they resolve to.
+    """
+    from .typesense_discovery_bridge import client
+
+    signals = signals or {}
+
+    if not query_embedding:
+        return {"error": "no embedding", "hits": [], "uuids": [], "filter_used": ""}
+
+    # ── Build facet filter (same logic as fetch_candidate_uuids_from_questions) ──
+    filter_parts = []
+
+    primary_kws = profile.get("primary_keywords", [])
+    if not primary_kws:
+        primary_kws = [
+            k.get("phrase") or k.get("word", "")
+            for k in profile.get("keywords", [])
+        ]
+    primary_kws = [kw for kw in primary_kws if kw][:3]
+    if primary_kws:
+        kw_values = ",".join([f"`{kw}`" for kw in primary_kws])
+        filter_parts.append(f"primary_keywords:[{kw_values}]")
+
+    entity_names = []
+    for p in profile.get("persons", []):
+        entity_names.append(p.get("phrase") or p.get("word", ""))
+    for o in profile.get("organizations", []):
+        entity_names.append(o.get("phrase") or o.get("word", ""))
+    entity_names = [e for e in entity_names if e][:3]
+    if entity_names:
+        ent_values = ",".join([f"`{e}`" for e in entity_names])
+        filter_parts.append(f"entities:[{ent_values}]")
+
+    semantic_kws = profile.get("semantic_keywords", [])
+    semantic_kws = [kw for kw in semantic_kws if kw][:3]
+    if semantic_kws:
+        sem_values = ",".join([f"`{kw}`" for kw in semantic_kws])
+        filter_parts.append(f"semantic_keywords:[{sem_values}]")
+
+    question_word = signals.get("question_word", "")
+    question_type_map = {
+        "when":  "TEMPORAL",
+        "where": "LOCATION",
+        "who":   "PERSON",
+        "what":  "FACTUAL",
+        "which": "FACTUAL",
+        "why":   "REASON",
+        "how":   "PROCESS",
+    }
+    question_type = question_type_map.get(question_word.lower(), "")
+    if question_type:
+        filter_parts.append(f"question_type:={question_type}")
+
+    filter_str = " || ".join(filter_parts) if filter_parts else ""
+
+    embedding_str = ",".join(str(x) for x in query_embedding)
+
+    search_params = {
+        "q":              "*",
+        "vector_query":   f"embedding:([{embedding_str}], k:{max_results})",
+        "per_page":       max_results,
+        "include_fields": "question_id,question,answer,answer_type,question_type,document_uuid,semantic_uuid,primary_keywords,entities,authority_rank_score",
+    }
+    if filter_str:
+        search_params["filter_by"] = filter_str
+
+    try:
+        search_requests = {"searches": [{"collection": "questions", **search_params}]}
+        response = client.multi_search.perform(search_requests, {})
+        result = response["results"][0]
+        hits = result.get("hits", [])
+
+        matched_questions = []
+        uuids = []
+        seen = set()
+
+        for hit in hits:
+            doc = hit.get("document", {})
+            uuid = doc.get("document_uuid")
+            vector_distance = hit.get("vector_distance", 1.0)
+            semantic_score  = round(1 - vector_distance, 4)
+
+            matched_questions.append({
+                "question":         doc.get("question", ""),
+                "answer":           doc.get("answer", ""),
+                "answer_type":      doc.get("answer_type", ""),
+                "question_type":    doc.get("question_type", ""),
+                "document_uuid":    uuid,
+                "semantic_uuid":    doc.get("semantic_uuid", ""),
+                "vector_distance":  round(vector_distance, 4),
+                "semantic_score":   semantic_score,
+                "confidence":       "HIGH" if vector_distance < 0.25 else
+                                    "MEDIUM" if vector_distance < 0.45 else
+                                    "LOW",
+                "primary_keywords": doc.get("primary_keywords", [])[:3],
+                "entities":         doc.get("entities", [])[:5],
+                "authority_rank_score": doc.get("authority_rank_score", 0),
+            })
+
+            if uuid and uuid not in seen:
+                seen.add(uuid)
+                uuids.append(uuid)
+
+        return {
+            "filter_used":          filter_str or "none (full scan)",
+            "filter_parts":         filter_parts,
+            "primary_kws_used":     primary_kws,
+            "entity_names_used":    entity_names,
+            "semantic_kws_used":    semantic_kws,
+            "question_type_filter": question_type or "none",
+            "total_hits":           len(hits),
+            "unique_doc_uuids":     len(uuids),
+            "uuids":                uuids,
+            "matched_questions":    matched_questions,
+        }
+
+    except Exception as e:
+        return {
+            "error":             str(e),
+            "filter_used":       filter_str,
+            "hits":              [],
+            "uuids":             [],
+            "matched_questions": [],
+        }
 
 
-from searchengine.intent_detect import detect_intent
-
-@require_GET
+@csrf_exempt
+@require_http_methods(["GET", "POST"])
 def debug_search_view(request):
     """
-    Debug endpoint that shows every step of the search pipeline.
-    Returns JSON with full diagnostic output.
-    
-    Usage: /debug/search/?q=where+is+africa
+    Debug endpoint for testing the full Typesense bridge pipeline.
+
+    GET  /debug/search/?query=When+was+Prentice+Herman+Polk+born
+    POST /debug/search/  { "query": "...", "alt_mode": "y", ... }
+
+    Returns detailed JSON showing every stage including:
+    - Matched questions with vector distance + confidence
+    - Stage 1A document pool
+    - Stage 1B questions pool
+    - Overlap between both pools
+    - Full pipeline results
     """
-    query = request.GET.get('q', '').strip()
-    
+    t0 = time.time()
+
+    # ── Parse params ──────────────────────────────────────────────────────
+    if request.method == "POST":
+        try:
+            body = json.loads(request.body)
+        except Exception:
+            body = {}
+        query         = body.get("query", "")
+        alt_mode      = body.get("alt_mode", "y")
+        page          = int(body.get("page", 1))
+        per_page      = int(body.get("per_page", 5))
+        session_id    = body.get("session_id", "debug-session")
+        search_source = body.get("search_source", "home")
+    else:
+        query         = request.GET.get("query", "")
+        alt_mode      = request.GET.get("alt_mode", "y")
+        page          = int(request.GET.get("page", 1))
+        per_page      = int(request.GET.get("per_page", 5))
+        session_id    = request.GET.get("session_id", "debug-session")
+        search_source = request.GET.get("search_source", "home")
+
     if not query:
         return JsonResponse({
-            'error': 'No query provided',
-            'usage': '/debug/search/?q=your+search+query',
-            'examples': [
-                '/debug/search/?q=where+is+africa',
-                '/debug/search/?q=restaurants+in+atlanta',
-                '/debug/search/?q=black+owned+barbershops+in+houston',
-                '/debug/search/?q=who+founded+morehouse',
-                '/debug/search/?q=billie+holiday',
-            ]
-        }, json_dumps_params={'indent': 2})
-    
-    debug = {
-        'query': query,
-        'steps': {},
-        'timings': {},
-    }
-    
-    # =========================================================================
-    # STEP 1: WORD DISCOVERY
-    # =========================================================================
-    t0 = time.time()
-    discovery = _run_word_discovery(query)
-    debug['timings']['word_discovery_ms'] = round((time.time() - t0) * 1000, 2)
-    
-    terms_debug = []
-    for t in discovery.get('terms', []):
-        terms_debug.append({
-            'word': t.get('word'),
-            'pos': t.get('pos'),
-            'category': t.get('category'),
-            'rank': t.get('rank', 0),
-            'is_stopword': t.get('is_stopword', False),
-            'display': t.get('display'),
-            'is_searchable_pos': t.get('pos', '').lower() in SEARCHABLE_POS,
-            'is_location_cat': t.get('category', '') in LOCATION_CATEGORIES,
-        })
-    
-    debug['steps']['1_word_discovery'] = {
-        'corrected_query': discovery.get('corrected_query', query),
-        'terms': terms_debug,
-        'ngrams': discovery.get('ngrams', []),
-        'corrections': discovery.get('corrections', []),
-        'stats': discovery.get('stats', {}),
-    }
-    
-    # =========================================================================
-    # STEP 2: INTENT DETECTION
-    # =========================================================================
-    t1 = time.time()
-    discovery = detect_intent(discovery)
-    signals = discovery.get('signals', {})
-    debug['timings']['intent_detect_ms'] = round((time.time() - t1) * 1000, 2)
-    
-    debug['steps']['2_intent_signals'] = {
-        'query_mode': signals.get('query_mode'),
-        'question_word': signals.get('question_word'),
-        'has_question_word': signals.get('has_question_word'),
-        'is_local_search': signals.get('is_local_search'),
-        'has_location': signals.get('has_location'),
-        'has_service_word': signals.get('has_service_word'),
-        'has_black_owned': signals.get('has_black_owned'),
-        'wants_single_result': signals.get('wants_single_result'),
-        'wants_multiple_results': signals.get('wants_multiple_results'),
-        'has_temporal': signals.get('has_temporal'),
-        'temporal_direction': signals.get('temporal_direction'),
-        'has_superlative': signals.get('has_superlative'),
-        'has_negation': signals.get('has_negation'),
-        'has_person': signals.get('has_person'),
-        'has_organization': signals.get('has_organization'),
-        'has_role_word': signals.get('has_role_word'),
-        'has_plural_noun': signals.get('has_plural_noun'),
-        'has_unknown_terms': signals.get('has_unknown_terms'),
-        'unknown_term_count': signals.get('unknown_term_count'),
-        'domains_detected': signals.get('domains_detected', []),
-        'service_words': signals.get('service_words', []),
-        'action_type': signals.get('action_type'),
-    }
-    
-    # =========================================================================
-    # STEP 3: BUILD PROFILE
-    # =========================================================================
-    t2 = time.time()
-    profile = build_query_profile(discovery, signals=signals)
-    debug['timings']['build_profile_ms'] = round((time.time() - t2) * 1000, 2)
-    
-    debug['steps']['3_query_profile'] = {
-        'search_terms': profile.get('search_terms', []),
-        'location_terms': profile.get('location_terms', []),
-        'cities': [c['name'] for c in profile.get('cities', [])],
-        'states': [s['name'] for s in profile.get('states', [])],
-        'primary_intent': profile.get('primary_intent'),
-        'has_person': profile.get('has_person'),
-        'has_organization': profile.get('has_organization'),
-        'has_location': profile.get('has_location'),
-        'has_keyword': profile.get('has_keyword'),
-        'has_media': profile.get('has_media'),
-        'field_boosts': profile.get('field_boosts', {}),
-        'preferred_data_types': profile.get('preferred_data_types', []),
-    }
-    
-    # =========================================================================
-    # STEP 4: BUILD TYPESENSE PARAMS
-    # =========================================================================
-    params = build_typesense_params(profile, signals=signals)
-    filter_str = build_filter_string_without_data_type(profile, signals=signals)
-    
-    debug['steps']['4_typesense_params'] = {
-        'q': params.get('q'),
-        'query_by': params.get('query_by'),
-        'query_by_weights': params.get('query_by_weights'),
-        'filter_by': params.get('filter_by', filter_str or '(none)'),
-        'sort_by': params.get('sort_by'),
-        'num_typos': params.get('num_typos'),
-        'prefix': params.get('prefix'),
-        'drop_tokens_threshold': params.get('drop_tokens_threshold'),
-        'blend_ratios': BLEND_RATIOS.get(signals.get('query_mode', 'explore')),
-    }
-    
-    # =========================================================================
-    # STEP 5: STAGE 1 — TYPESENSE SEARCH (top 10 only)
-    # =========================================================================
-    t3 = time.time()
-    
-    search_params = {
-        'q': params.get('q', '*'),
-        'query_by': params.get('query_by', 'document_title,primary_keywords,entity_names'),
-        'query_by_weights': params.get('query_by_weights', '20,15,5'),
-        'per_page': 10,
-        'page': 1,
-        'num_typos': params.get('num_typos', 0),
-        'prefix': params.get('prefix', 'no'),
-        'drop_tokens_threshold': params.get('drop_tokens_threshold', 0),
-        'sort_by': params.get('sort_by', '_text_match:desc,authority_score:desc'),
-        'include_fields': 'document_uuid,document_title,document_data_type,document_category,authority_score,document_url,primary_keywords,entity_names',
-    }
-    
-    if filter_str:
-        search_params['filter_by'] = filter_str
-    
-    stage1_debug = {
-        'search_params_sent': search_params,
-        'results': [],
-        'found': 0,
-        'error': None,
-    }
-    
+            "error": "Missing 'query' parameter",
+            "usage": {
+                "GET":  "/debug/search/?query=When+was+Prentice+Herman+Polk+born",
+                "POST": '{"query": "When was Prentice Herman Polk born?", "alt_mode": "y"}'
+            }
+        }, status=400)
+
+    # ── Imports ───────────────────────────────────────────────────────────
     try:
-        response = client.collections[COLLECTION_NAME].documents.search(search_params)
-        stage1_debug['found'] = response.get('found', 0)
-        
-        for i, hit in enumerate(response.get('hits', []), 1):
-            doc = hit.get('document', {})
-            stage1_debug['results'].append({
-                'rank': i,
-                'title': doc.get('document_title', ''),
-                'data_type': doc.get('document_data_type', ''),
-                'category': doc.get('document_category', ''),
-                'authority_score': doc.get('authority_score', 0),
-                'url': doc.get('document_url', ''),
-                'text_match_score': hit.get('text_match', 0),
-                'text_match_info': hit.get('text_match_info', {}),
-                'primary_keywords': (doc.get('primary_keywords', []) or [])[:5],
-                'entity_names': (doc.get('entity_names', []) or [])[:5],
-                'highlights': [
-                    {
-                        'field': h.get('field'),
-                        'snippet': h.get('snippet') or h.get('value', '')[:100],
-                    }
-                    for h in hit.get('highlights', [])
-                ],
-            })
+        from .typesense_discovery_bridge import (
+            execute_full_search,
+            run_parallel_prep,
+            build_query_profile,
+            fetch_candidate_uuids,
+            fetch_all_candidate_uuids,
+        )
+        from .intent_detect import detect_intent
+        INTENT_AVAILABLE = True
+    except ImportError as e:
+        return JsonResponse({"error": f"Import error: {str(e)}"}, status=500)
+
+    debug  = {}
+    errors = []
+
+    # ── Step 1: Word discovery + embedding ───────────────────────────────
+    try:
+        t1 = time.time()
+        discovery, query_embedding = run_parallel_prep(query, skip_embedding=False)
+        debug["step1_parallel_prep_ms"] = round((time.time() - t1) * 1000, 2)
+        debug["step1_word_discovery"] = {
+            "original_query":  discovery.get("query", query),
+            "corrected_query": discovery.get("corrected_query", query),
+            "corrections":     discovery.get("corrections", []),
+            "terms": [
+                {
+                    "word":          t.get("word"),
+                    "pos":           t.get("pos"),
+                    "category":      t.get("category"),
+                    "rank":          t.get("rank"),
+                    "is_stopword":   t.get("is_stopword"),
+                    "part_of_ngram": t.get("part_of_ngram"),
+                }
+                for t in discovery.get("terms", [])
+            ],
+            "ngrams": [
+                {
+                    "phrase":   n.get("phrase"),
+                    "category": n.get("category"),
+                    "rank":     n.get("rank"),
+                }
+                for n in discovery.get("ngrams", [])
+            ],
+            "stats": discovery.get("stats", {}),
+        }
+        debug["step1_embedding"] = {
+            "generated":  query_embedding is not None,
+            "dims":       len(query_embedding) if query_embedding else 0,
+            "sample":     query_embedding[:5] if query_embedding else [],
+        }
     except Exception as e:
-        stage1_debug['error'] = str(e)
-    
-    debug['timings']['stage1_search_ms'] = round((time.time() - t3) * 1000, 2)
-    debug['steps']['5_stage1_results'] = stage1_debug
-    
-    # =========================================================================
-    # SUMMARY
-    # =========================================================================
-    debug['timings']['total_ms'] = round((time.time() - t0) * 1000, 2)
-    
-    debug['summary'] = {
-        'query': query,
-        'corrected_query': discovery.get('corrected_query', query),
-        'query_mode': signals.get('query_mode'),
-        'q_sent_to_typesense': params.get('q'),
-        'fields_searched': params.get('query_by'),
-        'total_found': stage1_debug['found'],
-        'top_result': stage1_debug['results'][0]['title'] if stage1_debug['results'] else '(none)',
-        'wants_single_result': signals.get('wants_single_result'),
-        'wants_multiple_results': signals.get('wants_multiple_results'),
-    }
-    
-    return JsonResponse(debug, json_dumps_params={'indent': 2})
-"""
-Debug Bridge Endpoint
-=====================
-Calls execute_full_search() directly and returns raw counts as JSON.
-Bypasses views.py entirely — shows exactly what the bridge produces.
-
-Add to your urls.py:
-    from searchengine.debug_bridge import debug_bridge_view
-    path('debug/bridge/', debug_bridge_view, name='debug_bridge'),
-
-Usage:
-    /debug/bridge/?q=africa
-    /debug/bridge/?q=africa&alt_mode=n          (keyword path)
-    /debug/bridge/?q=africa&alt_mode=y          (semantic path)
-    /debug/bridge/?q=africa&page=2
-    /debug/bridge/?q=africa&data_type=article   (with filter)
-    /debug/bridge/?q=africa&view=images         (image pagination)
-"""
-
-import time
-from django.http import JsonResponse
-from django.views.decorators.http import require_GET
-
-from searchengine.typesense_discovery_bridge import (
-    execute_full_search,
-    _has_real_images,
-    _generate_stable_cache_key,
-    _get_cached_results,
-)
-
-
-@require_GET
-def debug_bridge_view(request):
-    query = request.GET.get('q', '').strip()
-
-    if not query:
-        return JsonResponse({
-            'error': 'No query provided',
-            'usage': '/debug/bridge/?q=your+search+query',
-            'examples': [
-                '/debug/bridge/?q=africa',
-                '/debug/bridge/?q=africa&alt_mode=n',
-                '/debug/bridge/?q=africa&alt_mode=y',
-                '/debug/bridge/?q=africa&view=images',
-                '/debug/bridge/?q=africa&data_type=article',
-            ]
-        }, json_dumps_params={'indent': 2})
-
-    # Parameters
-    alt_mode = request.GET.get('alt_mode', 'y')
-    page = int(request.GET.get('page', 1))
-    per_page = int(request.GET.get('per_page', 10))
-    view_mode = request.GET.get('view', '')
-    session_id = request.GET.get('session_id', 'debug-session')
-
-    # Filters
-    filters = {}
-    data_type = request.GET.get('data_type', '')
-    if data_type:
-        filters['data_type'] = data_type
-    category = request.GET.get('category', '')
-    if category:
-        filters['category'] = category
-
-    # Call bridge directly
-    t0 = time.time()
-    result = execute_full_search(
-        query=query,
-        session_id=session_id,
-        filters=filters,
-        page=page,
-        per_page=per_page,
-        alt_mode=alt_mode,
-        user_location=None,
-        pos_tags=[],
-        safe_search=True,
-    )
-    elapsed_ms = round((time.time() - t0) * 1000, 2)
-
-    # Extract raw counts from bridge result
-    facet_total = result.get('facet_total', 0)
-    total_image_count = result.get('total_image_count', 0)
-    total_filtered = result.get('total', 0)
-    data_type_facets = result.get('data_type_facets', [])
-    category_facets = result.get('category_facets', [])
-
-    # Sum facets to verify
-    facet_sum = sum(f.get('count', 0) for f in data_type_facets)
-
-    # Check stable cache contents
-    stable_key = _generate_stable_cache_key(session_id, query)
-    cached = _get_cached_results(stable_key)
-    cache_info = {}
-    if cached:
-        all_results = cached.get('all_results', [])
-        docs_with_images = [r for r in all_results if _has_real_images(r)]
-        cache_info = {
-            'stable_key': stable_key[:16] + '...',
-            'cached_total_results': len(all_results),
-            'cached_facet_total': cached.get('facet_total', 0),
-            'cached_total_image_count': cached.get('total_image_count', 0),
-            'docs_with_real_images': len(docs_with_images),
-            'sample_image_doc': docs_with_images[0] if docs_with_images else None,
-            'sample_no_image_doc': next(
-                (r for r in all_results if not _has_real_images(r)), None
-            ),
+        errors.append(f"parallel_prep: {str(e)}")
+        query_embedding = None
+        discovery = {
+            "query": query,
+            "corrected_query": query,
+            "terms": [],
+            "ngrams": [],
+            "corrections": [],
+            "stats": {},
         }
 
-    # Results for this page
-    page_results = []
-    for r in result.get('results', []):
-        page_results.append({
-            'id': r.get('id', '')[:20],
-            'title': r.get('title', '')[:80],
-            'data_type': r.get('data_type', ''),
-            'category': r.get('category', ''),
-            'authority_score': r.get('authority_score', 0),
-            'image_url_count': len(r.get('image_url', []) or []),
-            'logo_url_count': len(r.get('logo_url', []) or []),
-            'has_real_images': _has_real_images(r),
-            'url': r.get('url', '')[:80],
+    # ── Step 2: Intent detection ──────────────────────────────────────────
+    signals = {}
+    try:
+        if INTENT_AVAILABLE:
+            discovery = detect_intent(discovery)
+            signals   = discovery.get("signals", {})
+            debug["step2_intent_signals"] = {
+                "query_mode":            signals.get("query_mode"),
+                "question_word":         signals.get("question_word"),
+                "has_question_word":     signals.get("has_question_word"),
+                "wants_single_result":   signals.get("wants_single_result"),
+                "is_local_search":       signals.get("is_local_search"),
+                "local_search_strength": signals.get("local_search_strength"),
+                "has_location":          signals.get("has_location"),
+                "has_black_owned":       signals.get("has_black_owned"),
+                "temporal_direction":    signals.get("temporal_direction"),
+                "has_unknown_terms":     signals.get("has_unknown_terms"),
+                "has_superlative":       signals.get("has_superlative"),
+                "domains_detected":      signals.get("domains_detected", []),
+                "service_words":         signals.get("service_words", []),
+            }
+    except Exception as e:
+        errors.append(f"intent_detect: {str(e)}")
+
+    # ── Step 3: Build query profile ───────────────────────────────────────
+    profile = {"search_terms": query.split(), "cities": [], "states": [], "field_boosts": {}}
+    try:
+        t3 = time.time()
+        profile = build_query_profile(discovery, signals=signals)
+        debug["step3_build_profile_ms"] = round((time.time() - t3) * 1000, 2)
+        debug["step3_query_profile"] = {
+            "primary_intent":   profile.get("primary_intent"),
+            "search_terms":     profile.get("search_terms", []),
+            "location_terms":   profile.get("location_terms", []),
+            "cities":           [c.get("name") for c in profile.get("cities", [])],
+            "states":           [s.get("name") for s in profile.get("states", [])],
+            "persons":          [p.get("phrase") or p.get("word") for p in profile.get("persons", [])],
+            "organizations":    [o.get("phrase") or o.get("word") for o in profile.get("organizations", [])],
+            "keywords":         [k.get("phrase") or k.get("word") for k in profile.get("keywords", [])],
+            "has_person":       profile.get("has_person"),
+            "has_organization": profile.get("has_organization"),
+            "has_location":     profile.get("has_location"),
+            "has_keyword":      profile.get("has_keyword"),
+            "field_boosts":     profile.get("field_boosts", {}),
+            "person_score":     profile.get("person_score"),
+            "keyword_score":    profile.get("keyword_score"),
+            "location_score":   profile.get("location_score"),
+        }
+    except Exception as e:
+        errors.append(f"build_profile: {str(e)}")
+
+    corrected_query = discovery.get("corrected_query", query)
+
+    # ── Step 4A: Stage 1A — document collection ───────────────────────────
+    doc_uuids = []
+    try:
+        t4a = time.time()
+        doc_uuids = fetch_candidate_uuids(
+            corrected_query, profile, signals=signals, max_results=100
+        )
+        debug["step4a_stage1_document_ms"] = round((time.time() - t4a) * 1000, 2)
+        debug["step4a_stage1_document"] = {
+            "count":        len(doc_uuids),
+            "uuids_sample": doc_uuids[:10],
+        }
+    except Exception as e:
+        errors.append(f"stage1a: {str(e)}")
+        debug["step4a_error"] = str(e)
+
+    # ── Step 4B: Stage 1B — questions collection with full debug ─────────
+    q_debug = {}
+    q_uuids = []
+    try:
+        t4b = time.time()
+        q_debug = _fetch_questions_debug(
+            profile, query_embedding, signals=signals, max_results=50
+        )
+        q_uuids = q_debug.get("uuids", [])
+        debug["step4b_stage1_questions_ms"] = round((time.time() - t4b) * 1000, 2)
+        debug["step4b_stage1_questions"] = {
+            "filter_used":          q_debug.get("filter_used"),
+            "filter_parts":         q_debug.get("filter_parts", []),
+            "primary_kws_used":     q_debug.get("primary_kws_used", []),
+            "entity_names_used":    q_debug.get("entity_names_used", []),
+            "semantic_kws_used":    q_debug.get("semantic_kws_used", []),
+            "question_type_filter": q_debug.get("question_type_filter"),
+            "total_hits":           q_debug.get("total_hits", 0),
+            "unique_doc_uuids":     q_debug.get("unique_doc_uuids", 0),
+
+            # ── This is the key section — closest questions with distances ──
+            "matched_questions": q_debug.get("matched_questions", []),
+
+            # Error if any
+            "error": q_debug.get("error"),
+        }
+    except Exception as e:
+        errors.append(f"stage1b: {str(e)}")
+        debug["step4b_error"] = str(e)
+
+    # ── Step 4C: Overlap analysis ─────────────────────────────────────────
+    try:
+        doc_set = set(doc_uuids)
+        q_set   = set(q_uuids)
+        overlap = doc_set & q_set
+        debug["step4c_overlap"] = {
+            "document_pool":  len(doc_uuids),
+            "questions_pool": len(q_uuids),
+            "overlap_count":  len(overlap),
+            "overlap_uuids":  list(overlap)[:10],
+            "total_merged":   len(doc_set | q_set),
+            "interpretation": (
+                "HIGH CONFIDENCE — same docs found by both paths"
+                if overlap else
+                "No overlap — paths found different documents"
+            ),
+        }
+    except Exception as e:
+        errors.append(f"overlap: {str(e)}")
+
+    # ── Step 5: Full pipeline ─────────────────────────────────────────────
+    full_result = {}
+    try:
+        t5 = time.time()
+        full_result = execute_full_search(
+            query=query,
+            session_id=session_id,
+            filters={},
+            page=page,
+            per_page=per_page,
+            alt_mode=alt_mode,
+            search_source=search_source,
+        )
+        debug["step5_full_pipeline_ms"] = round((time.time() - t5) * 1000, 2)
+    except Exception as e:
+        errors.append(f"execute_full_search: {str(e)}")
+        debug["step5_error"] = str(e)
+
+    # ── Build results summary ─────────────────────────────────────────────
+    results_summary = []
+    for r in full_result.get("results", []):
+        results_summary.append({
+            "title":             r.get("title"),
+            "url":               r.get("url"),
+            "data_type":         r.get("data_type"),
+            "category":          r.get("category"),
+            "authority_score":   r.get("authority_score"),
+            "semantic_score":    r.get("semantic_score"),
+            "humanized_summary": r.get("humanized_summary", ""),
+            "location": {
+                "city":    r.get("location", {}).get("city"),
+                "state":   r.get("location", {}).get("state"),
+                "country": r.get("location", {}).get("country"),
+            },
+            "key_facts_count":  len(r.get("key_facts", [])),
+            "key_facts_sample": r.get("key_facts", [])[:2],
         })
 
-    # Build response
-    response = {
-        'query': query,
-        'alt_mode': alt_mode,
-        'path': 'keyword' if alt_mode == 'n' else 'semantic',
-        'page': page,
-        'per_page': per_page,
-        'filters': filters or None,
-        'elapsed_ms': elapsed_ms,
-
-        # === THE KEY NUMBERS ===
-        'counts': {
-            'facet_total': facet_total,
-            'total_image_count': total_image_count,
-            'total_filtered': total_filtered,
-            'facet_sum': facet_sum,
-            'facet_total_matches_sum': facet_total == facet_sum,
+    # ── Final response ────────────────────────────────────────────────────
+    return JsonResponse({
+        "meta": {
+            "query":            query,
+            "corrected_query":  full_result.get("corrected_query", corrected_query),
+            "query_mode":       full_result.get("query_mode"),
+            "intent":           full_result.get("intent"),
+            "search_strategy":  full_result.get("search_strategy"),
+            "semantic_enabled": full_result.get("semantic_enabled"),
+            "alt_mode":         alt_mode,
+            "total_ms":         round((time.time() - t0) * 1000, 2),
         },
-
-        # === FACETS ===
-        'data_type_facets': [
-            {'type': f['value'], 'label': f.get('label', ''), 'count': f['count']}
-            for f in data_type_facets
-        ],
-        'category_facets': [
-            {'category': f['value'], 'count': f['count']}
-            for f in category_facets[:10]
-        ],
-
-        # === WHAT THE TEMPLATE WOULD SHOW ===
-        'template_would_show': {
-            'all_tab': facet_total,
-            'images_tab': total_image_count,
-            'other_tabs': [
-                f"{f.get('label', f['value'])}: {f['count']}"
-                for f in data_type_facets
-            ],
-            'tab_sum_without_images': facet_sum,
-            'tab_sum_with_images': facet_sum + total_image_count,
-            'note': (
-                f"Images ({total_image_count}) is a cross-cut of the {facet_total} documents. "
-                f"Facet tabs sum to {facet_sum}. "
-                f"{'✅ matches facet_total' if facet_sum == facet_total else '⚠️ MISMATCH with facet_total'}"
-            ),
+        "counts": {
+            "total":             full_result.get("total", 0),
+            "facet_total":       full_result.get("facet_total", 0),
+            "total_images":      full_result.get("total_image_count", 0),
+            "results_this_page": len(full_result.get("results", [])),
         },
-
-        # === CACHE INSPECTION ===
-        'cache_inspection': cache_info,
-
-        # === PAGE RESULTS ===
-        'page_result_count': len(page_results),
-        'page_results': page_results,
-
-        # === BRIDGE METADATA ===
-        'bridge_metadata': {
-            'corrected_query': result.get('corrected_query', query),
-            'search_strategy': result.get('search_strategy', ''),
-            'query_mode': result.get('query_mode', ''),
-            'semantic_enabled': result.get('semantic_enabled', False),
-            'timings': result.get('timings', {}),
+        "facets": {
+            "data_types": full_result.get("data_type_facets", []),
+            "categories": full_result.get("category_facets", []),
         },
-    }
-
-    return JsonResponse(response, json_dumps_params={'indent': 2})
+        "results":         results_summary,
+        "pipeline_debug":  debug,
+        "timings":         full_result.get("timings", {}),
+        "filters_applied": full_result.get("filters_applied", {}),
+        "valid_terms":     full_result.get("valid_terms", []),
+        "unknown_terms":   full_result.get("unknown_terms", []),
+        "errors":          errors if errors else None,
+    }, json_dumps_params={"indent": 2})
