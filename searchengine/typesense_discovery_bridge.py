@@ -1082,90 +1082,346 @@ def build_filter_string_without_data_type(profile: Dict, signals: Dict = None) -
     return ' && '.join(filter_conditions) if filter_conditions else ''
 
 
-# ============================================================================
-# STAGE 1: GRAPH FILTER - Candidate Generation
-# ============================================================================
+# # ============================================================================
+# # STAGE 1: GRAPH FILTER - Candidate Generation
+# # ============================================================================
 
 
 
+# # ============================================================================
+# # STAGE 1 (SEMANTIC): Fetch ONLY document_uuids
+# # ============================================================================
+
+# def fetch_candidate_uuids(
+#     search_query: str,
+#     profile: Dict,
+#     signals: Dict = None,
+#     max_results: int = MAX_CACHED_RESULTS
+# ) -> List[str]:
+#     """
+#     Stage 1 (Semantic path): Keyword search using intent-based fields.
+#     Returns ONLY a list of document_uuid strings — no metadata.
+#     Metadata is fetched later in Stage 4 for survivors only.
+#     """
+#     signals = signals or {}
+#     params = build_typesense_params(profile, signals=signals)
+#     filter_str = build_filter_string_without_data_type(profile, signals=signals)
+
+#     PAGE_SIZE = 250
+#     all_uuids = []
+#     current_page = 1
+#     max_pages = (max_results // PAGE_SIZE) + 1
+
+#     query_mode = signals.get('query_mode', 'explore')
+
+#     print(f"🔍 Stage 1 (uuids only): '{params.get('q', search_query)}'")
+#     print(f"   Mode: {query_mode}")
+#     print(f"   Fields: {params.get('query_by', '')}")
+#     print(f"   Weights: {params.get('query_by_weights', '')}")
+#     print(f"   num_typos: {params.get('num_typos', 1)} | prefix: {params.get('prefix', 'yes')}")
+#     print(f"   sort_by: {params.get('sort_by', 'default')}")
+#     if filter_str:
+#         print(f"   Filters: {filter_str}")
+
+#     while len(all_uuids) < max_results and current_page <= max_pages:
+#         search_params = {
+#             'q': params.get('q', search_query),
+#             'query_by': params.get('query_by', 'document_title,primary_keywords,entity_names,key_facts,semantic_keywords'),
+#             'query_by_weights': params.get('query_by_weights', '10,8,6,4,3'),
+#             'per_page': PAGE_SIZE,
+#             'page': current_page,
+#             'include_fields': 'document_uuid',
+#             'num_typos': params.get('num_typos', 0),
+#             'prefix': params.get('prefix', 'no'),
+#             'drop_tokens_threshold': params.get('drop_tokens_threshold', 0),
+#             'sort_by': params.get('sort_by', '_text_match:desc,authority_score:desc'),
+#         }
+
+#         if filter_str:
+#             search_params['filter_by'] = filter_str
+
+#         try:
+#             response = client.collections[COLLECTION_NAME].documents.search(search_params)
+#             hits = response.get('hits', [])
+#             found = response.get('found', 0)
+
+#             if not hits:
+#                 break
+
+#             for hit in hits:
+#                 doc = hit.get('document', {})
+#                 uuid = doc.get('document_uuid')
+#                 if uuid:
+#                     all_uuids.append(uuid)
+
+#             if len(all_uuids) >= found or len(hits) < PAGE_SIZE:
+#                 break
+
+#             current_page += 1
+
+#         except Exception as e:
+#             print(f"❌ Stage 1 error (page {current_page}): {e}")
+#             break
+
+#     print(f"📊 Stage 1: Retrieved {len(all_uuids)} candidate UUIDs")
+#     return all_uuids[:max_results]
+
+
 # ============================================================================
-# STAGE 1 (SEMANTIC): Fetch ONLY document_uuids
+# STAGE 1A: Document collection — keyword graph, 100 candidates
 # ============================================================================
 
 def fetch_candidate_uuids(
     search_query: str,
     profile: Dict,
     signals: Dict = None,
-    max_results: int = MAX_CACHED_RESULTS
+    max_results: int = 100          # ← capped at 100
 ) -> List[str]:
     """
-    Stage 1 (Semantic path): Keyword search using intent-based fields.
-    Returns ONLY a list of document_uuid strings — no metadata.
-    Metadata is fetched later in Stage 4 for survivors only.
+    Stage 1A: Keyword graph search against the document collection.
+    Returns up to 100 document_uuid strings — no metadata.
     """
     signals = signals or {}
     params = build_typesense_params(profile, signals=signals)
     filter_str = build_filter_string_without_data_type(profile, signals=signals)
 
-    PAGE_SIZE = 250
-    all_uuids = []
-    current_page = 1
-    max_pages = (max_results // PAGE_SIZE) + 1
-
     query_mode = signals.get('query_mode', 'explore')
 
-    print(f"🔍 Stage 1 (uuids only): '{params.get('q', search_query)}'")
-    print(f"   Mode: {query_mode}")
-    print(f"   Fields: {params.get('query_by', '')}")
-    print(f"   Weights: {params.get('query_by_weights', '')}")
-    print(f"   num_typos: {params.get('num_typos', 1)} | prefix: {params.get('prefix', 'yes')}")
-    print(f"   sort_by: {params.get('sort_by', 'default')}")
+    print(f"🔍 Stage 1A (document): '{params.get('q', search_query)}'")
+    print(f"   Mode: {query_mode} | Max: {max_results}")
     if filter_str:
         print(f"   Filters: {filter_str}")
 
-    while len(all_uuids) < max_results and current_page <= max_pages:
-        search_params = {
-            'q': params.get('q', search_query),
-            'query_by': params.get('query_by', 'document_title,primary_keywords,entity_names,key_facts,semantic_keywords'),
-            'query_by_weights': params.get('query_by_weights', '10,8,6,4,3'),
-            'per_page': PAGE_SIZE,
-            'page': current_page,
-            'include_fields': 'document_uuid',
-            'num_typos': params.get('num_typos', 0),
-            'prefix': params.get('prefix', 'no'),
-            'drop_tokens_threshold': params.get('drop_tokens_threshold', 0),
-            'sort_by': params.get('sort_by', '_text_match:desc,authority_score:desc'),
-        }
+    search_params = {
+        'q':                    params.get('q', search_query),
+        'query_by':             params.get('query_by', 'document_title,primary_keywords,entity_names,key_facts,semantic_keywords'),
+        'query_by_weights':     params.get('query_by_weights', '10,8,6,4,3'),
+        'per_page':             max_results,
+        'page':                 1,
+        'include_fields':       'document_uuid',
+        'num_typos':            params.get('num_typos', 0),
+        'prefix':               params.get('prefix', 'no'),
+        'drop_tokens_threshold': params.get('drop_tokens_threshold', 0),
+        'sort_by':              params.get('sort_by', '_text_match:desc,authority_score:desc'),
+    }
 
-        if filter_str:
-            search_params['filter_by'] = filter_str
+    if filter_str:
+        search_params['filter_by'] = filter_str
 
-        try:
-            response = client.collections[COLLECTION_NAME].documents.search(search_params)
-            hits = response.get('hits', [])
-            found = response.get('found', 0)
+    try:
+        response = client.collections[COLLECTION_NAME].documents.search(search_params)
+        hits = response.get('hits', [])
 
-            if not hits:
+        uuids = []
+        for hit in hits:
+            doc = hit.get('document', {})
+            uuid = doc.get('document_uuid')
+            if uuid:
+                uuids.append(uuid)
+
+        print(f"📊 Stage 1A (document): {len(uuids)} candidate UUIDs")
+        return uuids
+
+    except Exception as e:
+        print(f"❌ Stage 1A error: {e}")
+        return []
+
+
+# ============================================================================
+# STAGE 1B: Questions collection — facet filter + vector search, 50 candidates
+# ============================================================================
+
+def fetch_candidate_uuids_from_questions(
+    profile: Dict,
+    query_embedding: List[float],
+    signals: Dict = None,
+    max_results: int = 50           # ← capped at 50
+) -> List[str]:
+    """
+    Stage 1B: Two-step search against the questions collection.
+
+    Step A — build a facet filter from profile metadata to narrow
+              the questions pool before the vector scan:
+              primary_keywords, entities, semantic_keywords, question_type
+
+    Step B — run vector search within that filtered subset only.
+              At 10M questions this keeps the ANN scan small and fast.
+              Misspellings are handled — the vector carries semantic
+              meaning even when query words are wrong.
+
+    Returns up to 50 document_uuid strings resolved from matched questions.
+    """
+    signals = signals or {}
+
+    if not query_embedding:
+        print("⚠️ Stage 1B (questions): no embedding — skipping")
+        return []
+
+    # ── Step A: Build facet filter ────────────────────────────────────────
+    filter_parts = []
+
+    # primary_keywords — use top 3 to keep filter focused
+    primary_kws = profile.get('primary_keywords', [])
+    if not primary_kws:
+        # fall back to profile keywords list
+        primary_kws = [k.get('phrase') or k.get('word', '') for k in profile.get('keywords', [])]
+    primary_kws = [kw for kw in primary_kws if kw][:3]
+
+    if primary_kws:
+        kw_values = ','.join([f'`{kw}`' for kw in primary_kws])
+        filter_parts.append(f'primary_keywords:[{kw_values}]')
+
+    # entities — persons, organizations from profile
+    entity_names = []
+    for p in profile.get('persons', []):
+        entity_names.append(p.get('phrase') or p.get('word', ''))
+    for o in profile.get('organizations', []):
+        entity_names.append(o.get('phrase') or o.get('word', ''))
+    entity_names = [e for e in entity_names if e][:3]
+
+    if entity_names:
+        ent_values = ','.join([f'`{e}`' for e in entity_names])
+        filter_parts.append(f'entities:[{ent_values}]')
+
+    # semantic_keywords — use top 3
+    semantic_kws = profile.get('semantic_keywords', [])
+    semantic_kws = [kw for kw in semantic_kws if kw][:3]
+
+    if semantic_kws:
+        sem_values = ','.join([f'`{kw}`' for kw in semantic_kws])
+        filter_parts.append(f'semantic_keywords:[{sem_values}]')
+
+    # question_type — infer from intent signals
+    question_word = signals.get('question_word', '')
+    question_type_map = {
+        'when':  'TEMPORAL',
+        'where': 'LOCATION',
+        'who':   'PERSON',
+        'what':  'FACTUAL',
+        'which': 'FACTUAL',
+        'why':   'REASON',
+        'how':   'PROCESS',
+    }
+    question_type = question_type_map.get(question_word.lower(), '')
+    if question_type:
+        filter_parts.append(f'question_type:={question_type}')
+
+    # Combine filter parts with OR logic so we cast a wide enough net.
+    # Using OR means: match any of these facets — ensures coverage even
+    # when some facets are sparse or the query is partially misspelled.
+    filter_str = ' || '.join(filter_parts) if filter_parts else ''
+
+    print(f"🔍 Stage 1B (questions): vector search within facet filter")
+    print(f"   primary_keywords : {primary_kws}")
+    print(f"   entities         : {entity_names}")
+    print(f"   semantic_keywords: {semantic_kws}")
+    print(f"   question_type    : {question_type or 'any'}")
+    print(f"   filter_by        : {filter_str[:120] if filter_str else 'none (full scan)'}")
+
+    # ── Step B: Vector search within filtered subset ──────────────────────
+    embedding_str = ','.join(str(x) for x in query_embedding)
+
+    search_params = {
+        'q':              '*',
+        'vector_query':   f'embedding:([{embedding_str}], k:{max_results})',
+        'per_page':       max_results,
+        'include_fields': 'document_uuid,question,answer_type,question_type',
+    }
+
+    if filter_str:
+        search_params['filter_by'] = filter_str
+
+    try:
+        search_requests = {'searches': [{'collection': 'questions', **search_params}]}
+        response = client.multi_search.perform(search_requests, {})
+        result = response['results'][0]
+        hits = result.get('hits', [])
+
+        uuids = []
+        seen = set()
+        for hit in hits:
+            doc = hit.get('document', {})
+            uuid = doc.get('document_uuid')
+            if uuid and uuid not in seen:
+                seen.add(uuid)
+                uuids.append(uuid)
+
+            if len(uuids) >= max_results:
                 break
 
-            for hit in hits:
-                doc = hit.get('document', {})
-                uuid = doc.get('document_uuid')
-                if uuid:
-                    all_uuids.append(uuid)
+        print(f"📊 Stage 1B (questions): {len(uuids)} candidate UUIDs from {len(hits)} question hits")
+        return uuids
 
-            if len(all_uuids) >= found or len(hits) < PAGE_SIZE:
-                break
+    except Exception as e:
+        print(f"❌ Stage 1B error: {e}")
+        return []
 
-            current_page += 1
 
-        except Exception as e:
-            print(f"❌ Stage 1 error (page {current_page}): {e}")
-            break
+# ============================================================================
+# STAGE 1 COMBINED: Run both in parallel, merge + dedup
+# ============================================================================
 
-    print(f"📊 Stage 1: Retrieved {len(all_uuids)} candidate UUIDs")
-    return all_uuids[:max_results]
+def fetch_all_candidate_uuids(
+    search_query: str,
+    profile: Dict,
+    query_embedding: List[float],
+    signals: Dict = None,
+) -> List[str]:
+    """
+    Runs Stage 1A (document) and Stage 1B (questions) in parallel.
+    Merges and deduplicates results — document_uuids that appear in
+    both pools are kept once (best signal: found by both paths).
 
+    Returns a single merged list of up to 150 document_uuid strings.
+    UUIDs found in BOTH pools are surfaced first — they are the
+    highest-confidence candidates.
+    """
+    signals = signals or {}
+
+    doc_future = _executor.submit(
+        fetch_candidate_uuids, search_query, profile, signals, 100
+    )
+    q_future = _executor.submit(
+        fetch_candidate_uuids_from_questions, profile, query_embedding, signals, 50
+    )
+
+    doc_uuids = doc_future.result()
+    q_uuids   = q_future.result()
+
+    # Find overlap — these are the highest confidence candidates
+    doc_set = set(doc_uuids)
+    q_set   = set(q_uuids)
+    overlap  = doc_set & q_set
+
+    # Merge: overlap first, then document-only, then question-only
+    merged = []
+    seen   = set()
+
+    # 1. Overlap (found by both paths) — highest confidence
+    for uuid in doc_uuids:
+        if uuid in overlap and uuid not in seen:
+            merged.append(uuid)
+            seen.add(uuid)
+
+    # 2. Document-only hits
+    for uuid in doc_uuids:
+        if uuid not in seen:
+            merged.append(uuid)
+            seen.add(uuid)
+
+    # 3. Question-only hits
+    for uuid in q_uuids:
+        if uuid not in seen:
+            merged.append(uuid)
+            seen.add(uuid)
+
+    print(f"📊 Stage 1 COMBINED:")
+    print(f"   document pool    : {len(doc_uuids)}")
+    print(f"   questions pool   : {len(q_uuids)}")
+    print(f"   overlap (both)   : {len(overlap)}")
+    print(f"   merged total     : {len(merged)}")
+
+    return merged
 
 # ============================================================================
 # STAGE 1 (KEYWORD): Fetch uuids + metadata in one call (no pruning)
