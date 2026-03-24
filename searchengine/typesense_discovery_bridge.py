@@ -2696,11 +2696,41 @@ def execute_full_search(
     print(f"   Search Terms: {profile.get('search_terms', [])}")
     print(f"   Field Boosts: {profile.get('field_boosts', {})}")
 
-    # ── Stage 1: Fetch ONLY document_uuids ──
+    # # ── Stage 1: Fetch ONLY document_uuids ──
+    # t3 = time.time()
+    # candidate_uuids = fetch_candidate_uuids(corrected_query, profile, signals=signals)
+    # times['stage1_uuids'] = round((time.time() - t3) * 1000, 2)
+    # print(f"📊 Stage 1: {len(candidate_uuids)} candidate UUIDs")
+
+    # ── Stage 1: Fetch candidate UUIDs from both collections in parallel ──
     t3 = time.time()
-    candidate_uuids = fetch_candidate_uuids(corrected_query, profile, signals=signals)
+
+    # If word discovery made unsafe corrections (proper nouns mangled into
+    # wrong categories), use the original query for Stage 1A keyword graph.
+    # Stage 1B always uses the original embedding so it is already protected.
+    UNSAFE_CATEGORIES = {
+        'Food', 'US City', 'US State', 'Country', 'Location',
+        'City', 'Place', 'Object', 'Animal', 'Color',
+    }
+    corrections = discovery.get('corrections', [])
+    has_unsafe_corrections = any(
+        c.get('correction_type') == 'pos_mismatch' or
+        c.get('category', '') in UNSAFE_CATEGORIES
+        for c in corrections
+    )
+    search_query_for_stage1 = query if has_unsafe_corrections else corrected_query
+
+    if has_unsafe_corrections:
+        print(f"⚠️  Unsafe corrections — using original query for Stage 1A: '{query}'")
+
+    candidate_uuids = fetch_all_candidate_uuids(
+        search_query_for_stage1,
+        profile,
+        query_embedding,
+        signals=signals
+    )
     times['stage1_uuids'] = round((time.time() - t3) * 1000, 2)
-    print(f"📊 Stage 1: {len(candidate_uuids)} candidate UUIDs")
+    print(f"📊 Stage 1 COMBINED: {len(candidate_uuids)} candidate UUIDs")
 
     # ── Stage 2: Vector rerank (only needs IDs + embedding) ──
     survivor_uuids = candidate_uuids  # default if no embedding
