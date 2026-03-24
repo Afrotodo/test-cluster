@@ -481,30 +481,30 @@ def _run_embedding(query: str) -> Optional[List[float]]:
     return get_query_embedding(query)
 
 
-def run_parallel_prep(query: str, skip_embedding: bool = False) -> Tuple[Dict, Optional[List[float]]]:
-    """Run word discovery and embedding IN PARALLEL."""
-    if skip_embedding:
-        discovery = _run_word_discovery(query)
-        return discovery, None
+# def run_parallel_prep(query: str, skip_embedding: bool = False) -> Tuple[Dict, Optional[List[float]]]:
+#     """Run word discovery and embedding IN PARALLEL."""
+#     if skip_embedding:
+#         discovery = _run_word_discovery(query)
+#         return discovery, None
     
-    discovery_future = _executor.submit(_run_word_discovery, query)
-    embedding_future = _executor.submit(_run_embedding, query)
+#     discovery_future = _executor.submit(_run_word_discovery, query)
+#     embedding_future = _executor.submit(_run_embedding, query)
     
-    discovery = discovery_future.result()
-    embedding = embedding_future.result()
+#     discovery = discovery_future.result()
+#     embedding = embedding_future.result()
     
-    # Re-embed if query was corrected
-    corrected_query = discovery.get('corrected_query', query)
-    if corrected_query.lower() != query.lower() and embedding is not None:
-        corrections = discovery.get('corrections', [])
-        significant = any(
-            c.get('original', '').lower() != c.get('corrected', '').lower()
-            for c in corrections
-        )
-        if significant:
-            embedding = get_query_embedding(corrected_query)
+#     # Re-embed if query was corrected
+#     corrected_query = discovery.get('corrected_query', query)
+#     if corrected_query.lower() != query.lower() and embedding is not None:
+#         corrections = discovery.get('corrections', [])
+#         significant = any(
+#             c.get('original', '').lower() != c.get('corrected', '').lower()
+#             for c in corrections
+#         )
+#         if significant:
+#             embedding = get_query_embedding(corrected_query)
     
-    return discovery, embedding
+#     return discovery, embedding
 
 
 # ============================================================================
@@ -1165,6 +1165,85 @@ def build_filter_string_without_data_type(profile: Dict, signals: Dict = None) -
 
 #     print(f"📊 Stage 1: Retrieved {len(all_uuids)} candidate UUIDs")
 #     return all_uuids[:max_results]
+# ============================================================================
+# RUN_PARALLEL_PREP FIX — Replace existing run_parallel_prep function
+# ============================================================================
+
+def run_parallel_prep(query: str, skip_embedding: bool = False) -> Tuple[Dict, Optional[List[float]]]:
+    """
+    Run word discovery and embedding IN PARALLEL.
+
+    FIX: Always embed the ORIGINAL query first.
+    Only re-embed with corrected_query if:
+      - The correction is a genuine dictionary word fix
+      - NOT a proper noun being mangled into a common word
+      - NOT a name being changed to food/city/other wrong category
+    """
+    if skip_embedding:
+        discovery = _run_word_discovery(query)
+        return discovery, None
+
+    # Always embed original query in parallel with word discovery
+    discovery_future = _executor.submit(_run_word_discovery, query)
+    embedding_future = _executor.submit(_run_embedding, query)  # ← always original
+
+    discovery = discovery_future.result()
+    embedding = embedding_future.result()
+
+    # ── Decide if re-embedding with corrected query is safe ───────────────
+    corrected_query = discovery.get('corrected_query', query)
+
+    if corrected_query.lower() != query.lower() and embedding is not None:
+        corrections = discovery.get('corrections', [])
+
+        # Only re-embed if corrections are genuine dictionary fixes
+        # NOT if they are proper nouns being mangled into wrong categories
+        SAFE_CORRECTION_TYPES = {'spelling', 'phonetic', 'abbreviation'}
+
+        UNSAFE_CATEGORIES = {
+            'Food', 'US City', 'US State', 'Country', 'Location',
+            'City', 'Place', 'Object', 'Animal', 'Color',
+        }
+
+        safe_corrections = []
+        unsafe_corrections = []
+
+        for c in corrections:
+            corrected_category = c.get('category', '')
+            correction_type    = c.get('correction_type', '')
+            original           = c.get('original', '')
+            corrected          = c.get('corrected', '')
+
+            # Flag as unsafe if:
+            # 1. Correction type is pos_mismatch (word discovery guessing)
+            # 2. Corrected category is something clearly wrong (Food, City, etc.)
+            # 3. Original was classified as Person/Organization (proper noun)
+            is_pos_mismatch    = correction_type == 'pos_mismatch'
+            is_wrong_category  = corrected_category in UNSAFE_CATEGORIES
+            is_proper_noun     = c.get('category', '') in ('Person', 'Organization', 'Brand')
+
+            if is_pos_mismatch or is_wrong_category or is_proper_noun:
+                unsafe_corrections.append(c)
+            else:
+                safe_corrections.append(c)
+
+        has_safe_corrections   = len(safe_corrections) > 0
+        has_unsafe_corrections = len(unsafe_corrections) > 0
+
+        if has_unsafe_corrections:
+            # Do NOT re-embed — original embedding is more accurate
+            print(f"⚠️  Skipping re-embed — unsafe corrections detected:")
+            for c in unsafe_corrections:
+                print(f"     '{c.get('original')}' → '{c.get('corrected')}' "
+                      f"(type={c.get('correction_type')}, category={c.get('category')})")
+            print(f"   Keeping original query embedding: '{query}'")
+
+        elif has_safe_corrections:
+            # Safe to re-embed with corrected query
+            print(f"✅  Re-embedding with corrected query: '{corrected_query}'")
+            embedding = get_query_embedding(corrected_query)
+
+    return discovery, embedding
 
 
 # ============================================================================
@@ -1175,7 +1254,7 @@ def fetch_candidate_uuids(
     search_query: str,
     profile: Dict,
     signals: Dict = None,
-    max_results: int = 100          # ← capped at 100
+    max_results: int = 100
 ) -> List[str]:
     """
     Stage 1A: Keyword graph search against the document collection.
@@ -1193,16 +1272,16 @@ def fetch_candidate_uuids(
         print(f"   Filters: {filter_str}")
 
     search_params = {
-        'q':                    params.get('q', search_query),
-        'query_by':             params.get('query_by', 'document_title,primary_keywords,entity_names,key_facts,semantic_keywords'),
-        'query_by_weights':     params.get('query_by_weights', '10,8,6,4,3'),
-        'per_page':             max_results,
-        'page':                 1,
-        'include_fields':       'document_uuid',
-        'num_typos':            params.get('num_typos', 0),
-        'prefix':               params.get('prefix', 'no'),
+        'q':                     params.get('q', search_query),
+        'query_by':              params.get('query_by', 'document_title,primary_keywords,entity_names,key_facts,semantic_keywords'),
+        'query_by_weights':      params.get('query_by_weights', '10,8,6,4,3'),
+        'per_page':              max_results,
+        'page':                  1,
+        'include_fields':        'document_uuid',
+        'num_typos':             params.get('num_typos', 0),
+        'prefix':                params.get('prefix', 'no'),
         'drop_tokens_threshold': params.get('drop_tokens_threshold', 0),
-        'sort_by':              params.get('sort_by', '_text_match:desc,authority_score:desc'),
+        'sort_by':               params.get('sort_by', '_text_match:desc,authority_score:desc'),
     }
 
     if filter_str:
@@ -1235,21 +1314,24 @@ def fetch_candidate_uuids_from_questions(
     profile: Dict,
     query_embedding: List[float],
     signals: Dict = None,
-    max_results: int = 50           # ← capped at 50
+    max_results: int = 50
 ) -> List[str]:
     """
     Stage 1B: Two-step search against the questions collection.
 
-    Step A — build a facet filter from profile metadata to narrow
-              the questions pool before the vector scan:
-              primary_keywords, entities, semantic_keywords, question_type
+    FIX 1: Uses the ORIGINAL query embedding (protected in run_parallel_prep)
+            so proper noun mangling does not corrupt the vector search.
 
-    Step B — run vector search within that filtered subset only.
-              At 10M questions this keeps the ANN scan small and fast.
-              Misspellings are handled — the vector carries semantic
-              meaning even when query words are wrong.
+    FIX 2: Facet filter is built more carefully:
+           - Entity names are validated — single-word fragments like
+             "prentice" or "herman" are weak and may not exist in the
+             entities field as standalone values. We detect this and
+             fall back to question_type only when entities are fragments.
+           - This prevents an over-narrow filter that returns 0 hits
+             when word discovery breaks a proper name into parts.
 
-    Returns up to 50 document_uuid strings resolved from matched questions.
+    Step A — build facet filter from profile metadata
+    Step B — vector search within that filtered subset
     """
     signals = signals or {}
 
@@ -1260,23 +1342,37 @@ def fetch_candidate_uuids_from_questions(
     # ── Step A: Build facet filter ────────────────────────────────────────
     filter_parts = []
 
-    # primary_keywords — use top 3 to keep filter focused
+    # primary_keywords — use top 3
     primary_kws = profile.get('primary_keywords', [])
     if not primary_kws:
-        # fall back to profile keywords list
-        primary_kws = [k.get('phrase') or k.get('word', '') for k in profile.get('keywords', [])]
+        primary_kws = [
+            k.get('phrase') or k.get('word', '')
+            for k in profile.get('keywords', [])
+        ]
     primary_kws = [kw for kw in primary_kws if kw][:3]
 
     if primary_kws:
         kw_values = ','.join([f'`{kw}`' for kw in primary_kws])
         filter_parts.append(f'primary_keywords:[{kw_values}]')
 
-    # entities — persons, organizations from profile
+    # entities — validate that names are meaningful multi-word phrases
+    # Single-word fragments (e.g. "prentice", "herman") are unreliable
+    # because the entities field stores full names like "Prentice Herman Polk"
     entity_names = []
     for p in profile.get('persons', []):
-        entity_names.append(p.get('phrase') or p.get('word', ''))
+        name = p.get('phrase') or p.get('word', '')
+        # Only use entity if it looks like a full name (has a space)
+        # or is clearly a known proper noun (capitalized, rank > 100)
+        rank = p.get('rank', 0)
+        if name and (' ' in name or rank > 100):
+            entity_names.append(name)
+
     for o in profile.get('organizations', []):
-        entity_names.append(o.get('phrase') or o.get('word', ''))
+        name = o.get('phrase') or o.get('word', '')
+        rank = o.get('rank', 0)
+        if name and (' ' in name or rank > 100):
+            entity_names.append(name)
+
     entity_names = [e for e in entity_names if e][:3]
 
     if entity_names:
@@ -1291,7 +1387,8 @@ def fetch_candidate_uuids_from_questions(
         sem_values = ','.join([f'`{kw}`' for kw in semantic_kws])
         filter_parts.append(f'semantic_keywords:[{sem_values}]')
 
-    # question_type — infer from intent signals
+    # question_type — always include when we have a question word signal
+    # This is the most reliable filter when entity names are fragments
     question_word = signals.get('question_word', '')
     question_type_map = {
         'when':  'TEMPORAL',
@@ -1306,25 +1403,29 @@ def fetch_candidate_uuids_from_questions(
     if question_type:
         filter_parts.append(f'question_type:={question_type}')
 
-    # Combine filter parts with OR logic so we cast a wide enough net.
-    # Using OR means: match any of these facets — ensures coverage even
-    # when some facets are sparse or the query is partially misspelled.
-    filter_str = ' || '.join(filter_parts) if filter_parts else ''
+    # ── Filter strategy: ──────────────────────────────────────────────────
+    # If we have strong entity names → use OR (broad net)
+    # If we only have question_type → use it alone (still narrows well)
+    # If we have nothing → no filter (full vector scan)
+    if filter_parts:
+        filter_str = ' || '.join(filter_parts)
+    else:
+        filter_str = ''
 
     print(f"🔍 Stage 1B (questions): vector search within facet filter")
     print(f"   primary_keywords : {primary_kws}")
     print(f"   entities         : {entity_names}")
     print(f"   semantic_keywords: {semantic_kws}")
     print(f"   question_type    : {question_type or 'any'}")
-    print(f"   filter_by        : {filter_str[:120] if filter_str else 'none (full scan)'}")
+    print(f"   filter_by        : {filter_str[:120] if filter_str else 'none (full vector scan)'}")
 
     # ── Step B: Vector search within filtered subset ──────────────────────
     embedding_str = ','.join(str(x) for x in query_embedding)
 
     search_params = {
-        'q':              '*',
-        'vector_query':   f'embedding:([{embedding_str}], k:{max_results})',
-        'per_page':       max_results,
+        'q':            '*',
+        'vector_query': f'embedding:([{embedding_str}], k:{max_results})',
+        'per_page':     max_results,
         'include_fields': 'document_uuid,question,answer_type,question_type',
     }
 
@@ -1336,6 +1437,21 @@ def fetch_candidate_uuids_from_questions(
         response = client.multi_search.perform(search_requests, {})
         result = response['results'][0]
         hits = result.get('hits', [])
+
+        # ── If filter returned too few hits, retry without filter ─────────
+        # This is the safety net for when all filter parts are too narrow
+        if len(hits) < 5 and filter_str:
+            print(f"⚠️  Stage 1B: only {len(hits)} hits with filter — retrying without filter")
+            search_params_fallback = {
+                'q':              '*',
+                'vector_query':   f'embedding:([{embedding_str}], k:{max_results})',
+                'per_page':       max_results,
+                'include_fields': 'document_uuid,question,answer_type,question_type',
+            }
+            search_requests_fallback = {'searches': [{'collection': 'questions', **search_params_fallback}]}
+            response_fallback = client.multi_search.perform(search_requests_fallback, {})
+            hits = response_fallback['results'][0].get('hits', [])
+            print(f"   Fallback returned {len(hits)} hits")
 
         uuids = []
         seen = set()
@@ -1369,12 +1485,15 @@ def fetch_all_candidate_uuids(
 ) -> List[str]:
     """
     Runs Stage 1A (document) and Stage 1B (questions) in parallel.
-    Merges and deduplicates results — document_uuids that appear in
-    both pools are kept once (best signal: found by both paths).
 
-    Returns a single merged list of up to 150 document_uuid strings.
-    UUIDs found in BOTH pools are surfaced first — they are the
-    highest-confidence candidates.
+    Merge order:
+    1. Overlap — found by both paths (highest confidence)
+    2. Document-only hits
+    3. Question-only hits
+
+    Stage 1B runs independently of Stage 1A results.
+    Even if Stage 1A returns 0 (e.g. bad keyword graph), Stage 1B
+    can still surface the right document via vector search.
     """
     signals = signals or {}
 
@@ -1388,7 +1507,7 @@ def fetch_all_candidate_uuids(
     doc_uuids = doc_future.result()
     q_uuids   = q_future.result()
 
-    # Find overlap — these are the highest confidence candidates
+    # Find overlap
     doc_set = set(doc_uuids)
     q_set   = set(q_uuids)
     overlap  = doc_set & q_set
@@ -1397,19 +1516,16 @@ def fetch_all_candidate_uuids(
     merged = []
     seen   = set()
 
-    # 1. Overlap (found by both paths) — highest confidence
     for uuid in doc_uuids:
         if uuid in overlap and uuid not in seen:
             merged.append(uuid)
             seen.add(uuid)
 
-    # 2. Document-only hits
     for uuid in doc_uuids:
         if uuid not in seen:
             merged.append(uuid)
             seen.add(uuid)
 
-    # 3. Question-only hits
     for uuid in q_uuids:
         if uuid not in seen:
             merged.append(uuid)
@@ -1422,6 +1538,7 @@ def fetch_all_candidate_uuids(
     print(f"   merged total     : {len(merged)}")
 
     return merged
+
 
 # ============================================================================
 # STAGE 1 (KEYWORD): Fetch uuids + metadata in one call (no pruning)
