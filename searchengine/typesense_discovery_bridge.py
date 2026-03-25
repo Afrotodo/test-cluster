@@ -1306,9 +1306,403 @@ def fetch_candidate_uuids(
         return []
 
 
+# # ============================================================================
+# # STAGE 1B: Questions collection — facet filter + vector search, 50 candidates
+# # ============================================================================
+
+# def fetch_candidate_uuids_from_questions(
+#     profile: Dict,
+#     query_embedding: List[float],
+#     signals: Dict = None,
+#     max_results: int = 50
+# ) -> List[str]:
+#     """
+#     Stage 1B: Two-step search against the questions collection.
+
+#     FIX 1: Uses the ORIGINAL query embedding (protected in run_parallel_prep)
+#             so proper noun mangling does not corrupt the vector search.
+
+#     FIX 2: Facet filter is built more carefully:
+#            - Entity names are validated — single-word fragments like
+#              "prentice" or "herman" are weak and may not exist in the
+#              entities field as standalone values. We detect this and
+#              fall back to question_type only when entities are fragments.
+#            - This prevents an over-narrow filter that returns 0 hits
+#              when word discovery breaks a proper name into parts.
+
+#     Step A — build facet filter from profile metadata
+#     Step B — vector search within that filtered subset
+#     """
+#     signals = signals or {}
+
+#     if not query_embedding:
+#         print("⚠️ Stage 1B (questions): no embedding — skipping")
+#         return []
+
+#     # ── Step A: Build facet filter ────────────────────────────────────────
+#     filter_parts = []
+
+#     # primary_keywords — use top 3
+#     primary_kws = profile.get('primary_keywords', [])
+#     if not primary_kws:
+#         primary_kws = [
+#             k.get('phrase') or k.get('word', '')
+#             for k in profile.get('keywords', [])
+#         ]
+#     primary_kws = [kw for kw in primary_kws if kw][:3]
+
+#     if primary_kws:
+#         kw_values = ','.join([f'`{kw}`' for kw in primary_kws])
+#         filter_parts.append(f'primary_keywords:[{kw_values}]')
+
+#     # entities — validate that names are meaningful multi-word phrases
+#     # Single-word fragments (e.g. "prentice", "herman") are unreliable
+#     # because the entities field stores full names like "Prentice Herman Polk"
+#     entity_names = []
+#     for p in profile.get('persons', []):
+#         name = p.get('phrase') or p.get('word', '')
+#         # Only use entity if it looks like a full name (has a space)
+#         # or is clearly a known proper noun (capitalized, rank > 100)
+#         rank = p.get('rank', 0)
+#         if name and (' ' in name or rank > 100):
+#             entity_names.append(name)
+
+#     for o in profile.get('organizations', []):
+#         name = o.get('phrase') or o.get('word', '')
+#         rank = o.get('rank', 0)
+#         if name and (' ' in name or rank > 100):
+#             entity_names.append(name)
+
+#     entity_names = [e for e in entity_names if e][:3]
+
+#     if entity_names:
+#         ent_values = ','.join([f'`{e}`' for e in entity_names])
+#         filter_parts.append(f'entities:[{ent_values}]')
+
+#     # semantic_keywords — use top 3
+#     semantic_kws = profile.get('semantic_keywords', [])
+#     semantic_kws = [kw for kw in semantic_kws if kw][:3]
+
+#     if semantic_kws:
+#         sem_values = ','.join([f'`{kw}`' for kw in semantic_kws])
+#         filter_parts.append(f'semantic_keywords:[{sem_values}]')
+
+#     # question_type — always include when we have a question word signal
+#     # This is the most reliable filter when entity names are fragments
+#     question_word = signals.get('question_word', '')
+#     question_type_map = {
+#         'when':  'TEMPORAL',
+#         'where': 'LOCATION',
+#         'who':   'PERSON',
+#         'what':  'FACTUAL',
+#         'which': 'FACTUAL',
+#         'why':   'REASON',
+#         'how':   'PROCESS',
+#     }
+#     question_type = question_type_map.get(question_word.lower(), '')
+#     if question_type:
+#         filter_parts.append(f'question_type:={question_type}')
+
+#     # ── Filter strategy: ──────────────────────────────────────────────────
+#     # If we have strong entity names → use OR (broad net)
+#     # If we only have question_type → use it alone (still narrows well)
+#     # If we have nothing → no filter (full vector scan)
+#     if filter_parts:
+#         filter_str = ' || '.join(filter_parts)
+#     else:
+#         filter_str = ''
+
+#     print(f"🔍 Stage 1B (questions): vector search within facet filter")
+#     print(f"   primary_keywords : {primary_kws}")
+#     print(f"   entities         : {entity_names}")
+#     print(f"   semantic_keywords: {semantic_kws}")
+#     print(f"   question_type    : {question_type or 'any'}")
+#     print(f"   filter_by        : {filter_str[:120] if filter_str else 'none (full vector scan)'}")
+
+#     # ── Step B: Vector search within filtered subset ──────────────────────
+#     embedding_str = ','.join(str(x) for x in query_embedding)
+
+#     search_params = {
+#         'q':            '*',
+#         'vector_query': f'embedding:([{embedding_str}], k:{max_results})',
+#         'per_page':     max_results,
+#         'include_fields': 'document_uuid,question,answer_type,question_type',
+#     }
+
+#     if filter_str:
+#         search_params['filter_by'] = filter_str
+
+#     try:
+#         search_requests = {'searches': [{'collection': 'questions', **search_params}]}
+#         response = client.multi_search.perform(search_requests, {})
+#         result = response['results'][0]
+#         hits = result.get('hits', [])
+
+#         # ── If filter returned too few hits, retry without filter ─────────
+#         # This is the safety net for when all filter parts are too narrow
+#         if len(hits) < 5 and filter_str:
+#             print(f"⚠️  Stage 1B: only {len(hits)} hits with filter — retrying without filter")
+#             search_params_fallback = {
+#                 'q':              '*',
+#                 'vector_query':   f'embedding:([{embedding_str}], k:{max_results})',
+#                 'per_page':       max_results,
+#                 'include_fields': 'document_uuid,question,answer_type,question_type',
+#             }
+#             search_requests_fallback = {'searches': [{'collection': 'questions', **search_params_fallback}]}
+#             response_fallback = client.multi_search.perform(search_requests_fallback, {})
+#             hits = response_fallback['results'][0].get('hits', [])
+#             print(f"   Fallback returned {len(hits)} hits")
+
+#         uuids = []
+#         seen = set()
+#         for hit in hits:
+#             doc = hit.get('document', {})
+#             uuid = doc.get('document_uuid')
+#             if uuid and uuid not in seen:
+#                 seen.add(uuid)
+#                 uuids.append(uuid)
+
+#             if len(uuids) >= max_results:
+#                 break
+
+#         print(f"📊 Stage 1B (questions): {len(uuids)} candidate UUIDs from {len(hits)} question hits")
+#         return uuids
+
+#     except Exception as e:
+#         print(f"❌ Stage 1B error: {e}")
+#         return []
+
 # ============================================================================
-# STAGE 1B: Questions collection — facet filter + vector search, 50 candidates
+# STAGE 1B: Questions collection — facet filter + vector search + validation
 # ============================================================================
+
+# Stopwords and question words to exclude from signal matching
+_MATCH_STOPWORDS = frozenset({
+    'a', 'an', 'the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
+    'of', 'with', 'by', 'from', 'as', 'is', 'was', 'are', 'were', 'be',
+    'been', 'being', 'have', 'has', 'had', 'do', 'does', 'did', 'will',
+    'would', 'could', 'should', 'may', 'might', 'shall', 'can', 'need',
+    'when', 'where', 'who', 'what', 'which', 'why', 'how', 'that', 'this',
+    'these', 'those', 'it', 'its', 'he', 'she', 'they', 'we', 'you', 'i',
+    'his', 'her', 'their', 'our', 'your', 'my', 'about', 'into', 'through',
+    'during', 'before', 'after', 'above', 'below', 'between', 'each',
+    'than', 'so', 'if', 'not', 'no', 'nor', 'yet', 'both', 'either',
+    'just', 'also', 'then', 'than', 'such', 'more', 'most', 'other',
+    'born', 'died', 'first', 'last', 'new', 'old', 'many', 'much',
+    'long', 'little', 'own', 'right', 'big', 'high', 'great', 'small',
+})
+
+
+def _normalize_signal(text: str) -> set:
+    """
+    Normalize a signal string into a set of meaningful tokens.
+    - Lowercase
+    - Strip punctuation except hyphens inside words
+    - Remove stopwords and question words
+    - Keep only tokens longer than 2 characters
+    """
+    import re
+    if not text:
+        return set()
+
+    # Lowercase
+    text = text.lower()
+
+    # Replace punctuation with spaces (keep hyphens between word chars)
+    text = re.sub(r"[^\w\s-]", " ", text)
+    text = re.sub(r"\s*-\s*", " ", text)  # normalize hyphens
+
+    tokens = text.split()
+
+    return {
+        t for t in tokens
+        if len(t) > 2 and t not in _MATCH_STOPWORDS
+    }
+
+
+def _extract_query_signals(profile: Dict) -> tuple:
+    """
+    Extract and normalize all meaningful query signals from the profile.
+    Returns:
+        all_tokens   — set of all individual normalized tokens
+        full_phrases — list of normalized full phrase strings (for substring match)
+        primary_subject — the highest-ranked entity/keyword (must-match candidate)
+    """
+    raw_signals = []
+    ranked_signals = []  # (rank, phrase)
+
+    # Persons — highest priority
+    for p in profile.get('persons', []):
+        phrase = p.get('phrase') or p.get('word', '')
+        rank   = p.get('rank', 0)
+        if phrase:
+            raw_signals.append(phrase)
+            ranked_signals.append((rank, phrase))
+
+    # Organizations
+    for o in profile.get('organizations', []):
+        phrase = o.get('phrase') or o.get('word', '')
+        rank   = o.get('rank', 0)
+        if phrase:
+            raw_signals.append(phrase)
+            ranked_signals.append((rank, phrase))
+
+    # Keywords
+    for k in profile.get('keywords', []):
+        phrase = k.get('phrase') or k.get('word', '')
+        rank   = k.get('rank', 0)
+        if phrase:
+            raw_signals.append(phrase)
+            ranked_signals.append((rank, phrase))
+
+    # Primary keywords from profile (if populated)
+    for kw in profile.get('primary_keywords', []):
+        if kw:
+            raw_signals.append(kw)
+            ranked_signals.append((0, kw))
+
+    # Search terms (nouns from word discovery)
+    for term in profile.get('search_terms', []):
+        if term:
+            raw_signals.append(term)
+
+    # Build token set and full phrase list
+    all_tokens   = set()
+    full_phrases = []
+
+    for phrase in raw_signals:
+        normalized = _normalize_signal(phrase)
+        all_tokens.update(normalized)
+        phrase_lower = phrase.lower().strip()
+        if phrase_lower:
+            full_phrases.append(phrase_lower)
+
+    # Primary subject = highest ranked signal
+    primary_subject = None
+    if ranked_signals:
+        ranked_signals.sort(key=lambda x: -x[0])
+        primary_subject = _normalize_signal(ranked_signals[0][1])
+
+    return all_tokens, full_phrases, primary_subject
+
+
+def _validate_question_hit(
+    hit_doc: Dict,
+    query_tokens: set,
+    query_phrases: list,
+    primary_subject: set,
+    min_matches: int = 1,
+) -> bool:
+    """
+    Validate a question hit against query signals using 4-level matching.
+
+    Level 1 — Exact token match (case insensitive)
+    Level 2 — Partial token match (query token inside candidate string)
+    Level 3 — Substring containment (query phrase inside candidate or vice versa)
+    Level 4 — Token overlap (shared meaningful tokens between strings)
+
+    Rules:
+    - At least min_matches signals must match
+    - If primary_subject is provided and query has 3+ signals,
+      primary subject must be one of the matches (prevents Grammy
+      matching on Beyoncé when user asked about Dr. Dre)
+
+    Returns True if hit passes validation, False if it should be discarded.
+    """
+    if not query_tokens:
+        # No signals to validate against — accept everything
+        return True
+
+    # Collect candidate values from the hit
+    candidate_raw = []
+    candidate_raw.extend(hit_doc.get('primary_keywords', []))
+    candidate_raw.extend(hit_doc.get('entities', []))
+    candidate_raw.extend(hit_doc.get('semantic_keywords', []))
+
+    if not candidate_raw:
+        return False
+
+    # Normalize all candidate values
+    candidate_tokens   = set()
+    candidate_phrases  = []
+
+    for val in candidate_raw:
+        if not val:
+            continue
+        normalized = _normalize_signal(val)
+        candidate_tokens.update(normalized)
+        candidate_phrases.append(val.lower().strip())
+
+    candidate_text = ' '.join(candidate_phrases)
+
+    match_count         = 0
+    primary_subject_hit = False
+
+    # ── Level 1: Exact token match ────────────────────────────────────────
+    exact_matches = query_tokens & candidate_tokens
+    if exact_matches:
+        match_count += len(exact_matches)
+        if primary_subject and (primary_subject & exact_matches):
+            primary_subject_hit = True
+
+    # ── Level 2: Partial token match ─────────────────────────────────────
+    # Query token appears as substring inside any candidate token
+    for qt in query_tokens:
+        if qt in exact_matches:
+            continue  # already counted
+        for ct in candidate_tokens:
+            if qt in ct or ct in qt:
+                match_count += 1
+                if primary_subject and qt in primary_subject:
+                    primary_subject_hit = True
+                break
+
+    # ── Level 3: Substring containment ───────────────────────────────────
+    # Full query phrase appears inside candidate text or vice versa
+    for qp in query_phrases:
+        if len(qp) < 3:
+            continue
+        if qp in candidate_text:
+            match_count += 1
+            if primary_subject:
+                qp_tokens = _normalize_signal(qp)
+                if qp_tokens & primary_subject:
+                    primary_subject_hit = True
+        else:
+            # Check if any candidate phrase contains the query phrase
+            for cp in candidate_phrases:
+                if qp in cp or cp in qp:
+                    match_count += 1
+                    if primary_subject:
+                        qp_tokens = _normalize_signal(qp)
+                        if qp_tokens & primary_subject:
+                            primary_subject_hit = True
+                    break
+
+    # ── Level 4: Token overlap ────────────────────────────────────────────
+    # Shared meaningful tokens between query and candidate
+    # Only counts tokens not already matched
+    remaining_query = query_tokens - exact_matches
+    token_overlap   = remaining_query & candidate_tokens
+    if token_overlap:
+        match_count += len(token_overlap)
+        if primary_subject and (primary_subject & token_overlap):
+            primary_subject_hit = True
+
+    # ── Decision ──────────────────────────────────────────────────────────
+    if match_count < min_matches:
+        return False
+
+    # If query has 3+ signals AND we have a primary subject,
+    # primary subject must be one of the matches.
+    # This prevents "Grammy" alone matching Dr. Dre questions
+    # to Beyoncé Grammy questions.
+    if primary_subject and len(query_tokens) >= 3:
+        if not primary_subject_hit:
+            return False
+
+    return True
+
 
 def fetch_candidate_uuids_from_questions(
     profile: Dict,
@@ -1319,19 +1713,20 @@ def fetch_candidate_uuids_from_questions(
     """
     Stage 1B: Two-step search against the questions collection.
 
-    FIX 1: Uses the ORIGINAL query embedding (protected in run_parallel_prep)
-            so proper noun mangling does not corrupt the vector search.
+    Step A — Build facet filter from profile metadata to narrow
+              the questions pool before the vector scan.
 
-    FIX 2: Facet filter is built more carefully:
-           - Entity names are validated — single-word fragments like
-             "prentice" or "herman" are weak and may not exist in the
-             entities field as standalone values. We detect this and
-             fall back to question_type only when entities are fragments.
-           - This prevents an over-narrow filter that returns 0 hits
-             when word discovery breaks a proper name into parts.
+    Step B — Run vector search within that filtered subset.
 
-    Step A — build facet filter from profile metadata
-    Step B — vector search within that filtered subset
+    Step C — NEW: Validate each hit against query signals using
+              4-level case-insensitive partial matching before
+              accepting into the candidate pool.
+              This prevents structurally similar but topically
+              unrelated questions from polluting the pool
+              (e.g. Bivins birth question matching Polk birth query,
+              Beyoncé Grammy question matching Dr. Dre Grammy query).
+
+    Returns up to max_results validated document_uuid strings.
     """
     signals = signals or {}
 
@@ -1339,10 +1734,17 @@ def fetch_candidate_uuids_from_questions(
         print("⚠️ Stage 1B (questions): no embedding — skipping")
         return []
 
+    # ── Extract query signals for validation ─────────────────────────────
+    query_tokens, query_phrases, primary_subject = _extract_query_signals(profile)
+
+    print(f"🔍 Stage 1B validation signals:")
+    print(f"   query_tokens    : {sorted(query_tokens)}")
+    print(f"   query_phrases   : {query_phrases}")
+    print(f"   primary_subject : {primary_subject}")
+
     # ── Step A: Build facet filter ────────────────────────────────────────
     filter_parts = []
 
-    # primary_keywords — use top 3
     primary_kws = profile.get('primary_keywords', [])
     if not primary_kws:
         primary_kws = [
@@ -1355,40 +1757,30 @@ def fetch_candidate_uuids_from_questions(
         kw_values = ','.join([f'`{kw}`' for kw in primary_kws])
         filter_parts.append(f'primary_keywords:[{kw_values}]')
 
-    # entities — validate that names are meaningful multi-word phrases
-    # Single-word fragments (e.g. "prentice", "herman") are unreliable
-    # because the entities field stores full names like "Prentice Herman Polk"
+    # Only use entity names that are full names (have space) or high rank
     entity_names = []
     for p in profile.get('persons', []):
         name = p.get('phrase') or p.get('word', '')
-        # Only use entity if it looks like a full name (has a space)
-        # or is clearly a known proper noun (capitalized, rank > 100)
         rank = p.get('rank', 0)
         if name and (' ' in name or rank > 100):
             entity_names.append(name)
-
     for o in profile.get('organizations', []):
         name = o.get('phrase') or o.get('word', '')
         rank = o.get('rank', 0)
         if name and (' ' in name or rank > 100):
             entity_names.append(name)
-
     entity_names = [e for e in entity_names if e][:3]
 
     if entity_names:
         ent_values = ','.join([f'`{e}`' for e in entity_names])
         filter_parts.append(f'entities:[{ent_values}]')
 
-    # semantic_keywords — use top 3
     semantic_kws = profile.get('semantic_keywords', [])
     semantic_kws = [kw for kw in semantic_kws if kw][:3]
-
     if semantic_kws:
         sem_values = ','.join([f'`{kw}`' for kw in semantic_kws])
         filter_parts.append(f'semantic_keywords:[{sem_values}]')
 
-    # question_type — always include when we have a question word signal
-    # This is the most reliable filter when entity names are fragments
     question_word = signals.get('question_word', '')
     question_type_map = {
         'when':  'TEMPORAL',
@@ -1403,16 +1795,8 @@ def fetch_candidate_uuids_from_questions(
     if question_type:
         filter_parts.append(f'question_type:={question_type}')
 
-    # ── Filter strategy: ──────────────────────────────────────────────────
-    # If we have strong entity names → use OR (broad net)
-    # If we only have question_type → use it alone (still narrows well)
-    # If we have nothing → no filter (full vector scan)
-    if filter_parts:
-        filter_str = ' || '.join(filter_parts)
-    else:
-        filter_str = ''
+    filter_str = ' || '.join(filter_parts) if filter_parts else ''
 
-    print(f"🔍 Stage 1B (questions): vector search within facet filter")
     print(f"   primary_keywords : {primary_kws}")
     print(f"   entities         : {entity_names}")
     print(f"   semantic_keywords: {semantic_kws}")
@@ -1423,10 +1807,10 @@ def fetch_candidate_uuids_from_questions(
     embedding_str = ','.join(str(x) for x in query_embedding)
 
     search_params = {
-        'q':            '*',
-        'vector_query': f'embedding:([{embedding_str}], k:{max_results})',
-        'per_page':     max_results,
-        'include_fields': 'document_uuid,question,answer_type,question_type',
+        'q':              '*',
+        'vector_query':   f'embedding:([{embedding_str}], k:{max_results * 2})',  # fetch extra for validation
+        'per_page':       max_results * 2,
+        'include_fields': 'document_uuid,question,answer_type,question_type,primary_keywords,entities,semantic_keywords',
     }
 
     if filter_str:
@@ -1438,40 +1822,62 @@ def fetch_candidate_uuids_from_questions(
         result = response['results'][0]
         hits = result.get('hits', [])
 
-        # ── If filter returned too few hits, retry without filter ─────────
-        # This is the safety net for when all filter parts are too narrow
+        # Fallback: retry without filter if too few hits
         if len(hits) < 5 and filter_str:
             print(f"⚠️  Stage 1B: only {len(hits)} hits with filter — retrying without filter")
             search_params_fallback = {
                 'q':              '*',
-                'vector_query':   f'embedding:([{embedding_str}], k:{max_results})',
-                'per_page':       max_results,
-                'include_fields': 'document_uuid,question,answer_type,question_type',
+                'vector_query':   f'embedding:([{embedding_str}], k:{max_results * 2})',
+                'per_page':       max_results * 2,
+                'include_fields': 'document_uuid,question,answer_type,question_type,primary_keywords,entities,semantic_keywords',
             }
             search_requests_fallback = {'searches': [{'collection': 'questions', **search_params_fallback}]}
             response_fallback = client.multi_search.perform(search_requests_fallback, {})
             hits = response_fallback['results'][0].get('hits', [])
             print(f"   Fallback returned {len(hits)} hits")
 
-        uuids = []
-        seen = set()
+        # ── Step C: Validate each hit against query signals ───────────────
+        uuids       = []
+        seen        = set()
+        accepted    = 0
+        rejected    = 0
+
         for hit in hits:
-            doc = hit.get('document', {})
+            doc  = hit.get('document', {})
             uuid = doc.get('document_uuid')
-            if uuid and uuid not in seen:
-                seen.add(uuid)
-                uuids.append(uuid)
+
+            if not uuid:
+                continue
+
+            # Validate hit against query signals
+            is_valid = _validate_question_hit(
+                hit_doc         = doc,
+                query_tokens    = query_tokens,
+                query_phrases   = query_phrases,
+                primary_subject = primary_subject,
+                min_matches     = 1,
+            )
+
+            if is_valid:
+                accepted += 1
+                if uuid not in seen:
+                    seen.add(uuid)
+                    uuids.append(uuid)
+            else:
+                rejected += 1
+                print(f"   ❌ Rejected: '{doc.get('question', '')[:60]}' "
+                      f"(distance={hit.get('vector_distance', 1.0):.4f})")
 
             if len(uuids) >= max_results:
                 break
 
-        print(f"📊 Stage 1B (questions): {len(uuids)} candidate UUIDs from {len(hits)} question hits")
+        print(f"📊 Stage 1B (questions): {len(uuids)} validated UUIDs "
+              f"({accepted} accepted, {rejected} rejected from {len(hits)} hits)")
         return uuids
 
     except Exception as e:
         print(f"❌ Stage 1B error: {e}")
         return []
-
 
 # ============================================================================
 # STAGE 1 COMBINED: Run both in parallel, merge + dedup
@@ -2707,6 +3113,8 @@ def execute_full_search(
 
     # If word discovery made unsafe corrections (proper nouns mangled into
     # wrong categories), use the original query for Stage 1A keyword graph.
+
+
     # Stage 1B always uses the original embedding so it is already protected.
     UNSAFE_CATEGORIES = {
         'Food', 'US City', 'US State', 'Country', 'Location',
