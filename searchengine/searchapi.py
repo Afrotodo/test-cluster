@@ -374,20 +374,33 @@ def get_exact_term_matches(term: str) -> List[Dict[str, Any]]:
             if not metadata:
                 continue
 
+            # matches.append({
+            #     "id":            key,
+            #     "member":        key,
+            #     "term":          metadata.get("question", ""),
+            #     "display":       metadata.get("question", ""),
+            #     "description":   "",
+            #     "category":      "question",
+            #     "entity_type":   "question",
+            #     "pos":           "question",
+            #     "rank":          _safe_int(metadata.get("score", 0)),
+            #     "exists":        True,
+            #     "document_uuid": metadata.get("document_uuid", ""),
+            #     "answer":        metadata.get("answer", ""),
+            #     "answer_type":   metadata.get("answer_type", "UNKNOWN"),
+            # })
+
             matches.append({
-                "id":            key,
-                "member":        key,
-                "term":          metadata.get("question", ""),
-                "display":       metadata.get("question", ""),
-                "description":   "",
-                "category":      "question",
-                "entity_type":   "question",
-                "pos":           "question",
-                "rank":          _safe_int(metadata.get("score", 0)),
-                "exists":        True,
-                "document_uuid": metadata.get("document_uuid", ""),
-                "answer":        metadata.get("answer", ""),
-                "answer_type":   metadata.get("answer_type", "UNKNOWN"),
+            "id":            key,
+            "member":        key,
+            "term":          metadata.get("term", ""),      # ← correct
+            "display":       metadata.get("display", ""),   # ← correct
+            "description":   metadata.get("description", ""),
+            "category":      metadata.get("category", ""),
+            "entity_type":   metadata.get("entity_type", ""),
+            "pos":           metadata.get("pos", ""),
+            "rank":          _safe_int(metadata.get("rank", 0)),  # ← correct
+            "exists":        True,
             })
 
         matches.sort(key=lambda x: x.get("rank", 0), reverse=True)
@@ -396,6 +409,7 @@ def get_exact_term_matches(term: str) -> List[Dict[str, Any]]:
     except Exception:
         logger.exception("Exact match error for term '%s'", term)
         return []
+
 
 
 # =============================================================================
