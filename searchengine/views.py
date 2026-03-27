@@ -9005,139 +9005,139 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 
-def _fetch_questions_debug(
-    profile: dict,
-    query_embedding: list,
-    signals: dict = None,
-    max_results: int = 50,
-) -> dict:
-    """
-    Stage 1B with full debug output.
-    Returns matched questions with vector distance, question text,
-    answer, question_type, and the document_uuid they resolve to.
-    """
-    from .typesense_discovery_bridge import client
+# def _fetch_questions_debug(
+#     profile: dict,
+#     query_embedding: list,
+#     signals: dict = None,
+#     max_results: int = 50,
+# ) -> dict:
+#     """
+#     Stage 1B with full debug output.
+#     Returns matched questions with vector distance, question text,
+#     answer, question_type, and the document_uuid they resolve to.
+#     """
+#     from .typesense_discovery_bridge import client
 
-    signals = signals or {}
+#     signals = signals or {}
 
-    if not query_embedding:
-        return {"error": "no embedding", "hits": [], "uuids": [], "filter_used": ""}
+#     if not query_embedding:
+#         return {"error": "no embedding", "hits": [], "uuids": [], "filter_used": ""}
 
-    # ── Build facet filter (same logic as fetch_candidate_uuids_from_questions) ──
-    filter_parts = []
+#     # ── Build facet filter (same logic as fetch_candidate_uuids_from_questions) ──
+#     filter_parts = []
 
-    primary_kws = profile.get("primary_keywords", [])
-    if not primary_kws:
-        primary_kws = [
-            k.get("phrase") or k.get("word", "")
-            for k in profile.get("keywords", [])
-        ]
-    primary_kws = [kw for kw in primary_kws if kw][:3]
-    if primary_kws:
-        kw_values = ",".join([f"`{kw}`" for kw in primary_kws])
-        filter_parts.append(f"primary_keywords:[{kw_values}]")
+#     primary_kws = profile.get("primary_keywords", [])
+#     if not primary_kws:
+#         primary_kws = [
+#             k.get("phrase") or k.get("word", "")
+#             for k in profile.get("keywords", [])
+#         ]
+#     primary_kws = [kw for kw in primary_kws if kw][:3]
+#     if primary_kws:
+#         kw_values = ",".join([f"`{kw}`" for kw in primary_kws])
+#         filter_parts.append(f"primary_keywords:[{kw_values}]")
 
-    entity_names = []
-    for p in profile.get("persons", []):
-        entity_names.append(p.get("phrase") or p.get("word", ""))
-    for o in profile.get("organizations", []):
-        entity_names.append(o.get("phrase") or o.get("word", ""))
-    entity_names = [e for e in entity_names if e][:3]
-    if entity_names:
-        ent_values = ",".join([f"`{e}`" for e in entity_names])
-        filter_parts.append(f"entities:[{ent_values}]")
+#     entity_names = []
+#     for p in profile.get("persons", []):
+#         entity_names.append(p.get("phrase") or p.get("word", ""))
+#     for o in profile.get("organizations", []):
+#         entity_names.append(o.get("phrase") or o.get("word", ""))
+#     entity_names = [e for e in entity_names if e][:3]
+#     if entity_names:
+#         ent_values = ",".join([f"`{e}`" for e in entity_names])
+#         filter_parts.append(f"entities:[{ent_values}]")
 
-    semantic_kws = profile.get("semantic_keywords", [])
-    semantic_kws = [kw for kw in semantic_kws if kw][:3]
-    if semantic_kws:
-        sem_values = ",".join([f"`{kw}`" for kw in semantic_kws])
-        filter_parts.append(f"semantic_keywords:[{sem_values}]")
+#     semantic_kws = profile.get("semantic_keywords", [])
+#     semantic_kws = [kw for kw in semantic_kws if kw][:3]
+#     if semantic_kws:
+#         sem_values = ",".join([f"`{kw}`" for kw in semantic_kws])
+#         filter_parts.append(f"semantic_keywords:[{sem_values}]")
 
-    question_word = signals.get("question_word", "")
-    question_type_map = {
-        "when":  "TEMPORAL",
-        "where": "LOCATION",
-        "who":   "PERSON",
-        "what":  "FACTUAL",
-        "which": "FACTUAL",
-        "why":   "REASON",
-        "how":   "PROCESS",
-    }
-    question_type = question_type_map.get(question_word.lower(), "")
-    if question_type:
-        filter_parts.append(f"question_type:={question_type}")
+#     question_word = signals.get("question_word", "")
+#     question_type_map = {
+#         "when":  "TEMPORAL",
+#         "where": "LOCATION",
+#         "who":   "PERSON",
+#         "what":  "FACTUAL",
+#         "which": "FACTUAL",
+#         "why":   "REASON",
+#         "how":   "PROCESS",
+#     }
+#     question_type = question_type_map.get(question_word.lower(), "")
+#     if question_type:
+#         filter_parts.append(f"question_type:={question_type}")
 
-    filter_str = " || ".join(filter_parts) if filter_parts else ""
+#     filter_str = " || ".join(filter_parts) if filter_parts else ""
 
-    embedding_str = ",".join(str(x) for x in query_embedding)
+#     embedding_str = ",".join(str(x) for x in query_embedding)
 
-    search_params = {
-        "q":              "*",
-        "vector_query":   f"embedding:([{embedding_str}], k:{max_results})",
-        "per_page":       max_results,
-        "include_fields": "question_id,question,answer,answer_type,question_type,document_uuid,semantic_uuid,primary_keywords,entities,authority_rank_score",
-    }
-    if filter_str:
-        search_params["filter_by"] = filter_str
+#     search_params = {
+#         "q":              "*",
+#         "vector_query":   f"embedding:([{embedding_str}], k:{max_results})",
+#         "per_page":       max_results,
+#         "include_fields": "question_id,question,answer,answer_type,question_type,document_uuid,semantic_uuid,primary_keywords,entities,authority_rank_score",
+#     }
+#     if filter_str:
+#         search_params["filter_by"] = filter_str
 
-    try:
-        search_requests = {"searches": [{"collection": "questions", **search_params}]}
-        response = client.multi_search.perform(search_requests, {})
-        result = response["results"][0]
-        hits = result.get("hits", [])
+#     try:
+#         search_requests = {"searches": [{"collection": "questions", **search_params}]}
+#         response = client.multi_search.perform(search_requests, {})
+#         result = response["results"][0]
+#         hits = result.get("hits", [])
 
-        matched_questions = []
-        uuids = []
-        seen = set()
+#         matched_questions = []
+#         uuids = []
+#         seen = set()
 
-        for hit in hits:
-            doc = hit.get("document", {})
-            uuid = doc.get("document_uuid")
-            vector_distance = hit.get("vector_distance", 1.0)
-            semantic_score  = round(1 - vector_distance, 4)
+#         for hit in hits:
+#             doc = hit.get("document", {})
+#             uuid = doc.get("document_uuid")
+#             vector_distance = hit.get("vector_distance", 1.0)
+#             semantic_score  = round(1 - vector_distance, 4)
 
-            matched_questions.append({
-                "question":         doc.get("question", ""),
-                "answer":           doc.get("answer", ""),
-                "answer_type":      doc.get("answer_type", ""),
-                "question_type":    doc.get("question_type", ""),
-                "document_uuid":    uuid,
-                "semantic_uuid":    doc.get("semantic_uuid", ""),
-                "vector_distance":  round(vector_distance, 4),
-                "semantic_score":   semantic_score,
-                "confidence":       "HIGH" if vector_distance < 0.25 else
-                                    "MEDIUM" if vector_distance < 0.45 else
-                                    "LOW",
-                "primary_keywords": doc.get("primary_keywords", [])[:3],
-                "entities":         doc.get("entities", [])[:5],
-                "authority_rank_score": doc.get("authority_rank_score", 0),
-            })
+#             matched_questions.append({
+#                 "question":         doc.get("question", ""),
+#                 "answer":           doc.get("answer", ""),
+#                 "answer_type":      doc.get("answer_type", ""),
+#                 "question_type":    doc.get("question_type", ""),
+#                 "document_uuid":    uuid,
+#                 "semantic_uuid":    doc.get("semantic_uuid", ""),
+#                 "vector_distance":  round(vector_distance, 4),
+#                 "semantic_score":   semantic_score,
+#                 "confidence":       "HIGH" if vector_distance < 0.25 else
+#                                     "MEDIUM" if vector_distance < 0.45 else
+#                                     "LOW",
+#                 "primary_keywords": doc.get("primary_keywords", [])[:3],
+#                 "entities":         doc.get("entities", [])[:5],
+#                 "authority_rank_score": doc.get("authority_rank_score", 0),
+#             })
 
-            if uuid and uuid not in seen:
-                seen.add(uuid)
-                uuids.append(uuid)
+#             if uuid and uuid not in seen:
+#                 seen.add(uuid)
+#                 uuids.append(uuid)
 
-        return {
-            "filter_used":          filter_str or "none (full scan)",
-            "filter_parts":         filter_parts,
-            "primary_kws_used":     primary_kws,
-            "entity_names_used":    entity_names,
-            "semantic_kws_used":    semantic_kws,
-            "question_type_filter": question_type or "none",
-            "total_hits":           len(hits),
-            "unique_doc_uuids":     len(uuids),
-            "uuids":                uuids,
-            "matched_questions":    matched_questions,
-        }
+#         return {
+#             "filter_used":          filter_str or "none (full scan)",
+#             "filter_parts":         filter_parts,
+#             "primary_kws_used":     primary_kws,
+#             "entity_names_used":    entity_names,
+#             "semantic_kws_used":    semantic_kws,
+#             "question_type_filter": question_type or "none",
+#             "total_hits":           len(hits),
+#             "unique_doc_uuids":     len(uuids),
+#             "uuids":                uuids,
+#             "matched_questions":    matched_questions,
+#         }
 
-    except Exception as e:
-        return {
-            "error":             str(e),
-            "filter_used":       filter_str,
-            "hits":              [],
-            "uuids":             [],
-            "matched_questions": [],
-        }
+#     except Exception as e:
+#         return {
+#             "error":             str(e),
+#             "filter_used":       filter_str,
+#             "hits":              [],
+#             "uuids":             [],
+#             "matched_questions": [],
+#         }
 
 
 @csrf_exempt
@@ -9438,3 +9438,138 @@ def debug_search_view(request):
         "unknown_terms":   full_result.get("unknown_terms", []),
         "errors":          errors if errors else None,
     }, json_dumps_params={"indent": 2})
+
+def _fetch_questions_debug(
+    profile: dict,
+    query_embedding: list,
+    signals: dict = None,
+    max_results: int = 50,
+) -> dict:
+        """
+        Stage 1B with full debug output.
+        Returns matched questions with vector distance, question text,
+        answer, question_type, and the document_uuid they resolve to.
+        """
+        from .typesense_discovery_bridge import client
+
+        signals = signals or {}
+
+        if not query_embedding:
+            return {"error": "no embedding", "hits": [], "uuids": [], "filter_used": ""}
+
+        # ── Build facet filter (same logic as fetch_candidate_uuids_from_questions) ──
+        filter_parts = []
+
+        primary_kws = profile.get("primary_keywords", [])
+        if not primary_kws:
+            primary_kws = [
+                k.get("phrase") or k.get("word", "")
+                for k in profile.get("keywords", [])
+            ]
+        primary_kws = [kw for kw in primary_kws if kw][:3]
+        if primary_kws:
+            kw_values = ",".join([f"`{kw}`" for kw in primary_kws])
+            filter_parts.append(f"primary_keywords:[{kw_values}]")
+
+        entity_names = []
+        for p in profile.get("persons", []):
+            entity_names.append(p.get("phrase") or p.get("word", ""))
+        for o in profile.get("organizations", []):
+            entity_names.append(o.get("phrase") or o.get("word", ""))
+        entity_names = [e for e in entity_names if e][:3]
+        if entity_names:
+            ent_values = ",".join([f"`{e}`" for e in entity_names])
+            filter_parts.append(f"entities:[{ent_values}]")
+
+        semantic_kws = profile.get("semantic_keywords", [])
+        semantic_kws = [kw for kw in semantic_kws if kw][:3]
+        if semantic_kws:
+            sem_values = ",".join([f"`{kw}`" for kw in semantic_kws])
+            filter_parts.append(f"semantic_keywords:[{sem_values}]")
+
+        # ★ FIX: use `or ''` to guard against None value
+        question_word = signals.get("question_word") or ""
+        question_type_map = {
+            "when":  "TEMPORAL",
+            "where": "LOCATION",
+            "who":   "PERSON",
+            "what":  "FACTUAL",
+            "which": "FACTUAL",
+            "why":   "REASON",
+            "how":   "PROCESS",
+        }
+        question_type = question_type_map.get(question_word.lower(), "")
+        if question_type:
+            filter_parts.append(f"question_type:={question_type}")
+
+        filter_str = " || ".join(filter_parts) if filter_parts else ""
+
+        embedding_str = ",".join(str(x) for x in query_embedding)
+
+        search_params = {
+            "q":              "*",
+            "vector_query":   f"embedding:([{embedding_str}], k:{max_results})",
+            "per_page":       max_results,
+            "include_fields": "question_id,question,answer,answer_type,question_type,document_uuid,semantic_uuid,primary_keywords,entities,authority_rank_score",
+        }
+        if filter_str:
+            search_params["filter_by"] = filter_str
+
+        try:
+            search_requests = {"searches": [{"collection": "questions", **search_params}]}
+            response = client.multi_search.perform(search_requests, {})
+            result = response["results"][0]
+            hits = result.get("hits", [])
+
+            matched_questions = []
+            uuids = []
+            seen = set()
+
+            for hit in hits:
+                doc = hit.get("document", {})
+                uuid = doc.get("document_uuid")
+                vector_distance = hit.get("vector_distance", 1.0)
+                semantic_score  = round(1 - vector_distance, 4)
+
+                matched_questions.append({
+                    "question":         doc.get("question", ""),
+                    "answer":           doc.get("answer", ""),
+                    "answer_type":      doc.get("answer_type", ""),
+                    "question_type":    doc.get("question_type", ""),
+                    "document_uuid":    uuid,
+                    "semantic_uuid":    doc.get("semantic_uuid", ""),
+                    "vector_distance":  round(vector_distance, 4),
+                    "semantic_score":   semantic_score,
+                    "confidence":       "HIGH" if vector_distance < 0.25 else
+                                        "MEDIUM" if vector_distance < 0.45 else
+                                        "LOW",
+                    "primary_keywords": doc.get("primary_keywords", [])[:3],
+                    "entities":         doc.get("entities", [])[:5],
+                    "authority_rank_score": doc.get("authority_rank_score", 0),
+                })
+
+                if uuid and uuid not in seen:
+                    seen.add(uuid)
+                    uuids.append(uuid)
+
+            return {
+                "filter_used":          filter_str or "none (full scan)",
+                "filter_parts":         filter_parts,
+                "primary_kws_used":     primary_kws,
+                "entity_names_used":    entity_names,
+                "semantic_kws_used":    semantic_kws,
+                "question_type_filter": question_type or "none",
+                "total_hits":           len(hits),
+                "unique_doc_uuids":     len(uuids),
+                "uuids":                uuids,
+                "matched_questions":    matched_questions,
+            }
+
+        except Exception as e:
+            return {
+                "error":             str(e),
+                "filter_used":       filter_str,
+                "hits":              [],
+                "uuids":             [],
+                "matched_questions": [],
+            }
