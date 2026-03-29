@@ -4358,3 +4358,530 @@ def _fetch_questions_debug(
             "uuids":             [],
             "matched_questions": [],
         }
+
+
+import json
+import time
+from django.http import JsonResponse
+from django.views.decorators.http import require_GET
+ 
+# ── Import word discovery ────────────────────────────────────────────────
+try:
+    from .word_discovery_fulltest import (
+        WordDiscovery,
+        vocab_cache_wrapper,
+        get_fuzzy_suggestions,
+        get_fuzzy_suggestions_batch,
+        damerau_levenshtein_distance,
+        is_pos_compatible,
+        normalize_pos_string,
+        STOPWORDS,
+        GRAMMAR_RULES,
+        RAM_CACHE_AVAILABLE,
+        vocab_cache,
+    )
+    WD_AVAILABLE = True
+except ImportError:
+    try:
+        from word_discovery_fulltest import (
+            WordDiscovery,
+            vocab_cache_wrapper,
+            get_fuzzy_suggestions,
+            get_fuzzy_suggestions_batch,
+            damerau_levenshtein_distance,
+            is_pos_compatible,
+            normalize_pos_string,
+            STOPWORDS,
+            GRAMMAR_RULES,
+            RAM_CACHE_AVAILABLE,
+            vocab_cache,
+        )
+        WD_AVAILABLE = True
+    except ImportError:
+        WD_AVAILABLE = False
+ 
+ 
+@require_GET
+def debug_word_discovery_view(request):
+    """
+    Debug endpoint that traces every step of word discovery.
+ 
+    GET /debug/word-discovery/?q=restuarants+in+atlanta
+    """
+    query = request.GET.get('q', '').strip()
+ 
+    if not query:
+        return JsonResponse({
+            'error': 'Missing ?q= parameter',
+            'usage': '/debug/word-discovery/?q=restuarants+in+atlanta',
+        }, status=400)
+ 
+    if not WD_AVAILABLE:
+        return JsonResponse({
+            'error': 'word_discovery_fulltest not available',
+        }, status=500)
+ 
+    trace = {
+        'query': query,
+        'ram_cache_available': RAM_CACHE_AVAILABLE,
+        'ram_cache_loaded': bool(vocab_cache and vocab_cache.loaded) if vocab_cache else False,
+        'steps': {},
+    }
+ 
+    t0 = time.perf_counter()
+ 
+    # ── Tokenize ─────────────────────────────────────────────────────
+    words = [w.strip('?!.,;:"\'"()[]{}') for w in query.lower().split()]
+    words = [w for w in words if w]
+    trace['tokens'] = words
+ 
+    # ================================================================
+    # STEP 1: RAM Cache Lookup
+    # ================================================================
+    step1 = []
+    cache = vocab_cache_wrapper
+ 
+    for i, word in enumerate(words):
+        word_lower = word.lower().strip()
+        entry = {
+            'position': i + 1,
+            'word': word_lower,
+        }
+ 
+        # Check stopwords first
+        if word_lower in STOPWORDS:
+            entry['result'] = 'STOPWORD'
+            entry['pos'] = STOPWORDS[word_lower]
+            entry['matches'] = []
+            entry['match_count'] = 0
+            step1.append(entry)
+            continue
+ 
+        # RAM hash lookup
+        matches = cache.get_term_matches(word_lower)
+ 
+        if matches:
+            entry['result'] = 'FOUND'
+            entry['match_count'] = len(matches)
+            entry['matches'] = [
+                {
+                    'term': m.get('term', ''),
+                    'category': m.get('category', ''),
+                    'pos': m.get('pos', ''),
+                    'rank': m.get('rank', 0),
+                    'entity_type': m.get('entity_type', ''),
+                }
+                for m in matches
+            ]
+        else:
+            entry['result'] = 'NOT_IN_RAM'
+            entry['match_count'] = 0
+            entry['matches'] = []
+ 
+            # Also check what the RAM cache has for similar words
+            # (helps debug — shows nearby entries)
+            nearby = []
+            for variant in _generate_variants(word_lower):
+                variant_matches = cache.get_term_matches(variant)
+                if variant_matches:
+                    nearby.append({
+                        'variant': variant,
+                        'distance': damerau_levenshtein_distance(word_lower, variant),
+                        'top_match': {
+                            'term': variant_matches[0].get('term', ''),
+                            'category': variant_matches[0].get('category', ''),
+                            'rank': variant_matches[0].get('rank', 0),
+                        }
+                    })
+            if nearby:
+                nearby.sort(key=lambda x: x['distance'])
+                entry['nearby_in_ram'] = nearby[:5]
+ 
+        step1.append(entry)
+ 
+    trace['steps']['step1_ram_lookup'] = step1
+ 
+    # ================================================================
+    # STEP 2: N-gram Detection
+    # ================================================================
+    step2 = {'ngrams_found': [], 'consumed_positions': []}
+ 
+    # Check all possible n-grams
+    for n in [4, 3, 2]:
+        if len(words) >= n:
+            for i in range(len(words) - n + 1):
+                chunk = words[i:i + n]
+                result = cache.get_ngram(chunk)
+                if result:
+                    step2['ngrams_found'].append({
+                        'type': f'{n}-gram',
+                        'words': chunk,
+                        'positions': list(range(i + 1, i + n + 1)),
+                        'term': result.get('term', ''),
+                        'category': result.get('category', ''),
+                        'pos': normalize_pos_string(result.get('pos', '')),
+                        'rank': result.get('rank', 0),
+                    })
+ 
+    trace['steps']['step2_ngrams'] = step2
+ 
+    # ================================================================
+    # STEP 3: POS Prediction (Grammar Rules)
+    # ================================================================
+    step3 = []
+ 
+    for i, word_info in enumerate(step1):
+        word = word_info['word']
+        pos_entry = {
+            'position': i + 1,
+            'word': word,
+        }
+ 
+        if word_info['result'] == 'STOPWORD':
+            pos_entry['predicted_pos'] = word_info['pos']
+            pos_entry['source'] = 'stopword'
+            pos_entry['left'] = None
+            pos_entry['right'] = None
+            step3.append(pos_entry)
+            continue
+ 
+        # Get left neighbor POS
+        left_pos = 'start' if i == 0 else None
+        if left_pos is None:
+            for j in range(i - 1, -1, -1):
+                prev = step1[j]
+                if prev['result'] == 'STOPWORD':
+                    left_pos = prev['pos']
+                    break
+                elif prev['matches']:
+                    left_pos = normalize_pos_string(prev['matches'][0].get('pos', ''))
+                    break
+ 
+        # Get right neighbor POS
+        right_pos = 'end' if i == len(step1) - 1 else None
+        if right_pos is None:
+            for j in range(i + 1, len(step1)):
+                nxt = step1[j]
+                if nxt['result'] == 'STOPWORD':
+                    right_pos = nxt['pos']
+                    break
+                elif nxt['matches']:
+                    right_pos = normalize_pos_string(nxt['matches'][0].get('pos', ''))
+                    break
+ 
+        pos_entry['left'] = left_pos
+        pos_entry['right'] = right_pos
+ 
+        # Look up grammar rule
+        predicted = None
+        rule_used = None
+ 
+        if left_pos and right_pos:
+            predicted = GRAMMAR_RULES.get((left_pos, right_pos))
+            if predicted:
+                rule_used = f'({left_pos}, {right_pos})'
+ 
+        if not predicted and left_pos:
+            predicted = GRAMMAR_RULES.get((left_pos, None))
+            if predicted:
+                rule_used = f'({left_pos}, None)'
+ 
+        if not predicted and right_pos:
+            predicted = GRAMMAR_RULES.get((None, right_pos))
+            if predicted:
+                rule_used = f'(None, {right_pos})'
+ 
+        if not predicted:
+            predicted = [('noun', 0.75)]
+            rule_used = 'default (no rule matched)'
+ 
+        pos_entry['predicted_pos_list'] = predicted
+        pos_entry['predicted_pos'] = predicted[0][0] if predicted else 'noun'
+        pos_entry['rule_used'] = rule_used
+ 
+        step3.append(pos_entry)
+ 
+    trace['steps']['step3_pos_prediction'] = step3
+ 
+    # ================================================================
+    # STEP 3.5: Suffix Refinement
+    # ================================================================
+    step3_5 = []
+ 
+    SUFFIX_POS_RULES = WordDiscovery.SUFFIX_POS_RULES
+    SUFFIX_EXCEPTIONS = WordDiscovery.SUFFIX_EXCEPTIONS
+    MIN_LEN = WordDiscovery.MIN_SUFFIX_WORD_LENGTH
+ 
+    sorted_suffixes = sorted(SUFFIX_POS_RULES.keys(), key=len, reverse=True)
+ 
+    for i, word_info in enumerate(step1):
+        word = word_info['word']
+ 
+        if word_info['result'] == 'STOPWORD':
+            continue
+ 
+        suffix_entry = {
+            'position': i + 1,
+            'word': word,
+        }
+ 
+        if len(word) < MIN_LEN:
+            suffix_entry['result'] = 'too_short'
+            step3_5.append(suffix_entry)
+            continue
+ 
+        if word in SUFFIX_EXCEPTIONS:
+            suffix_entry['result'] = 'exception'
+            step3_5.append(suffix_entry)
+            continue
+ 
+        matched_suffix = None
+        for suffix in sorted_suffixes:
+            if word.endswith(suffix) and len(word) > len(suffix) + 1:
+                matched_suffix = suffix
+                break
+ 
+        if matched_suffix:
+            suffix_entry['matched_suffix'] = matched_suffix
+            suffix_entry['suffix_predictions'] = SUFFIX_POS_RULES[matched_suffix]
+            suffix_entry['result'] = 'refined'
+        else:
+            suffix_entry['result'] = 'no_suffix_match'
+ 
+        step3_5.append(suffix_entry)
+ 
+    trace['steps']['step3_5_suffix'] = step3_5
+ 
+    # ================================================================
+    # STEP 4: Best Match Selection
+    # ================================================================
+    step4 = []
+ 
+    for i, word_info in enumerate(step1):
+        word = word_info['word']
+ 
+        if word_info['result'] == 'STOPWORD':
+            continue
+ 
+        match_entry = {
+            'position': i + 1,
+            'word': word,
+        }
+ 
+        if word_info['result'] == 'NOT_IN_RAM':
+            match_entry['result'] = 'UNKNOWN — deferred to Step 5'
+            match_entry['selected'] = None
+            step4.append(match_entry)
+            continue
+ 
+        matches = word_info['matches']
+        predicted_pos = step3[i]['predicted_pos'] if i < len(step3) else 'noun'
+        match_entry['predicted_pos'] = predicted_pos
+ 
+        # Filter by POS compatibility
+        compatible = []
+        incompatible = []
+        for m in matches:
+            match_pos = normalize_pos_string(m['pos'])
+            if is_pos_compatible(match_pos, predicted_pos):
+                compatible.append(m)
+            else:
+                incompatible.append(m)
+ 
+        match_entry['compatible_matches'] = compatible
+        match_entry['incompatible_matches'] = [
+            f"{m['category']}({normalize_pos_string(m['pos'])})" for m in incompatible
+        ]
+ 
+        if compatible:
+            # Sort by rank, pick best
+            compatible.sort(key=lambda x: x['rank'], reverse=True)
+            match_entry['selected'] = compatible[0]
+            match_entry['result'] = 'SELECTED (POS compatible)'
+        elif matches:
+            match_entry['selected'] = matches[0]
+            match_entry['result'] = 'FALLBACK (no POS match, using highest rank)'
+        else:
+            match_entry['selected'] = None
+            match_entry['result'] = 'NO MATCHES'
+ 
+        step4.append(match_entry)
+ 
+    trace['steps']['step4_match_selection'] = step4
+ 
+    # ================================================================
+    # STEP 5: Unknown Word Correction (Redis Fuzzy Search)
+    # ================================================================
+    step5 = {
+        'unknowns': [],
+        'pos_mismatches': [],
+        'redis_calls': [],
+        'corrections': [],
+    }
+ 
+    unknown_words = []
+    for i, word_info in enumerate(step1):
+        if word_info['result'] == 'NOT_IN_RAM':
+            predicted_pos = step3[i]['predicted_pos'] if i < len(step3) else 'noun'
+            unknown_words.append({
+                'position': i + 1,
+                'word': word_info['word'],
+                'predicted_pos': predicted_pos,
+            })
+ 
+    step5['unknowns'] = unknown_words
+ 
+    if unknown_words:
+        words_to_fetch = [u['word'] for u in unknown_words]
+        step5['words_sent_to_redis'] = words_to_fetch
+ 
+        # Call the actual batch function
+        try:
+            t_redis = time.perf_counter()
+            batch_results = get_fuzzy_suggestions_batch(
+                words_to_fetch, limit=10, max_distance=2
+            )
+            redis_time = (time.perf_counter() - t_redis) * 1000
+            step5['redis_time_ms'] = round(redis_time, 2)
+ 
+            for u in unknown_words:
+                word = u['word']
+                predicted_pos = u['predicted_pos']
+                suggestions = batch_results.get(word.lower().strip(), [])
+ 
+                word_result = {
+                    'word': word,
+                    'position': u['position'],
+                    'predicted_pos': predicted_pos,
+                    'total_suggestions': len(suggestions),
+                    'suggestions': [],
+                }
+ 
+                for s in suggestions[:10]:
+                    s_pos = normalize_pos_string(s.get('pos', 'unknown'))
+                    compatible = is_pos_compatible(s_pos, predicted_pos)
+                    word_result['suggestions'].append({
+                        'term': s['term'],
+                        'category': s.get('category', ''),
+                        'pos': s_pos,
+                        'rank': s.get('rank', 0),
+                        'distance': s.get('distance', 99),
+                        'pos_compatible': compatible,
+                    })
+ 
+                # What would Step 5 do with this?
+                compatible_suggestions = [
+                    s for s in suggestions
+                    if is_pos_compatible(
+                        normalize_pos_string(s.get('pos', 'unknown')),
+                        predicted_pos
+                    )
+                ]
+ 
+                if compatible_suggestions:
+                    best = compatible_suggestions[0]
+                    word_result['best_compatible'] = {
+                        'term': best['term'],
+                        'distance': best.get('distance', 99),
+                        'rank': best.get('rank', 0),
+                        'pos': normalize_pos_string(best.get('pos', '')),
+                        'category': best.get('category', ''),
+                    }
+                    word_result['outcome'] = (
+                        f"SUGGESTION: '{best['term']}' "
+                        f"(distance={best.get('distance', '?')}, rank={best.get('rank', 0)})"
+                    )
+                elif suggestions:
+                    best = suggestions[0]
+                    word_result['best_any'] = {
+                        'term': best['term'],
+                        'distance': best.get('distance', 99),
+                        'rank': best.get('rank', 0),
+                        'pos': normalize_pos_string(best.get('pos', '')),
+                    }
+                    word_result['outcome'] = (
+                        f"SUGGESTION (no POS match): '{best['term']}' "
+                        f"(distance={best.get('distance', '?')})"
+                    )
+                else:
+                    word_result['outcome'] = 'NO SUGGESTIONS — word stays as-is'
+ 
+                step5['corrections'].append(word_result)
+ 
+        except Exception as e:
+            step5['redis_error'] = str(e)
+    else:
+        step5['outcome'] = 'No unknown words — Step 5 skipped'
+ 
+    trace['steps']['step5_corrections'] = step5
+ 
+    # ================================================================
+    # STEP 6 & 7: Run the full pipeline for comparison
+    # ================================================================
+    try:
+        wd = WordDiscovery(verbose=False)
+        t_full = time.perf_counter()
+        full_output = wd.process(query)
+        full_time = (time.perf_counter() - t_full) * 1000
+ 
+        trace['steps']['step7_final_output'] = {
+            'corrected_query': full_output.get('corrected_query', ''),
+            'processing_time_ms': round(full_time, 2),
+            'stats': full_output.get('stats', {}),
+            'corrections': full_output.get('corrections', []),
+            'terms': [
+                {
+                    'position': t.get('position'),
+                    'word': t.get('word'),
+                    'status': t.get('status'),
+                    'pos': t.get('pos'),
+                    'predicted_pos': t.get('predicted_pos'),
+                    'category': t.get('category', ''),
+                    'rank': t.get('rank', 0),
+                    'display': t.get('display', ''),
+                    'is_stopword': t.get('is_stopword', False),
+                    'part_of_ngram': t.get('part_of_ngram', False),
+                    'match_count': t.get('match_count', 0),
+                    # Suggestion fields (if present)
+                    'suggestion': t.get('suggestion'),
+                    'suggestion_display': t.get('suggestion_display'),
+                    'suggestion_distance': t.get('suggestion_distance'),
+                    # Corrected fields (if present)
+                    'corrected': t.get('corrected'),
+                    'corrected_display': t.get('corrected_display'),
+                    'distance': t.get('distance'),
+                }
+                for t in full_output.get('terms', [])
+            ],
+            'ngrams': full_output.get('ngrams', []),
+        }
+    except Exception as e:
+        trace['steps']['step7_final_output'] = {'error': str(e)}
+ 
+    total_time = (time.perf_counter() - t0) * 1000
+    trace['total_debug_time_ms'] = round(total_time, 2)
+ 
+    return JsonResponse(trace, json_dumps_params={'indent': 2})
+ 
+ 
+def _generate_variants(word: str) -> list:
+    """
+    Generate common typo variants of a word to check in RAM cache.
+    This helps the debug output show what IS in the cache near the misspelling.
+    """
+    variants = set()
+ 
+    # Adjacent transpositions (Damerau)
+    for i in range(len(word) - 1):
+        swapped = list(word)
+        swapped[i], swapped[i + 1] = swapped[i + 1], swapped[i]
+        variants.add(''.join(swapped))
+ 
+    # Single character deletions
+    for i in range(len(word)):
+        variants.add(word[:i] + word[i + 1:])
+ 
+    # Remove the original word
+    variants.discard(word)
+ 
+    return sorted(variants)

@@ -98,6 +98,7 @@ urlpatterns = [
     #  Testing endpoints 
     # path('debug/search/', views.debug_search_view, name='debug_search'),
     path('debug/search/', views.debug_search_view, name='debug_search'),
+    path('debug/word-discovery/', views.debug_word_discovery_view, name='debug_word_discovery'),
     # path('debug/business/', views.debug_business_search, name='debug_business'),
     # path('debug/schema/', views.debug_schema, name='debug_schema'),
     # path('debug/stage2/', views.debug_stage2_view, name='debug_stage2'),
