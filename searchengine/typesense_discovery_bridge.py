@@ -1879,6 +1879,244 @@ def _validate_question_hit(
 #         print(f"❌ Stage 1B error: {e}")
 #         return []
 
+# def fetch_candidate_uuids_from_questions(
+#     profile: Dict,
+#     query_embedding: List[float],
+#     signals: Dict = None,
+#     max_results: int = 50
+# ) -> List[str]:
+#     """
+#     Stage 1B: Two-step search against the questions collection.
+
+#     Step A — Build facet filter from profile metadata to narrow
+#               the questions pool before the vector scan.
+
+#     Step B — Run vector search within that filtered subset.
+
+#     Step C — Validate each hit against query signals using
+#               4-level case-insensitive partial matching before
+#               accepting into the candidate pool.
+
+#     Returns up to max_results validated document_uuid strings.
+#     """
+#     signals = signals or {}
+
+#     if not query_embedding:
+#         print("⚠️ Stage 1B (questions): no embedding — skipping")
+#         return []
+
+#     # ── Extract query signals for validation ─────────────────────────────
+#     query_tokens, query_phrases, primary_subject = _extract_query_signals(profile)
+
+#     print(f"🔍 Stage 1B validation signals:")
+#     print(f"   query_tokens    : {sorted(query_tokens)}")
+#     print(f"   query_phrases   : {query_phrases}")
+#     print(f"   primary_subject : {primary_subject}")
+
+#     # ── Step A: Build facet filter ────────────────────────────────────────
+#     filter_parts = []
+
+#     primary_kws = profile.get('primary_keywords', [])
+#     if not primary_kws:
+#         primary_kws = [
+#             k.get('phrase') or k.get('word', '')
+#             for k in profile.get('keywords', [])
+#         ]
+#     primary_kws = [kw for kw in primary_kws if kw][:3]
+
+#     if primary_kws:
+#         kw_values = ','.join([f'`{kw}`' for kw in primary_kws])
+#         filter_parts.append(f'primary_keywords:[{kw_values}]')
+
+#     # Only use entity names that are full names (have space) or high rank
+#     entity_names = []
+#     for p in profile.get('persons', []):
+#         name = p.get('phrase') or p.get('word', '')
+#         rank = p.get('rank', 0)
+#         if name and (' ' in name or rank > 100):
+#             entity_names.append(name)
+#     for o in profile.get('organizations', []):
+#         name = o.get('phrase') or o.get('word', '')
+#         rank = o.get('rank', 0)
+#         if name and (' ' in name or rank > 100):
+#             entity_names.append(name)
+#     entity_names = [e for e in entity_names if e][:3]
+
+#     if entity_names:
+#         ent_values = ','.join([f'`{e}`' for e in entity_names])
+#         filter_parts.append(f'entities:[{ent_values}]')
+
+#     semantic_kws = profile.get('semantic_keywords', [])
+#     semantic_kws = [kw for kw in semantic_kws if kw][:3]
+#     if semantic_kws:
+#         sem_values = ','.join([f'`{kw}`' for kw in semantic_kws])
+#         filter_parts.append(f'semantic_keywords:[{sem_values}]')
+
+#     # ★ FIX: use `or ''` to guard against None value
+#     question_word = signals.get('question_word') or ''
+#     question_type_map = {
+#         'when':  'TEMPORAL',
+#         'where': 'LOCATION',
+#         'who':   'PERSON',
+#         'what':  'FACTUAL',
+#         'which': 'FACTUAL',
+#         'why':   'REASON',
+#         'how':   'PROCESS',
+#     }
+#     question_type = question_type_map.get(question_word.lower(), '')
+#     if question_type:
+#         filter_parts.append(f'question_type:={question_type}')
+
+#     filter_str = ' || '.join(filter_parts) if filter_parts else ''
+
+#     print(f"   primary_keywords : {primary_kws}")
+#     print(f"   entities         : {entity_names}")
+#     print(f"   semantic_keywords: {semantic_kws}")
+#     print(f"   question_type    : {question_type or 'any'}")
+#     print(f"   filter_by        : {filter_str[:120] if filter_str else 'none (full vector scan)'}")
+
+#     # ── Step B: Vector search within filtered subset ──────────────────────
+#     embedding_str = ','.join(str(x) for x in query_embedding)
+
+#     search_params = {
+#         'q':              '*',
+#         'vector_query':   f'embedding:([{embedding_str}], k:{max_results * 2})',
+#         'per_page':       max_results * 2,
+#         'include_fields': 'document_uuid,question,answer_type,question_type,primary_keywords,entities,semantic_keywords',
+#     }
+
+#     if filter_str:
+#         search_params['filter_by'] = filter_str
+
+#     try:
+#         search_requests = {'searches': [{'collection': 'questions', **search_params}]}
+#         response = client.multi_search.perform(search_requests, {})
+#         result = response['results'][0]
+#         hits = result.get('hits', [])
+
+#         # Fallback: retry without filter if too few hits
+#         if len(hits) < 5 and filter_str:
+#             print(f"⚠️  Stage 1B: only {len(hits)} hits with filter — retrying without filter")
+#             search_params_fallback = {
+#                 'q':              '*',
+#                 'vector_query':   f'embedding:([{embedding_str}], k:{max_results * 2})',
+#                 'per_page':       max_results * 2,
+#                 'include_fields': 'document_uuid,question,answer_type,question_type,primary_keywords,entities,semantic_keywords',
+#             }
+#             search_requests_fallback = {'searches': [{'collection': 'questions', **search_params_fallback}]}
+#             response_fallback = client.multi_search.perform(search_requests_fallback, {})
+#             hits = response_fallback['results'][0].get('hits', [])
+#             print(f"   Fallback returned {len(hits)} hits")
+
+#         # ── Step C: Validate each hit against query signals ───────────────
+#         uuids       = []
+#         seen        = set()
+#         accepted    = 0
+#         rejected    = 0
+
+#         for hit in hits:
+#             doc  = hit.get('document', {})
+#             uuid = doc.get('document_uuid')
+
+#             if not uuid:
+#                 continue
+
+#             # Validate hit against query signals
+#             is_valid = _validate_question_hit(
+#                 hit_doc         = doc,
+#                 query_tokens    = query_tokens,
+#                 query_phrases   = query_phrases,
+#                 primary_subject = primary_subject,
+#                 min_matches     = 1,
+#             )
+
+#             if is_valid:
+#                 accepted += 1
+#                 if uuid not in seen:
+#                     seen.add(uuid)
+#                     uuids.append(uuid)
+#             else:
+#                 rejected += 1
+#                 print(f"   ❌ Rejected: '{doc.get('question', '')[:60]}' "
+#                       f"(distance={hit.get('vector_distance', 1.0):.4f})")
+
+#             if len(uuids) >= max_results:
+#                 break
+
+#         print(f"📊 Stage 1B (questions): {len(uuids)} validated UUIDs "
+#               f"({accepted} accepted, {rejected} rejected from {len(hits)} hits)")
+#         return uuids
+
+#     except Exception as e:
+#         print(f"❌ Stage 1B error: {e}")
+#         return []
+
+# # ============================================================================
+# # STAGE 1 COMBINED: Run both in parallel, merge + dedup
+# # ============================================================================
+
+# def fetch_all_candidate_uuids(
+#     search_query: str,
+#     profile: Dict,
+#     query_embedding: List[float],
+#     signals: Dict = None,
+# ) -> List[str]:
+#     """
+#     Runs Stage 1A (document) and Stage 1B (questions) in parallel.
+
+#     Merge order:
+#     1. Overlap — found by both paths (highest confidence)
+#     2. Document-only hits
+#     3. Question-only hits
+
+#     Stage 1B runs independently of Stage 1A results.
+#     Even if Stage 1A returns 0 (e.g. bad keyword graph), Stage 1B
+#     can still surface the right document via vector search.
+#     """
+#     signals = signals or {}
+
+#     doc_future = _executor.submit(
+#         fetch_candidate_uuids, search_query, profile, signals, 100
+#     )
+#     q_future = _executor.submit(
+#         fetch_candidate_uuids_from_questions, profile, query_embedding, signals, 50
+#     )
+
+#     doc_uuids = doc_future.result()
+#     q_uuids   = q_future.result()
+
+#     # Find overlap
+#     doc_set = set(doc_uuids)
+#     q_set   = set(q_uuids)
+#     overlap  = doc_set & q_set
+
+#     # Merge: overlap first, then document-only, then question-only
+#     merged = []
+#     seen   = set()
+
+#     for uuid in doc_uuids:
+#         if uuid in overlap and uuid not in seen:
+#             merged.append(uuid)
+#             seen.add(uuid)
+
+#     for uuid in doc_uuids:
+#         if uuid not in seen:
+#             merged.append(uuid)
+#             seen.add(uuid)
+
+#     for uuid in q_uuids:
+#         if uuid not in seen:
+#             merged.append(uuid)
+#             seen.add(uuid)
+
+#     print(f"📊 Stage 1 COMBINED:")
+#     print(f"   document pool    : {len(doc_uuids)}")
+#     print(f"   questions pool   : {len(q_uuids)}")
+#     print(f"   overlap (both)   : {len(overlap)}")
+#     print(f"   merged total     : {len(merged)}")
+
+#     return merged
+
 def fetch_candidate_uuids_from_questions(
     profile: Dict,
     query_embedding: List[float],
@@ -1896,6 +2134,11 @@ def fetch_candidate_uuids_from_questions(
     Step C — Validate each hit against query signals using
               4-level case-insensitive partial matching before
               accepting into the candidate pool.
+
+    FIX: Location filter (city/state) is now AND'd onto the facet filter
+         so question hits are constrained to the detected geographic area.
+         Previously, Stage 1B returned results from ALL cities because
+         only Stage 1A applied the location filter.
 
     Returns up to max_results validated document_uuid strings.
     """
@@ -1967,12 +2210,65 @@ def fetch_candidate_uuids_from_questions(
     if question_type:
         filter_parts.append(f'question_type:={question_type}')
 
-    filter_str = ' || '.join(filter_parts) if filter_parts else ''
+    # ── Location filter: enforce city/state on questions collection ────────
+    # The profile already detected cities/states from word discovery.
+    # Stage 1A applies this to the document collection, but without it here
+    # the questions vector search returns results from ALL cities.
+    #
+    # Location is AND'd (hard constraint) while facet filters are OR'd
+    # (wide semantic net). A hit must be in the right city AND match
+    # at least one semantic facet.
+    location_filter_parts = []
+
+    # Check if location is the subject (e.g. "where is Atlanta") —
+    # in that case we do NOT filter by location, same logic as Stage 1A
+    query_mode = signals.get('query_mode', 'explore')
+    is_location_subject = (
+        query_mode == 'answer' and
+        signals.get('has_question_word') and
+        signals.get('question_word') in ('where',) and
+        signals.get('has_location_entity', False)
+    )
+
+    if not is_location_subject:
+        cities = profile.get('cities', [])
+        if cities:
+            city_filters = [f"location_city:=`{c['name']}`" for c in cities]
+            if len(city_filters) == 1:
+                location_filter_parts.append(city_filters[0])
+            else:
+                location_filter_parts.append('(' + ' || '.join(city_filters) + ')')
+
+        states = profile.get('states', [])
+        if states:
+            state_conditions = []
+            for state in states:
+                variants = state.get('variants', [state['name']])
+                for variant in variants:
+                    state_conditions.append(f"location_state:=`{variant}`")
+            if len(state_conditions) == 1:
+                location_filter_parts.append(state_conditions[0])
+            else:
+                location_filter_parts.append('(' + ' || '.join(state_conditions) + ')')
+
+    # Build final filter:
+    # - Facet filters (keywords, entities, question_type) are OR'd together
+    # - Location filter is AND'd to enforce geographic constraint
+    facet_filter = ' || '.join(filter_parts) if filter_parts else ''
+    location_filter = ' && '.join(location_filter_parts) if location_filter_parts else ''
+
+    if facet_filter and location_filter:
+        filter_str = f'({facet_filter}) && {location_filter}'
+    elif location_filter:
+        filter_str = location_filter
+    else:
+        filter_str = facet_filter
 
     print(f"   primary_keywords : {primary_kws}")
     print(f"   entities         : {entity_names}")
     print(f"   semantic_keywords: {semantic_kws}")
     print(f"   question_type    : {question_type or 'any'}")
+    print(f"   location_filter  : {location_filter or 'none'}")
     print(f"   filter_by        : {filter_str[:120] if filter_str else 'none (full vector scan)'}")
 
     # ── Step B: Vector search within filtered subset ──────────────────────
@@ -1994,19 +2290,45 @@ def fetch_candidate_uuids_from_questions(
         result = response['results'][0]
         hits = result.get('hits', [])
 
-        # Fallback: retry without filter if too few hits
+        # Fallback: if location filter returned too few hits, retry WITHOUT
+        # the location filter but KEEP facet filters. This handles cases
+        # where questions collection doesn't have location fields populated.
         if len(hits) < 5 and filter_str:
-            print(f"⚠️  Stage 1B: only {len(hits)} hits with filter — retrying without filter")
+            # First try: drop location, keep facet filters
+            fallback_filter = facet_filter if facet_filter else ''
+            print(f"⚠️  Stage 1B: only {len(hits)} hits with location filter — "
+                  f"retrying with facet filter only")
+
             search_params_fallback = {
                 'q':              '*',
                 'vector_query':   f'embedding:([{embedding_str}], k:{max_results * 2})',
                 'per_page':       max_results * 2,
                 'include_fields': 'document_uuid,question,answer_type,question_type,primary_keywords,entities,semantic_keywords',
             }
+            if fallback_filter:
+                search_params_fallback['filter_by'] = fallback_filter
+
             search_requests_fallback = {'searches': [{'collection': 'questions', **search_params_fallback}]}
             response_fallback = client.multi_search.perform(search_requests_fallback, {})
-            hits = response_fallback['results'][0].get('hits', [])
-            print(f"   Fallback returned {len(hits)} hits")
+            fallback_hits = response_fallback['results'][0].get('hits', [])
+            print(f"   Fallback (facet only) returned {len(fallback_hits)} hits")
+
+            # Second try: drop everything if still too few
+            if len(fallback_hits) < 5:
+                print(f"⚠️  Stage 1B: still only {len(fallback_hits)} hits — "
+                      f"retrying with no filter")
+                search_params_nofilter = {
+                    'q':              '*',
+                    'vector_query':   f'embedding:([{embedding_str}], k:{max_results * 2})',
+                    'per_page':       max_results * 2,
+                    'include_fields': 'document_uuid,question,answer_type,question_type,primary_keywords,entities,semantic_keywords',
+                }
+                search_requests_nofilter = {'searches': [{'collection': 'questions', **search_params_nofilter}]}
+                response_nofilter = client.multi_search.perform(search_requests_nofilter, {})
+                hits = response_nofilter['results'][0].get('hits', [])
+                print(f"   Fallback (no filter) returned {len(hits)} hits")
+            else:
+                hits = fallback_hits
 
         # ── Step C: Validate each hit against query signals ───────────────
         uuids       = []
@@ -2050,73 +2372,6 @@ def fetch_candidate_uuids_from_questions(
     except Exception as e:
         print(f"❌ Stage 1B error: {e}")
         return []
-
-# ============================================================================
-# STAGE 1 COMBINED: Run both in parallel, merge + dedup
-# ============================================================================
-
-def fetch_all_candidate_uuids(
-    search_query: str,
-    profile: Dict,
-    query_embedding: List[float],
-    signals: Dict = None,
-) -> List[str]:
-    """
-    Runs Stage 1A (document) and Stage 1B (questions) in parallel.
-
-    Merge order:
-    1. Overlap — found by both paths (highest confidence)
-    2. Document-only hits
-    3. Question-only hits
-
-    Stage 1B runs independently of Stage 1A results.
-    Even if Stage 1A returns 0 (e.g. bad keyword graph), Stage 1B
-    can still surface the right document via vector search.
-    """
-    signals = signals or {}
-
-    doc_future = _executor.submit(
-        fetch_candidate_uuids, search_query, profile, signals, 100
-    )
-    q_future = _executor.submit(
-        fetch_candidate_uuids_from_questions, profile, query_embedding, signals, 50
-    )
-
-    doc_uuids = doc_future.result()
-    q_uuids   = q_future.result()
-
-    # Find overlap
-    doc_set = set(doc_uuids)
-    q_set   = set(q_uuids)
-    overlap  = doc_set & q_set
-
-    # Merge: overlap first, then document-only, then question-only
-    merged = []
-    seen   = set()
-
-    for uuid in doc_uuids:
-        if uuid in overlap and uuid not in seen:
-            merged.append(uuid)
-            seen.add(uuid)
-
-    for uuid in doc_uuids:
-        if uuid not in seen:
-            merged.append(uuid)
-            seen.add(uuid)
-
-    for uuid in q_uuids:
-        if uuid not in seen:
-            merged.append(uuid)
-            seen.add(uuid)
-
-    print(f"📊 Stage 1 COMBINED:")
-    print(f"   document pool    : {len(doc_uuids)}")
-    print(f"   questions pool   : {len(q_uuids)}")
-    print(f"   overlap (both)   : {len(overlap)}")
-    print(f"   merged total     : {len(merged)}")
-
-    return merged
-
 
 # ============================================================================
 # STAGE 1 (KEYWORD): Fetch uuids + metadata in one call (no pruning)
