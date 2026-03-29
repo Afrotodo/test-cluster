@@ -1303,3 +1303,858 @@ html, body {
     </script>
 </body>
 </html>
+
+
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% if show_map_view %}{% if map_view_data.short_address %}{{ map_view_data.short_address }} - Map{% else %}Map{% endif %}{% else %}{{ query }} - AfroTodo Search{% endif %}</title>
+    <meta name="description" content="{% if show_map_view %}Map view{% else %}Search results for {{ query }}{% endif %} on AfroTodo">
+    <meta name="csrf-token" content="{{ csrf_token }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700;800&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    {% if address_map or show_map_view or map_location_count %}
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    {% endif %}
+    <style>
+        :root {
+            --black: #1a1a1a; --green: #2d6a4f; --green-light: #40916c;
+            --green-soft: rgba(45, 106, 79, 0.08); --gold: #d4a03a; --gold-light: #e9c46a;
+            --gold-soft: rgba(212, 160, 58, 0.1); --red: #bc4749; --red-deep: #9b2226;
+            --cream: #faf8f5; --warm-white: #fffef9; --gray-50: #fafaf9;
+            --gray-100: #f5f3f0; --gray-200: #e8e4df; --gray-300: #d4cfc8;
+            --gray-400: #a8a29e; --gray-500: #8a8279; --gray-600: #6b645b; --gray-700: #4a4640;
+            --font-display: 'Playfair Display', Georgia, serif;
+            --font-body: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+            --space-xs: 4px; --space-sm: 8px; --space-md: 16px; --space-lg: 24px;
+            --space-xl: 32px; --space-2xl: 48px;
+            --transition-fast: 150ms ease; --transition-base: 250ms ease;
+        }
+        html, body { overflow-x: hidden; max-width: 100vw; }
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: var(--font-body); font-size: 15px; color: var(--black); background: var(--cream); line-height: 1.6; min-height: 100vh; }
+        a { text-decoration: none; color: inherit; }
+
+        /* Header */
+        .header { position: sticky; top: 0; background: rgba(250, 248, 245, 0.95); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); z-index: 100; border-bottom: 1px solid var(--gray-200); }
+        .header-top { display: flex; align-items: center; padding: var(--space-md) var(--space-lg); max-width: 1200px; margin: 0 auto; gap: var(--space-lg); }
+        .logo { flex-shrink: 0; } .logo a { font-family: var(--font-display); font-size: 26px; font-weight: 700; display: flex; align-items: baseline; }
+        .logo .letter-a { color: var(--black); } .logo .letter-f { color: var(--green); } .logo .letter-r { color: var(--gold); } .logo .letter-o { color: var(--red); } .logo .letter-text { color: var(--black); }
+        .search-wrapper { flex: 1; max-width: 640px; }
+        .search-box { display: flex; align-items: center; background: var(--warm-white); border: 2px solid var(--gray-200); border-radius: 12px; padding: var(--space-xs) var(--space-sm) var(--space-xs) var(--space-md); transition: all var(--transition-base); }
+        .search-box:hover { border-color: var(--gray-300); box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+        .search-box:focus-within { border-color: var(--green); box-shadow: 0 0 0 3px var(--green-soft); }
+        .search-input { flex: 1; border: none; outline: none; font-family: var(--font-body); font-size: 16px; color: var(--black); background: transparent; padding: var(--space-sm) 0; min-width: 0; }
+        .search-input::placeholder { color: var(--gray-400); }
+        .search-actions { display: flex; align-items: center; gap: var(--space-xs); }
+        .search-action-btn { padding: var(--space-sm) var(--space-md); background: none; border: none; cursor: pointer; border-radius: 8px; font-family: var(--font-body); font-size: 13px; font-weight: 500; color: var(--gray-500); transition: all var(--transition-fast); }
+        .search-action-btn:hover { background: var(--gray-100); color: var(--gray-700); }
+        .search-divider { width: 1px; height: 24px; background: var(--gray-300); margin: 0 var(--space-xs); }
+        .search-submit { padding: var(--space-sm) var(--space-md); background: var(--black); border: none; cursor: pointer; border-radius: 10px; font-family: var(--font-body); font-size: 14px; font-weight: 600; color: var(--warm-white); transition: all var(--transition-fast); }
+        .search-submit:hover { background: var(--gray-700); }
+        .header-auth { display: flex; align-items: center; gap: var(--space-sm); flex-shrink: 0; }
+        .auth-link { padding: var(--space-sm) var(--space-md); font-size: 14px; font-weight: 500; border-radius: 8px; transition: all var(--transition-fast); }
+        .auth-link.login { color: var(--gray-700); } .auth-link.login:hover { background: var(--gray-100); }
+        .auth-link.signup { background: var(--black); color: var(--warm-white); } .auth-link.signup:hover { background: var(--gray-700); }
+        .user-greeting { font-size: 14px; color: var(--gray-600); padding: var(--space-sm) var(--space-md); background: var(--gray-100); border-radius: 20px; }
+        .nav-tabs { display: flex; align-items: center; padding: 0 var(--space-lg); max-width: 1200px; margin: 0 auto; gap: var(--space-xs); overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; height: 44px; }
+        .nav-tabs::-webkit-scrollbar { display: none; }
+        .nav-tab { position: relative; display: flex; align-items: center; gap: var(--space-sm); padding: var(--space-sm) var(--space-md); font-size: 14px; font-weight: 500; color: var(--gray-600); border-radius: 8px; white-space: nowrap; transition: color var(--transition-fast), background var(--transition-fast); flex-shrink: 0; }
+        .nav-tab:hover { color: var(--black); background: var(--gray-100); }
+        .nav-tab.active { color: var(--green); } .nav-tab::after { content: ''; position: absolute; bottom: -1px; left: var(--space-sm); right: var(--space-sm); height: 2px; background: transparent; border-radius: 2px 2px 0 0; }
+        .nav-tab.active::after { background: var(--green); }
+        .nav-tab .tab-count { font-size: 11px; font-weight: 600; background: var(--gray-200); color: var(--gray-600); padding: 2px 6px; border-radius: 10px; margin-left: 4px; }
+        .nav-tab.active .tab-count { background: var(--green-soft); color: var(--green); }
+        /* Main content */
+        .main-content { display: flex; max-width: 1200px; margin: 0 auto; padding: var(--space-lg); gap: var(--space-2xl); }
+        .results-area { flex: 1; max-width: 700px; }
+        .results-stats { display: flex; align-items: center; gap: var(--space-sm); color: var(--gray-500); font-size: 14px; padding-bottom: var(--space-md); border-bottom: 1px solid var(--gray-200); margin-bottom: var(--space-lg); flex-wrap: wrap; }
+        .results-count { font-weight: 600; color: var(--gray-700); }
+        .active-filter-badge { display: inline-flex; align-items: center; gap: 4px; background: var(--green-soft); color: var(--green); padding: 4px 10px; border-radius: 20px; font-size: 13px; font-weight: 500; }
+        .active-filter-badge.schema-badge { background: rgba(99,102,241,0.1); color: #6366f1; }
+        .active-filter-badge .remove-filter { width: 14px; height: 14px; display: flex; align-items: center; justify-content: center; background: var(--green); color: white; border-radius: 50%; cursor: pointer; margin-left: 4px; font-size: 10px; line-height: 1; }
+        .active-filter-badge.schema-badge .remove-filter { background: #6366f1; }
+        .spelling-correction { background: var(--gold-soft); border-left: 3px solid var(--gold); padding: var(--space-md); border-radius: 0 8px 8px 0; margin-bottom: var(--space-lg); }
+        .including-results { font-size: 15px; color: var(--black); margin-bottom: var(--space-xs); }
+        .including-results .label { color: var(--gray-600); }
+        .corrected-link { color: var(--green); font-weight: 600; } .corrected-link:hover { text-decoration: underline; }
+        .search-instead { font-size: 14px; color: var(--gray-500); } .search-instead a { color: var(--green); font-weight: 500; }
+
+        /* ═══════ MULTI-PIN MAP SECTION ═══════ */
+        .multi-map-section { background: var(--warm-white); border: 1px solid var(--gray-200); border-radius: 12px; overflow: hidden; margin-bottom: var(--space-lg); }
+        .multi-map-header { display: flex; align-items: center; justify-content: space-between; padding: var(--space-sm) var(--space-lg); border-bottom: 1px solid var(--gray-200); background: var(--gray-50); }
+        .multi-map-header-left { display: flex; align-items: center; gap: var(--space-sm); }
+        .multi-map-title { font-family: var(--font-display); font-size: 15px; font-weight: 600; color: var(--black); }
+        .multi-map-count { font-size: 12px; color: var(--gray-500); font-weight: 500; }
+        .multi-map-toggle { display: flex; align-items: center; gap: 4px; padding: 5px 12px; border-radius: 8px; font-size: 12px; font-weight: 600; font-family: var(--font-body); color: var(--gray-600); background: var(--warm-white); border: 1px solid var(--gray-200); cursor: pointer; transition: all var(--transition-fast); }
+        .multi-map-toggle:hover { background: var(--gray-100); color: var(--black); }
+        .multi-map-frame { width: 100%; height: 300px; background: var(--gray-100); position: relative; }
+        .multi-map-frame .leaflet-popup-content-wrapper { font-family: var(--font-body) !important; font-size: 13px !important; border-radius: 8px !important; box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important; }
+        .multi-map-frame .leaflet-popup-content { margin: 10px 14px !important; }
+        .multi-map-frame .leaflet-control-zoom a { background: var(--warm-white) !important; color: var(--black) !important; border-color: var(--gray-200) !important; width: 32px !important; height: 32px !important; line-height: 32px !important; border-radius: 8px !important; }
+        .multi-map-frame .leaflet-control-zoom { border: none !important; box-shadow: 0 2px 8px rgba(0,0,0,0.1) !important; border-radius: 8px !important; overflow: hidden; }
+        .multi-map-list { display: flex; gap: var(--space-sm); padding: var(--space-sm) var(--space-lg); overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: thin; border-top: 1px solid var(--gray-200); background: var(--gray-50); }
+        .multi-map-list::-webkit-scrollbar { height: 4px; }
+        .multi-map-list::-webkit-scrollbar-thumb { background: var(--gray-300); border-radius: 2px; }
+        .multi-map-chip { display: flex; align-items: center; gap: 6px; padding: 6px 12px; background: var(--warm-white); border: 1px solid var(--gray-200); border-radius: 8px; font-size: 12px; font-weight: 500; color: var(--gray-700); white-space: nowrap; cursor: pointer; transition: all var(--transition-fast); flex-shrink: 0; }
+        .multi-map-chip:hover { border-color: var(--gray-400); box-shadow: 0 2px 6px rgba(0,0,0,0.08); }
+        .multi-map-chip.active { border-color: var(--green); color: var(--green); background: var(--green-soft); font-weight: 600; }
+        .multi-map-chip-num { width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: white; flex-shrink: 0; line-height: 1; }
+        /* Numbered marker/result badge */
+        .result-map-number { width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; color: white; flex-shrink: 0; line-height: 1; margin-right: var(--space-sm); }
+        .result-item.map-linked { cursor: pointer; }
+        .result-item.map-linked:hover { border-color: var(--green); box-shadow: 0 4px 16px rgba(45,106,79,0.12); }
+        .result-item.map-highlighted { border-color: var(--green); box-shadow: 0 4px 16px rgba(45,106,79,0.15); background: rgba(45,106,79,0.02); }
+        @media (max-width: 768px) { .multi-map-frame { height: 240px; } .multi-map-header { padding: var(--space-sm) var(--space-md); } .multi-map-list { padding: var(--space-sm) var(--space-md); } }
+        @media (max-width: 480px) { .multi-map-frame { height: 200px; } .result-map-number { width: 20px; height: 20px; font-size: 10px; } .multi-map-chip-num { width: 18px; height: 18px; font-size: 10px; } }
+
+        /* Result items */
+        .result-item { background: var(--warm-white); border: 1px solid var(--gray-200); border-radius: 12px; padding: var(--space-lg); margin-bottom: var(--space-md); transition: all var(--transition-fast); }
+        .result-item:hover { border-color: var(--gray-300); box-shadow: 0 4px 12px rgba(0,0,0,0.06); transform: translateY(-1px); }
+        .result-item.has-map-card { padding: 0; overflow: hidden; }
+        .result-item.has-map-card .result-item-content { padding: var(--space-lg); }
+        .result-item.has-map-card:hover { transform: translateY(-1px); }
+        /* Result card header */
+        .result-header { display: flex; align-items: center; margin-bottom: var(--space-sm); }
+        .result-site-info { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
+        .result-site-row1 { display: flex; align-items: center; gap: 8px; }
+        /* Favicon */
+        .result-favicon { width: 18px; height: 18px; border-radius: 4px; background: var(--gray-200); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: var(--gray-600); flex-shrink: 0; overflow: hidden; }
+        .result-favicon img { width: 100%; height: 100%; object-fit: contain; }
+        .result-site-name { font-size: 13px; font-weight: 600; color: var(--gray-700); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .result-url { font-size: 12px; color: var(--gray-500); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-left: 26px; }
+        /* Inline result images (max 2, e.g. recipes) */
+        .result-images { display: flex; gap: 8px; margin-bottom: var(--space-sm); }
+        .result-thumb { width: 120px; height: 80px; border-radius: 8px; object-fit: cover; border: 1px solid var(--gray-200); flex-shrink: 0; background: var(--gray-100); }
+        /* Title */
+        .result-title { font-family: var(--font-display); font-size: 20px; font-weight: 600; line-height: 1.3; margin-bottom: var(--space-sm); }
+        .result-title a { color: var(--black); transition: color var(--transition-fast); } .result-title a:hover { color: var(--green); } .result-title a:visited { color: var(--gray-600); }
+        .result-snippet { font-size: 14px; line-height: 1.6; color: var(--gray-600); }
+        .result-snippet em, .result-snippet b, .result-snippet strong { color: var(--black); font-weight: 600; font-style: normal; background: var(--gold-soft); padding: 1px 3px; border-radius: 3px; }
+        .result-date { color: var(--gray-500); font-size: 13px; }
+        .result-meta { display: flex; align-items: center; gap: var(--space-sm); margin-top: var(--space-sm); padding-top: var(--space-sm); border-top: 1px solid var(--gray-100); flex-wrap: wrap; }
+        .result-tag { font-size: 12px; font-weight: 500; padding: 4px 10px; border-radius: 20px; background: var(--gray-100); color: var(--gray-600); }
+        .result-tag.clickable { cursor: pointer; transition: all var(--transition-fast); } .result-tag.clickable:hover { background: var(--gray-200); }
+        /* NBOC tag — shown when black_owned is false */
+        .result-tag.nboc { background: rgba(180,83,9,0.08); color: #92400e; font-weight: 600; border: 1px solid rgba(180,83,9,0.15); }
+        .result-map-link { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 500; padding: 4px 10px; border-radius: 20px; background: rgba(188,71,73,0.08); color: var(--red); transition: all var(--transition-fast); }
+        .result-map-link:hover { background: rgba(188,71,73,0.15); }
+
+        /* Inline map within result card */
+        .result-map-frame { width: 100%; height: 220px; background: var(--gray-100); position: relative; }
+        .result-map-expand { position: absolute; top: var(--space-sm); left: var(--space-sm); z-index: 500; display: inline-flex; align-items: center; gap: 4px; padding: 6px 12px; background: var(--warm-white); border: 1px solid var(--gray-200); border-radius: 8px; font-size: 12px; font-weight: 600; font-family: var(--font-body); color: var(--gray-700); text-decoration: none; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .result-map-expand:hover { background: var(--gray-100); }
+        .result-map-frame .leaflet-control-zoom a { background: var(--warm-white) !important; color: var(--black) !important; border-color: var(--gray-200) !important; width: 32px !important; height: 32px !important; line-height: 32px !important; border-radius: 8px !important; }
+        .result-map-frame .leaflet-control-zoom { border: none !important; box-shadow: 0 2px 8px rgba(0,0,0,0.1) !important; border-radius: 8px !important; overflow: hidden; }
+        .result-map-frame .leaflet-popup-content-wrapper { font-family: var(--font-body) !important; font-size: 13px !important; border-radius: 8px !important; }
+        .afrotodo-marker { background: none !important; border: none !important; }
+        .result-map-details { padding: var(--space-md) var(--space-lg); background: var(--gray-50); border-top: 1px solid var(--gray-200); border-bottom: 1px solid var(--gray-200); }
+        .result-map-details-row { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-md); }
+        .result-map-info { display: flex; align-items: flex-start; gap: var(--space-sm); flex: 1; min-width: 0; }
+        .result-map-text { min-width: 0; }
+        .result-map-address { font-size: 14px; color: var(--gray-700); font-weight: 500; line-height: 1.4; }
+        .result-map-phone { font-size: 13px; color: var(--gray-500); margin-top: 2px; }
+        .result-map-phone a { color: var(--green); font-weight: 500; }
+        .result-map-website { font-size: 13px; margin-top: 2px; }
+        .result-map-website a { color: var(--green); font-weight: 500; }
+        .result-map-website a:hover { text-decoration: underline; }
+        .result-map-actions { display: flex; gap: var(--space-sm); flex-shrink: 0; flex-wrap: wrap; }
+        .result-map-btn { display: inline-flex; align-items: center; gap: 5px; padding: 7px 14px; border-radius: 8px; font-size: 12px; font-weight: 600; font-family: var(--font-body); white-space: nowrap; transition: all var(--transition-fast); text-decoration: none; }
+        .result-map-btn:active { transform: scale(0.97); }
+        .result-map-btn-directions { background: var(--green); color: white; } .result-map-btn-directions:hover { background: var(--green-light); color: white; }
+        .result-map-btn-secondary { background: var(--gray-100); color: var(--gray-700); border: 1px solid var(--gray-200); } .result-map-btn-secondary:hover { background: var(--gray-200); }
+        .result-map-coords { padding: 0 var(--space-lg) var(--space-sm); font-size: 11px; color: var(--gray-400); background: var(--gray-50); }
+
+        /* Pagination */
+        .pagination { display: flex; flex-direction: column; align-items: center; gap: var(--space-md); margin-top: var(--space-xl); padding-top: var(--space-lg); border-top: 1px solid var(--gray-200); }
+        .pagination-info { font-size: 14px; color: var(--gray-500); }
+        .pagination-controls { display: flex; align-items: center; gap: var(--space-sm); }
+        .pagination-btn { display: flex; align-items: center; gap: 4px; padding: var(--space-sm) var(--space-md); font-size: 14px; font-weight: 500; color: var(--gray-700); background: var(--warm-white); border: 1px solid var(--gray-200); border-radius: 8px; transition: all var(--transition-fast); }
+        .pagination-btn:hover { background: var(--gray-100); } .pagination-btn.disabled { opacity: 0.5; pointer-events: none; }
+        .pagination-pages { display: flex; align-items: center; gap: 4px; }
+        .pagination-page { min-width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 500; color: var(--gray-700); background: var(--warm-white); border: 1px solid var(--gray-200); border-radius: 8px; }
+        .pagination-page:hover:not(.active) { background: var(--gray-100); } .pagination-page.active { background: var(--black); color: var(--warm-white); border-color: var(--black); }
+        .pagination-ellipsis { color: var(--gray-400); padding: 0 var(--space-xs); }
+
+        /* No results */
+        .no-results { text-align: center; padding: var(--space-2xl) var(--space-lg); }
+        .no-results h2 { font-family: var(--font-display); font-size: 22px; font-weight: 600; margin-bottom: var(--space-md); } .no-results h2 b { color: var(--green); }
+        .no-results p { color: var(--gray-600); margin-bottom: var(--space-md); }
+        .no-results-suggestions { text-align: left; max-width: 400px; margin: 0 auto; background: var(--warm-white); border: 1px solid var(--gray-200); border-radius: 12px; padding: var(--space-lg); }
+        .no-results-suggestions h3 { font-size: 14px; font-weight: 600; color: var(--gray-700); margin-bottom: var(--space-sm); }
+        .no-results-suggestions ul { list-style: none; } .no-results-suggestions li { position: relative; padding-left: var(--space-lg); margin-bottom: var(--space-sm); color: var(--gray-600); font-size: 14px; }
+        .no-results-suggestions li::before { content: '→'; position: absolute; left: 0; color: var(--green); }
+
+        /* Sidebar */
+        .sidebar { width: 320px; flex-shrink: 0; }
+        .sidebar-section { background: var(--warm-white); border: 1px solid var(--gray-200); border-radius: 12px; padding: var(--space-lg); margin-bottom: var(--space-md); }
+        .sidebar-title { font-family: var(--font-display); font-size: 16px; font-weight: 600; color: var(--black); margin-bottom: var(--space-md); }
+        .filter-options { display: flex; flex-direction: column; gap: 4px; }
+        .filter-option { display: flex; align-items: center; justify-content: space-between; padding: var(--space-sm) var(--space-md); font-size: 14px; color: var(--gray-700); background: var(--gray-50); border-radius: 8px; transition: all var(--transition-fast); cursor: pointer; }
+        .filter-option:hover { background: var(--gray-100); } .filter-option.active { background: var(--green-soft); color: var(--green); }
+        .filter-option .count { font-size: 12px; font-weight: 600; color: var(--gray-400); } .filter-option.active .count { color: var(--green); }
+        .related-searches { display: flex; flex-direction: column; gap: var(--space-sm); }
+        .related-search { display: flex; align-items: center; gap: var(--space-sm); padding: var(--space-sm) var(--space-md); background: var(--gray-50); border-radius: 8px; font-size: 14px; color: var(--gray-700); transition: all var(--transition-fast); }
+        .related-search:hover { background: var(--gray-100); color: var(--black); }
+        .related-searches-inline { background: var(--warm-white); border: 1px solid var(--gray-200); border-radius: 12px; padding: var(--space-md); margin-top: var(--space-lg); margin-bottom: var(--space-md); }
+        .related-searches-inline-title { font-family: var(--font-display); font-size: 15px; font-weight: 600; color: var(--black); margin-bottom: var(--space-sm); }
+        .related-searches-inline-list { display: flex; flex-wrap: wrap; gap: var(--space-sm); }
+        .related-searches-inline-item { display: inline-flex; align-items: center; padding: var(--space-sm) var(--space-md); background: var(--gray-50); border: 1px solid var(--gray-200); border-radius: 20px; font-size: 13px; color: var(--gray-700); transition: all var(--transition-fast); }
+        .related-searches-inline-item:hover { background: var(--gray-100); border-color: var(--gray-300); }
+        .footer { background: var(--warm-white); border-top: 1px solid var(--gray-200); margin-top: var(--space-2xl); }
+        .footer-content { max-width: 1200px; margin: 0 auto; padding: var(--space-lg); }
+        .footer-top { display: flex; justify-content: space-between; align-items: center; padding-bottom: var(--space-md); border-bottom: 1px solid var(--gray-100); margin-bottom: var(--space-md); }
+        .footer-brand { font-family: var(--font-display); font-size: 18px; font-weight: 700; } .footer-links { display: flex; gap: var(--space-lg); flex-wrap: wrap; }
+        .footer-link { font-size: 14px; color: var(--gray-500); transition: color var(--transition-fast); } .footer-link:hover { color: var(--black); }
+        .footer-tagline { font-size: 13px; color: var(--gray-500); text-align: center; }
+
+        /* ═══════ IMAGE TAB — CHANGE 1: updated image card styles ═══════ */
+        .image-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: var(--space-md); padding: var(--space-md) 0; }
+        .image-card { position: relative; border-radius: 12px; overflow: hidden; background: var(--gray-100); cursor: pointer; transition: transform var(--transition-fast), box-shadow var(--transition-fast); border: 1px solid var(--gray-200); display: flex; flex-direction: column; }
+        .image-card:hover { transform: translateY(-4px); box-shadow: 0 8px 24px rgba(0,0,0,0.12); }
+        .image-card img { width: 100%; aspect-ratio: 1; object-fit: cover; }
+        .image-card-overlay { position: absolute; bottom: 0; left: 0; right: 0; padding: var(--space-sm) var(--space-md); background: linear-gradient(transparent, rgba(0,0,0,0.85)); color: white; opacity: 0; transition: opacity var(--transition-fast); }
+        .image-card:hover .image-card-overlay { opacity: 1; }
+        .image-card-overlay .image-card-title { font-size: 12px; font-weight: 500; line-height: 1.3; color: white; }
+        .image-card-overlay .image-card-source { font-size: 10px; opacity: 0.8; color: white; }
+        .image-card-info { display: none; padding: var(--space-sm); }
+        .image-card-info .image-card-title { font-size: 12px; font-weight: 500; line-height: 1.3; color: var(--black); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+        .image-card-info .image-card-source { font-size: 11px; color: var(--gray-500); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        @media (max-width: 1024px) { .image-card-overlay { display: none !important; } .image-card-info { display: block; } }
+
+        .lightbox { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.95); z-index: 9999; justify-content: center; align-items: center; padding: 40px; }
+        .lightbox.active { display: flex; }
+        .lightbox-content { max-width: 90vw; max-height: 90vh; position: relative; text-align: center; } .lightbox-content img { max-width: 100%; max-height: 75vh; object-fit: contain; border-radius: 8px; }
+        .lightbox-close { position: absolute; top: 20px; right: 20px; background: rgba(255,255,255,0.2); border: none; color: white; width: 44px; height: 44px; border-radius: 50%; cursor: pointer; font-size: 28px; display: flex; align-items: center; justify-content: center; z-index: 10001; }
+        .lightbox-info { color: white; margin-top: var(--space-md); } .lightbox-title { font-size: 16px; font-weight: 500; } .lightbox-source { font-size: 14px; opacity: 0.8; } .lightbox-source a { color: var(--green-light); }
+        .lightbox-nav { position: absolute; top: 50%; transform: translateY(-50%); background: rgba(255,255,255,0.2); border: none; color: white; width: 50px; height: 50px; border-radius: 50%; cursor: pointer; font-size: 28px; display: flex; align-items: center; justify-content: center; z-index: 10001; }
+        .lightbox-prev { left: 20px; } .lightbox-next { right: 20px; }
+
+        /* Legacy standalone address map card */
+        .address-map-card { background: var(--warm-white); border: 1px solid var(--gray-200); border-radius: 12px; overflow: hidden; margin-bottom: var(--space-lg); transition: all var(--transition-fast); }
+        .address-map-card:hover { border-color: var(--gray-300); box-shadow: 0 4px 12px rgba(0,0,0,0.06); }
+        .address-map-frame { width: 100%; height: 280px; background: var(--gray-100); position: relative; }
+        .address-map-expand { position: absolute; top: var(--space-sm); left: var(--space-sm); z-index: 500; display: inline-flex; align-items: center; gap: 4px; padding: 6px 12px; background: var(--warm-white); border: 1px solid var(--gray-200); border-radius: 8px; font-size: 12px; font-weight: 600; font-family: var(--font-body); color: var(--gray-700); text-decoration: none; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .address-map-expand:hover { background: var(--gray-100); }
+        .address-map-frame .leaflet-control-zoom a { background: var(--warm-white) !important; color: var(--black) !important; border-color: var(--gray-200) !important; width: 32px !important; height: 32px !important; line-height: 32px !important; border-radius: 8px !important; }
+        .address-map-frame .leaflet-control-zoom { border: none !important; box-shadow: 0 2px 8px rgba(0,0,0,0.1) !important; border-radius: 8px !important; overflow: hidden; }
+        .address-map-frame .leaflet-popup-content-wrapper { font-family: var(--font-body) !important; font-size: 13px !important; border-radius: 8px !important; }
+        .address-map-body { padding: var(--space-lg); display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-md); }
+        .address-map-info { display: flex; align-items: flex-start; gap: var(--space-sm); flex: 1; min-width: 0; }
+        .address-map-text { min-width: 0; }
+        .address-map-title { font-family: var(--font-display); font-size: 18px; font-weight: 600; line-height: 1.3; margin-bottom: 2px; }
+        .address-map-location { font-size: 14px; color: var(--gray-600); }
+        .address-map-actions { display: flex; gap: var(--space-sm); flex-shrink: 0; flex-wrap: wrap; }
+        .address-map-btn { display: inline-flex; align-items: center; gap: 6px; padding: var(--space-sm) var(--space-md); border-radius: 8px; font-size: 13px; font-weight: 600; font-family: var(--font-body); white-space: nowrap; transition: all var(--transition-fast); text-decoration: none; }
+        .address-map-btn:active { transform: scale(0.97); }
+        .address-map-btn-directions { background: var(--green); color: white; } .address-map-btn-directions:hover { background: var(--green-light); color: white; }
+        .address-map-btn-share { background: var(--gray-100); color: var(--gray-700); border: 1px solid var(--gray-200); } .address-map-btn-share:hover { background: var(--gray-200); }
+        .address-map-coords { padding: 0 var(--space-lg) var(--space-md); font-size: 12px; color: var(--gray-400); }
+
+        /* FULL MAP VIEW */
+        .full-map-page { display: flex; flex-direction: column; height: calc(100vh - 110px); }
+        .full-map-bar { display: flex; align-items: center; gap: var(--space-md); padding: var(--space-sm) var(--space-lg); background: var(--warm-white); border-bottom: 1px solid var(--gray-200); flex-shrink: 0; }
+        .full-map-back { display: flex; align-items: center; gap: var(--space-xs); padding: var(--space-sm) var(--space-md); border-radius: 8px; font-size: 14px; font-weight: 500; color: var(--gray-700); } .full-map-back:hover { background: var(--gray-100); }
+        .full-map-info { flex: 1; min-width: 0; }
+        .full-map-title { font-family: var(--font-display); font-size: 16px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .full-map-subtitle { font-size: 12px; color: var(--gray-500); }
+        .full-map-actions { display: flex; gap: var(--space-sm); flex-shrink: 0; }
+        .full-map-btn { display: inline-flex; align-items: center; gap: 6px; padding: var(--space-sm) var(--space-md); border-radius: 8px; font-size: 13px; font-weight: 600; font-family: var(--font-body); white-space: nowrap; transition: all var(--transition-fast); text-decoration: none; }
+        .full-map-btn.primary { background: var(--green); color: white; } .full-map-btn.primary:hover { background: var(--green-light); color: white; }
+        .full-map-btn.secondary { background: var(--gray-100); color: var(--gray-700); border: 1px solid var(--gray-200); } .full-map-btn.secondary:hover { background: var(--gray-200); }
+        .full-map-container { flex: 1; position: relative; }
+        #full-map { width: 100%; height: 100%; }
+        .full-map-info-card { position: absolute; bottom: var(--space-lg); left: var(--space-lg); z-index: 800; background: var(--warm-white); border: 1px solid var(--gray-200); border-radius: 12px; padding: var(--space-md) var(--space-lg); box-shadow: 0 4px 20px rgba(0,0,0,0.12); max-width: 360px; display: flex; align-items: center; gap: var(--space-sm); }
+        .full-map-coords { font-size: 11px; color: var(--gray-400); font-family: monospace; }
+        .nearme-badge { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; color: var(--green); background: var(--green-soft); padding: 2px 8px; border-radius: 10px; margin-top: 2px; }
+        .nearme-dot { width: 6px; height: 6px; background: var(--green); border-radius: 50%; animation: pulse 2s infinite; }
+        @keyframes pulse { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:0.5; transform:scale(1.3); } }
+        .map-error { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; text-align: center; padding: var(--space-xl); }
+        .map-error h2 { font-family: var(--font-display); font-size: 20px; margin-bottom: var(--space-sm); }
+        .map-error p { color: var(--gray-600); font-size: 14px; margin-bottom: var(--space-lg); }
+        .map-error-link { color: var(--green); font-weight: 500; } .map-error-link:hover { text-decoration: underline; }
+
+        /* Infinite scroll status */
+        .infinite-scroll-status { text-align: center; padding: var(--space-lg) 0; color: var(--gray-500); font-size: 14px; }
+        .infinite-scroll-spinner { display: inline-flex; align-items: center; gap: var(--space-sm); }
+        .infinite-scroll-spinner::before { content: ''; width: 20px; height: 20px; border: 2px solid var(--gray-300); border-top-color: var(--green); border-radius: 50%; animation: spin 0.8s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .infinite-scroll-end { color: var(--gray-400); font-style: italic; }
+
+        /* Responsive */
+        @media (max-width: 1024px) { .sidebar { display: none; } .results-area { max-width: none; width: 100%; } }
+        @media (max-width: 768px) {
+            .header-top { flex-wrap: wrap; padding: var(--space-sm) var(--space-md); gap: var(--space-sm); } .logo a { font-size: 22px; }
+            .search-wrapper { order: 3; width: 100%; max-width: none; flex: 1 1 100%; } .header-auth { margin-left: auto; }
+            .nav-tabs { padding: 0 var(--space-md); gap: 2px; height: 40px; } .nav-tab { padding: var(--space-sm); font-size: 13px; }
+            .main-content { padding: var(--space-md); flex-direction: column; } .results-area { width: 100%; max-width: 100%; }
+            .result-item { padding: var(--space-md); } .result-title { font-size: 18px; }
+            .result-header { flex-wrap: wrap; gap: var(--space-sm); }
+            .result-site-info { flex: 1 1 100%; min-width: 0; } .result-url { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+            .footer-top { flex-direction: column; gap: var(--space-md); text-align: center; } .footer-links { justify-content: center; }
+            .result-map-frame { height: 180px; } .result-map-details-row { flex-direction: column; gap: var(--space-sm); }
+            .result-map-actions { width: 100%; } .result-map-btn { flex: 1; justify-content: center; }
+            .address-map-frame { height: 220px; } .address-map-body { flex-direction: column; padding: var(--space-md); gap: var(--space-sm); }
+            .address-map-actions { width: 100%; } .address-map-btn { flex: 1; justify-content: center; }
+            .full-map-bar { padding: var(--space-sm) var(--space-md); gap: var(--space-sm); flex-wrap: wrap; }
+            .full-map-info-card { left: var(--space-sm); right: var(--space-sm); bottom: var(--space-sm); max-width: none; }
+        }
+        @media (max-width: 480px) {
+            body { font-size: 14px; } .search-input { font-size: 16px !important; }
+            .main-content { padding: var(--space-sm); } .result-item { padding: var(--space-sm) var(--space-md); } .result-item.has-map-card .result-item-content { padding: var(--space-sm) var(--space-md); } .result-title { font-size: 16px; }
+            .result-snippet { font-size: 13px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+            .result-map-frame { height: 160px; } .result-map-btn { font-size: 11px; padding: 6px 10px; }
+            .address-map-frame { height: 180px; } .address-map-title { font-size: 15px; } .address-map-btn { font-size: 12px; padding: 8px var(--space-sm); }
+        }
+        @media (max-width: 360px) { .logo a { font-size: 18px; } .result-title { font-size: 15px; } .result-map-frame { height: 140px; } .address-map-frame { height: 160px; } .multi-map-frame { height: 170px; } .multi-map-chip { padding: 5px 8px; font-size: 11px; } .multi-map-chip-num { width: 16px; height: 16px; font-size: 9px; } .result-map-number { width: 18px; height: 18px; font-size: 9px; margin-right: 4px; } }
+        @media print { .header, .sidebar, .footer, .pagination, .nav-tabs, .address-map-card, .result-map-frame, .result-map-details, .multi-map-section { display: none !important; } }
+        @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration: 0.01ms !important; } }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="header-top">
+            <div class="logo"><a href="/"><span class="letter-a">A</span><span class="letter-f">f</span><span class="letter-r">r</span><span class="letter-o">o</span><span class="letter-text">Todo</span></a></div>
+            <div class="search-wrapper">
+                <form action="{% url 'searchengine:search' %}" method="GET" id="search-form">
+                    <div class="search-box">
+                        <input type="text" name="query" class="search-input" value="{{ query }}" autocomplete="off" placeholder="Search Black business, culture & community...">
+                        <input type="hidden" name="session_id" value="{{ session_id }}">
+                        <div class="search-actions">
+                            <button type="button" class="search-action-btn" onclick="clearSearch()" title="Clear">✕</button>
+                            <button type="button" class="search-action-btn" onclick="nearMe()" title="Near Me">◎</button>
+                            <span class="search-divider"></span>
+                            <button type="submit" class="search-submit" title="Search">Search</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="header-auth">
+                {% if user.is_authenticated %}<span class="user-greeting">{{ user.username }}</span><a href="" class="auth-link login">Logout</a>
+                {% else %}<a href="" class="auth-link login">Login</a><a href="" class="auth-link signup">Sign Up</a>{% endif %}
+            </div>
+        </div>
+        {% if not show_map_view %}
+        <nav class="nav-tabs">
+            <a href="{% url 'searchengine:search' %}?query={{ query|urlencode }}&session_id={{ session_id }}" class="nav-tab {% if not active_data_type and not show_images %}active{% endif %}">
+                All</a>
+            {% if image_count > 0 %}
+            <a href="{% url 'searchengine:search' %}?query={{ query|urlencode }}&view=images&session_id={{ session_id }}" class="nav-tab {% if show_images %}active{% endif %}">
+                Images</a>
+            {% endif %}
+            {% for facet in data_type_facets %}
+            {% if facet.count > 0 %}
+            <a href="{% url 'searchengine:search' %}?query={{ query|urlencode }}&data_type={{ facet.value|urlencode }}&session_id={{ session_id }}" class="nav-tab {% if active_data_type == facet.value %}active{% endif %}">
+                {{ facet.label }}</a>
+            {% endif %}
+            {% endfor %}
+        </nav>
+        {% endif %}
+    </header>
+
+
+    
+    {% if show_map_view %}
+    {# ═══════════ FULL MAP VIEW ═══════════ #}
+    <div class="full-map-page">
+        {% if map_view_data and not map_view_data.error %}
+        <div class="full-map-bar">
+            <a href="{% url 'searchengine:search' %}?query={{ query|urlencode }}" class="full-map-back">← <span>Back to results</span></a>
+            <div class="full-map-info">
+                <div class="full-map-title">{{ map_view_data.short_address }}</div>
+                <div class="full-map-subtitle">{{ map_view_data.location_line }}</div>
+            </div>
+            <div class="full-map-actions">
+                <a href="{{ map_view_data.directions_url }}" target="_blank" class="full-map-btn primary"><span>Directions</span></a>
+                <a href="{{ map_view_data.share_url }}" target="_blank" class="full-map-btn secondary"><span>Share</span></a>
+                <a href="{{ map_view_data.streetview_url }}" target="_blank" class="full-map-btn secondary"><span>Street View</span></a>
+            </div>
+        </div>
+        <div class="full-map-container">
+            <div id="full-map"></div>
+            <div class="full-map-info-card">
+                <div class="address-map-text">
+                    <div class="address-map-title" style="font-size:15px;">{{ map_view_data.short_address }}</div>
+                    <div class="address-map-location" style="font-size:12px;">{{ map_view_data.location_line }}</div>
+                    {% if map_view_data.is_nearme %}<div class="nearme-badge"><div class="nearme-dot"></div> Your location</div>{% endif %}
+                    <div class="full-map-coords">{{ map_view_data.lat|floatformat:6 }}, {{ map_view_data.lng|floatformat:6 }}</div>
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <div class="map-error">
+            <h2>Location not found</h2>
+            <p>{{ map_view_data.error_message|default:"Could not find that location. Try a more specific address." }}</p>
+            <a href="{% url 'searchengine:search' %}?query={{ query|urlencode }}" class="map-error-link">← Back to search</a>
+        </div>
+        {% endif %}
+    </div>
+
+
+
+    {% else %}
+    {# ═══════════ NORMAL SEARCH RESULTS VIEW ═══════════ #}
+    <div class="main-content">
+        <div class="results-area">
+            <div class="results-stats">
+                About <span class="results-count">{{ display_total|default:total_results|default:"0" }}</span> results for "<strong>{{ query }}</strong>"
+                {% if map_location_count %}<span class="active-filter-badge" style="background:rgba(188,71,73,0.08);color:var(--red);">{{ map_location_count }} on map</span>{% endif %}
+                {% if show_images %}<span class="active-filter-badge">Images<a href="{% url 'searchengine:search' %}?query={{ query|urlencode }}&session_id={{ session_id }}" class="remove-filter">✕</a></span>{% endif %}
+                {% if active_data_type %}<span class="active-filter-badge">{% if active_data_type == 'article' %}Articles{% elif active_data_type == 'person' %}People{% elif active_data_type == 'business' %}Businesses{% elif active_data_type == 'place' %}Places{% elif active_data_type == 'event' %}Events{% else %}{{ active_data_type|title }}{% endif %}<a href="{% url 'searchengine:search' %}?query={{ query|urlencode }}&session_id={{ session_id }}" class="remove-filter">✕</a></span>{% endif %}
+                {% if active_category %}<span class="active-filter-badge">{{ active_category|cut:"_"|title }}<a href="{% url 'searchengine:search' %}?query={{ query|urlencode }}{% if active_data_type %}&data_type={{ active_data_type }}{% endif %}&session_id={{ session_id }}" class="remove-filter">✕</a></span>{% endif %}
+                {% if active_schema %}<span class="active-filter-badge schema-badge">{{ active_schema }}<a href="{% url 'searchengine:search' %}?query={{ query|urlencode }}{% if active_data_type %}&data_type={{ active_data_type }}{% endif %}&session_id={{ session_id }}" class="remove-filter">✕</a></span>{% endif %}
+            </div>
+            {% if was_corrected %}<div class="spelling-correction"><div class="including-results"><span class="label">Showing results for </span><a href="{% url 'searchengine:search' %}?query={{ corrected_query|urlencode }}&session_id={{ session_id }}" class="corrected-link">{{ corrected_query }}</a></div><div class="search-instead">Search instead for <a href="{% url 'searchengine:search' %}?query={{ query|urlencode }}&session_id={{ session_id }}&no_correct=1">{{ query }}</a></div></div>{% endif %}
+
+{% if is_question_path and answer %}
+<div class="featured-snippet" style="background: var(--warm-white); border: 1px solid var(--gray-200); border-radius: 12px; padding: var(--space-lg); margin-bottom: var(--space-lg); box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
+    <div style="display: flex; align-items: center; gap: var(--space-sm); margin-bottom: var(--space-md);">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="flex-shrink:0;">
+            <circle cx="8" cy="8" r="7" stroke="var(--green)" stroke-width="1.5" fill="var(--green-soft)"/>
+            <circle cx="8" cy="8" r="3" fill="var(--green)">
+                <animate attributeName="r" values="3;4;3" dur="2s" repeatCount="indefinite"/>
+                <animate attributeName="opacity" values="1;0.6;1" dur="2s" repeatCount="indefinite"/>
+            </circle>
+        </svg>
+        <span style="font-family: var(--font-display); font-size: 15px; font-weight: 600; color: var(--black);">AfroTodo Answer</span>
+    </div>
+    <div style="font-size: 12px; font-weight: 600; color: var(--gray-500); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: var(--space-sm);"></div>
+    <div style="font-family: var(--font-display); font-size: 28px; font-weight: 700; color: var(--black); margin-bottom: var(--space-md);">{{ answer }}</div>
+
+
+    {% if results.0.url %}
+    <div style="display: flex; align-items: center; gap: var(--space-sm); padding-top: var(--space-sm); border-top: 1px solid var(--gray-200);">
+        <a href="{{ results.0.url }}" target="_blank" style="font-size: 13px; color: var(--green); font-weight: 500; text-decoration: none;">{{ results.0.site_name|default:results.0.source }}</a>
+        <span style="font-size: 12px; color: var(--gray-400);">·</span>
+        <a href="{{ results.0.url }}" target="_blank" style="font-size: 12px; color: var(--gray-400); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 300px;">{{ results.0.url|truncatechars:50 }}</a>
+    </div>
+    {% endif %}
+</div>
+{% endif %}
+
+{% if results.0.humanized_summary and map_location_count < 2 and not show_images and not active_data_type and not active_category and not active_schema %}
+<div class="featured-snippet" style="background: var(--warm-white); border: 1px solid var(--gray-200); border-radius: 12px; padding: var(--space-lg); margin-bottom: var(--space-lg); box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
+    <!-- <div style="display: flex; align-items: center; gap: var(--space-sm); margin-bottom: var(--space-md);">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="flex-shrink:0;">
+            <circle cx="8" cy="8" r="7" stroke="var(--green)" stroke-width="1.5" fill="var(--green-soft)"/>
+            <circle cx="8" cy="8" r="3" fill="var(--green)">
+                <animate attributeName="r" values="3;4;3" dur="2s" repeatCount="indefinite"/>
+                <animate attributeName="opacity" values="1;0.6;1" dur="2s" repeatCount="indefinite"/>
+            </circle>
+        </svg>
+        <span style="font-family: var(--font-display); font-size: 15px; font-weight: 600; color: var(--black);"></span>
+    </div> -->
+    <!-- <p style="font-size: 15px; line-height: 1.8; color: var(--gray-700); margin-bottom: var(--space-md);"> -->
+        <!-- {{ results.0.humanized_summary }} -->
+    <!-- </p>
+    <div style="display: flex; align-items: center; gap: var(--space-sm); padding-top: var(--space-sm); border-top: 1px solid var(--gray-200);">
+        <a href="{{ results.0.url }}" target="_blank" style="font-size: 13px; color: var(--green); font-weight: 500; text-decoration: none;">{{ results.0.site_name|default:results.0.source }}</a>
+        <span style="font-size: 12px; color: var(--gray-400);">·</span>
+        <a href="{{ results.0.url }}" target="_blank" style="font-size: 12px; color: var(--gray-400); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 300px;">{{ results.0.url|truncatechars:50 }}</a>
+    </div>  -->
+
+    {% if results.0.key_facts %}
+    <div style="margin-top: var(--space-md); padding-top: var(--space-md); ">
+        <span style="font-size: 13px; font-weight: 600; color: var(--gray-500); text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: var(--space-sm);">Within this article</span>
+        {% for fact in results.0.key_facts %}
+        <div style="display: flex; align-items: flex-start; gap: 8px; padding: 8px 0;{% if not forloop.last %} border-bottom: 1px solid var(--gray-100);{% endif %}">
+            <svg width="6" height="6" viewBox="0 0 6 6" style="flex-shrink: 0; margin-top: 7px;">
+                <circle cx="3" cy="3" r="3" fill="var(--green)"/>
+            </svg>
+            <span style="font-size: 14px; color: var(--gray-700); line-height: 1.6;">{{ fact }}</span>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+</div>
+{% endif %}
+
+
+
+
+
+
+
+            {# ═══════════ MULTI-PIN MAP (shows when 2+ results have geopoints) ═══════════ #}
+            {% if map_location_count >= 2 and not show_images %}
+            <div class="multi-map-section" id="multi-map-section">
+                <div class="multi-map-header">
+                    <div class="multi-map-header-left">
+                        <span class="multi-map-title">{{ map_location_count }} locations</span>
+                        <span class="multi-map-count">on map</span>
+                    </div>
+                    <button class="multi-map-toggle" onclick="toggleMultiMap()" id="multi-map-toggle">
+                        <span id="multi-map-toggle-text">Hide</span>
+                    </button>
+                </div>
+                <div id="multi-map-body">
+                    <div class="multi-map-frame" id="multi-map"></div>
+                    <div class="multi-map-list" id="multi-map-list">
+                        {% for loc in map_locations %}
+                        <div class="multi-map-chip" data-idx="{{ forloop.counter0 }}" data-id="{{ loc.id }}" onclick="focusPin({{ forloop.counter0 }})">
+                            <span class="multi-map-chip-num" data-pin-idx="{{ forloop.counter0 }}">{{ forloop.counter }}</span>
+                            {{ loc.title|truncatewords:4 }}
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            {# ═══════════ IMAGE VIEW WITH INFINITE SCROLL ═══════════ #}
+            {% if show_images %}
+                {% if image_results %}
+                    <div class="image-grid" id="image-grid">
+                        {% for img in image_results %}
+                        <!-- CHANGE 2: image card with both overlay and info div -->
+                        <div class="image-card" data-index="{{ forloop.counter0 }}" data-url="{{ img.url }}" data-title="{{ img.title }}" data-source="{{ img.source_url }}" data-source-name="{{ img.source_name }}" data-type="{{ img.image_type }}" onclick="openLightbox(this)">
+                            <img src="{{ img.url }}" alt="{{ img.title }}" loading="lazy" onerror="this.parentElement.style.display='none'">
+                            <div class="image-card-overlay">
+                                <div class="image-card-title">{{ img.title|truncatewords:8 }}</div>
+                                <div class="image-card-source">{{ img.source_name|truncatewords:4 }}</div>
+                            </div>
+                            <div class="image-card-info">
+                                <div class="image-card-title">{{ img.title|truncatewords:8 }}</div>
+                                <div class="image-card-source">{{ img.source_name|truncatewords:4 }}</div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+
+                    {# ── Infinite Scroll Status ── #}
+                    <div class="infinite-scroll-status" id="infinite-scroll-status">
+                        <div class="infinite-scroll-spinner" id="infinite-scroll-loading" style="display:none;">Loading more images...</div>
+                        <div class="infinite-scroll-end" id="infinite-scroll-end" style="display:none;">No more images</div>
+                    </div>
+
+                {% else %}
+                    <div class="no-images" style="text-align:center;padding:48px;color:var(--gray-600);">
+                        <h3 style="font-family:var(--font-display);margin-bottom:8px;">No images found for "{{ query }}"</h3>
+                        <p>Try a different search.</p>
+                    </div>
+                {% endif %}
+
+            {% elif has_results %}
+                {% for item in results %}
+                <article class="result-item{% if address_map and item.id == address_map.id %} has-map-card{% endif %}" data-position="{{ forloop.counter }}" data-result-id="{{ item.id|default:'' }}" data-url="{{ item.url|default:'#' }}" data-title="{{ item.title|default:'Untitled' }}" data-source="{{ item.source|default:item.site_name|default:'' }}" data-data-type="{{ item.data_type|default:'' }}" data-schema="{{ item.schema|default:'' }}">
+
+                    {# ── INLINE MAP: rendered inside result card when single address_map match and no multi-map ── #}
+                    {% if address_map and item.id == address_map.id and map_location_count < 2 %}
+                    <div class="result-map-frame" id="address-map">
+                        <a href="{{ address_map.full_map_url }}" class="result-map-expand">⛶ Expand</a>
+                    </div>
+                    <div class="result-map-details">
+                        <div class="result-map-details-row">
+                            <div class="result-map-info">
+                                <div class="result-map-text">
+                                    <div class="result-map-address">{{ address_map.location_line }}</div>
+                                    {% if address_map.phone %}<div class="result-map-phone"><a href="tel:{{ address_map.phone }}">{{ address_map.phone }}</a></div>{% endif %}
+                                    {% if address_map.website %}<div class="result-map-website"><a href="{{ address_map.website }}" target="_blank">{{ address_map.website|truncatechars:40 }}</a></div>{% endif %}
+                                </div>
+                            </div>
+                            <div class="result-map-actions">
+                                <a href="{{ address_map.directions_url }}" target="_blank" class="result-map-btn result-map-btn-directions">Directions</a>
+                                <a href="{{ address_map.share_url }}" target="_blank" class="result-map-btn result-map-btn-secondary">Share</a>
+                                <a href="{{ address_map.streetview_url }}" target="_blank" class="result-map-btn result-map-btn-secondary">Street View</a>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    {# ── STANDARD RESULT CONTENT ── #}
+                    <div class="{% if address_map and item.id == address_map.id and map_location_count < 2 %}result-item-content{% endif %}">
+                        {# Header: favicon + site name row1, url row2 #}
+                        <div class="result-header">
+                            <div class="result-map-number" data-map-badge-for="{{ item.id }}" style="display:none;"></div>
+                            <div class="result-site-info">
+                                <div class="result-site-row1">
+                                    <div class="result-favicon" data-fallback="{{ item.site_name|default:item.source|default:'W'|slice:':1'|upper }}">
+                                        <img src="https://www.google.com/s2/favicons?domain={{ item.url }}&sz=32"
+                                             alt=""
+                                             onerror="this.style.display='none';this.parentElement.textContent=this.parentElement.dataset.fallback;">
+                                    </div>
+                                    <span class="result-site-name">{{ item.site_name|default:item.source|default:"Website" }}</span>
+                                </div>
+                                <div class="result-url">{{ item.url|default:"#"|truncatechars:70 }}</div>
+                            </div>
+                        </div>
+                        {# Title #}
+                        <h3 class="result-title"><a href="{{ item.url|default:'#' }}" class="result-link">{{ item.title|default:"Untitled" }}</a></h3>
+                        {# Inline images — max 2, only shown if item has them #}
+                        {% if item.image_url %}
+                        <div class="result-images">
+                            {% for img in item.image_url|slice:":2" %}
+                            <img class="result-thumb" src="{{ img }}" alt="{{ item.title }}" loading="lazy" onerror="this.style.display='none'">
+                            {% endfor %}
+                        </div>
+                        {% elif item.image %}
+                        <div class="result-images">
+                            <img class="result-thumb" src="{{ item.image }}" alt="{{ item.title }}" loading="lazy" onerror="this.style.display='none'">
+                        </div>
+                        {% endif %}
+                        {# Snippet #}
+                        <p class="result-snippet">{% if item.date %}<span class="result-date">{{ item.date }} — </span>{% endif %}{{ item.summary_highlighted|default:item.summary|default:"No description available."|safe|truncatewords:40 }}</p>
+                        {# Meta tags #}
+                        <div class="result-meta">
+                            {% if item.category %}<a href="{% url 'searchengine:search' %}?query={{ query|urlencode }}&category={{ item.category|urlencode }}&session_id={{ session_id }}" class="result-tag clickable">{{ item.category|cut:"_"|title }}</a>{% endif %}
+                            {% if item.has_map and not address_map or item.id != address_map.id %}<a href="{{ item.map_url }}" class="result-map-link">Map</a>{% endif %}
+                            {% if item.black_owned == False %}<span class="result-tag nboc">NBOC</span>{% endif %}
+                        </div>
+                    </div>
+                </article>
+                {% endfor %}
+                {% if related_searches %}<div class="related-searches-inline"><h3 class="related-searches-inline-title">Related Searches</h3><div class="related-searches-inline-list">{% for s in related_searches|slice:":5" %}<a href="{% url 'searchengine:search' %}?query={{ s.query|urlencode }}&session_id={{ session_id }}&alt_mode=y" class="related-searches-inline-item">{{ s.query }}</a>{% endfor %}</div></div>{% endif %}
+                {% if pagination.total_pages > 1 %}<nav class="pagination"><div class="pagination-info">Showing {{ pagination.start_result }}-{{ pagination.end_result }} of {{ total_results|default:pagination.total_results }}</div><div class="pagination-controls">{% if pagination.has_previous %}<a href="?query={{ query|urlencode }}&page={{ pagination.previous_page }}&per_page={{ per_page }}{% if active_data_type %}&data_type={{ active_data_type }}{% endif %}&session_id={{ session_id }}" class="pagination-btn">← Prev</a>{% else %}<span class="pagination-btn disabled">← Prev</span>{% endif %}<div class="pagination-pages">{% for p in pagination.page_range %}{% if p == pagination.current_page %}<span class="pagination-page active">{{ p }}</span>{% else %}<a href="?query={{ query|urlencode }}&page={{ p }}&per_page={{ per_page }}{% if active_data_type %}&data_type={{ active_data_type }}{% endif %}&session_id={{ session_id }}" class="pagination-page">{{ p }}</a>{% endif %}{% endfor %}</div>{% if pagination.has_next %}<a href="?query={{ query|urlencode }}&page={{ pagination.next_page }}&per_page={{ per_page }}{% if active_data_type %}&data_type={{ active_data_type }}{% endif %}&session_id={{ session_id }}" class="pagination-btn">Next →</a>{% else %}<span class="pagination-btn disabled">Next →</span>{% endif %}</div></nav>{% endif %}
+            {% else %}
+                <div class="no-results"><h2>No results found for <b>{{ query }}</b></h2><p>Try adjusting your search.</p><div class="no-results-suggestions"><h3>Suggestions</h3><ul><li>Check your spelling</li><li>Try more general keywords</li><li>Try different keywords</li></ul></div></div>
+                {% if related_searches %}<div class="related-searches-inline"><h3 class="related-searches-inline-title">Related Searches</h3><div class="related-searches-inline-list">{% for s in related_searches|slice:":5" %}<a href="{% url 'searchengine:search' %}?query={{ s.query|urlencode }}&session_id={{ session_id }}&alt_mode=y" class="related-searches-inline-item">{{ s.query }}</a>{% endfor %}</div></div>{% endif %}
+            {% endif %}
+        </div>
+<aside class="sidebar">
+    {% if data_type_facets %}<div class="sidebar-section"><h3 class="sidebar-title">Filter by Type</h3><div class="filter-options"><a href="{% url 'searchengine:search' %}?query={{ query|urlencode }}&session_id={{ session_id }}" class="filter-option {% if not active_data_type and not show_images %}active{% endif %}">All Results</a>{% for facet in data_type_facets %}<a href="{% url 'searchengine:search' %}?query={{ query|urlencode }}&data_type={{ facet.value|urlencode }}&session_id={{ session_id }}" class="filter-option {% if active_data_type == facet.value %}active{% endif %}">{{ facet.label }}</a>{% endfor %}</div></div>{% endif %}
+    {% if related_searches %}<div class="sidebar-section"><h3 class="sidebar-title">Related Searches</h3><div class="related-searches">{% for s in related_searches|slice:":5" %}<a href="{% url 'searchengine:search' %}?query={{ s.query|urlencode }}&session_id={{ session_id }}&alt_mode=y" class="related-search">{{ s.query }}</a>{% endfor %}</div></div>{% endif %}
+</aside>
+    </div>
+    {% endif %}
+
+    <div class="lightbox" id="lightbox"><button class="lightbox-close" onclick="closeLightbox()">&times;</button><button class="lightbox-nav lightbox-prev" onclick="navigateLightbox(-1)">&#8249;</button><div class="lightbox-content"><img id="lightbox-image" src="" alt=""><div class="lightbox-info"><div class="lightbox-title" id="lightbox-title"></div><div class="lightbox-source">From: <a id="lightbox-source" href="" target="_blank"></a></div></div></div><button class="lightbox-nav lightbox-next" onclick="navigateLightbox(1)">&#8250;</button></div>
+    {% if not show_map_view %}<footer class="footer"><div class="footer-content"><div class="footer-top"><span class="footer-brand">AfroTodo</span><div class="footer-links"><a href="{% url 'searchengine:about' %}" class="footer-link">About</a><a href="{% url 'accounts:register' %}" class="footer-link">Add Business</a><a href="{% url 'searchengine:privacy' %}" class="footer-link">Privacy</a><a href="{% url 'searchengine:term' %}" class="footer-link">Terms</a><a href="{% url 'searchengine:contact' %}" class="footer-link">Contact us</a></div></div><p class="footer-tagline">Shop Black. Learn Black. Own the future.</p></div></footer>{% endif %}
+
+<script>
+        const AC={sessionId:'{{ session_id|escapejs }}',query:'{{ query|escapejs }}',totalResults:{{ total_results|default:0 }},trackUrl:'/api/track-click/',t0:Date.now()};
+        function trackClick(r,l){if(navigator.sendBeacon)navigator.sendBeacon(AC.trackUrl,new Blob([JSON.stringify({session_id:AC.sessionId,query:AC.query,url:r.dataset.url||l.href,position:+r.dataset.position,title:r.dataset.title,data_type:r.dataset.dataType,result_id:r.dataset.resultId,schema:r.dataset.schema,time_to_click_ms:Date.now()-AC.t0})],{type:'application/json'}));}
+        function trackEvent(t,e){if(navigator.sendBeacon)navigator.sendBeacon(AC.trackUrl,new Blob([JSON.stringify({session_id:AC.sessionId,event_type:t,query:AC.query,...e})],{type:'application/json'}));}
+        document.addEventListener('DOMContentLoaded',function(){document.querySelectorAll('.result-item').forEach(r=>{r.querySelectorAll('.result-link,.result-title a').forEach(l=>{l.addEventListener('click',()=>trackClick(r,l));});});});
+        function clearSearch(){var i=document.querySelector('.search-input');i.value='';i.focus();}
+        function nearMe(){if(!navigator.geolocation){alert('Geolocation not supported.');return;}navigator.geolocation.getCurrentPosition(p=>{window.location.href='{% url "searchengine:search" %}?view=map&lat='+p.coords.latitude+'&lng='+p.coords.longitude+'&nearme=1';},()=>{alert('Could not get your location.');},{enableHighAccuracy:true,timeout:10000});}
+        window.addEventListener('beforeunload',function(){var t=Date.now()-AC.t0;if(t>1000&&navigator.sendBeacon)navigator.sendBeacon(AC.trackUrl,new Blob([JSON.stringify({session_id:AC.sessionId,event_type:'page_dwell',query:AC.query,time_on_page_ms:t})],{type:'application/json'}));});
+        var cIdx=0,iCards=[];
+        function openLightbox(c){iCards=Array.from(document.querySelectorAll('.image-card'));cIdx=iCards.indexOf(c);if(cIdx<0)cIdx=0;updLB();document.getElementById('lightbox').classList.add('active');document.body.style.overflow='hidden';}
+        function closeLightbox(){document.getElementById('lightbox').classList.remove('active');document.body.style.overflow='';}
+        function navigateLightbox(d){cIdx+=d;if(cIdx<0)cIdx=iCards.length-1;if(cIdx>=iCards.length)cIdx=0;updLB();}
+        function updLB(){var c=iCards[cIdx];if(c){document.getElementById('lightbox-image').src=c.dataset.url;document.getElementById('lightbox-title').textContent=c.dataset.title;var s=document.getElementById('lightbox-source');s.href=c.dataset.source;s.textContent=c.dataset.sourceName;}}
+        document.addEventListener('keydown',e=>{if(!document.getElementById('lightbox').classList.contains('active'))return;if(e.key==='Escape')closeLightbox();if(e.key==='ArrowLeft')navigateLightbox(-1);if(e.key==='ArrowRight')navigateLightbox(1);});
+        document.getElementById('lightbox').addEventListener('click',e=>{if(e.target===document.getElementById('lightbox'))closeLightbox();});
+
+        /* ═══════ INFINITE SCROLL FOR IMAGES ═══════ */
+        (function(){
+            var grid=document.getElementById('image-grid');
+            if(!grid) return;
+            var loading=document.getElementById('infinite-scroll-loading');
+            var endMsg=document.getElementById('infinite-scroll-end');
+            var nextOffset={{ image_results|length|default:0 }};
+            var limit=20;
+            var hasMore=true;
+            var isFetching=false;
+            var query='{{ query|escapejs }}';
+            var sessionId='{{ session_id|escapejs }}';
+
+            function checkScroll(){
+                if(!hasMore||isFetching) return;
+                var scrollBottom=window.innerHeight+window.scrollY;
+                var threshold=document.body.offsetHeight-600;
+                if(scrollBottom>=threshold) loadMore();
+            }
+
+            function loadMore(){
+                isFetching=true;
+                loading.style.display='';
+                endMsg.style.display='none';
+                var url='/search/images-load/?q='+encodeURIComponent(query)+'&offset='+nextOffset+'&limit='+limit+'&session_id='+encodeURIComponent(sessionId);
+                fetch(url).then(function(r){return r.json();}).then(function(data){
+                    loading.style.display='none';
+                    if(data.images&&data.images.length){
+                        data.images.forEach(function(img){
+                            var card=document.createElement('div');
+                            card.className='image-card';
+                            card.dataset.url=img.url;
+                            card.dataset.title=img.title||'';
+                            card.dataset.source=img.source_url||'';
+                            card.dataset.sourceName=img.source_name||'';
+                            card.dataset.type=img.image_type||'photo';
+                            card.onclick=function(){openLightbox(this);};
+                            /* CHANGE 3: infinite scroll card includes image-card-info div */
+                            card.innerHTML='<img src="'+img.url+'" alt="'+(img.title||'').replace(/"/g,'&quot;')+'" loading="lazy" onerror="this.parentElement.style.display=\'none\'">'
+                                +'<div class="image-card-overlay"><div class="image-card-title">'+(img.title||'')+'</div><div class="image-card-source">'+(img.source_name||'')+'</div></div>'
+                                +'<div class="image-card-info"><div class="image-card-title">'+(img.title||'')+'</div><div class="image-card-source">'+(img.source_name||'')+'</div></div>';
+                            grid.appendChild(card);
+                        });
+                        /* Update iCards for lightbox navigation */
+                        iCards=Array.from(document.querySelectorAll('.image-card'));
+                    }
+                    if(data.has_more){
+                        nextOffset=data.next_offset||nextOffset+limit;
+                        hasMore=true;
+                    }else{
+                        hasMore=false;
+                        endMsg.style.display='';
+                    }
+                    isFetching=false;
+                }).catch(function(err){
+                    console.error('Image load error:',err);
+                    loading.style.display='none';
+                    isFetching=false;
+                });
+            }
+
+            window.addEventListener('scroll',checkScroll,{passive:true});
+            window.addEventListener('resize',checkScroll,{passive:true});
+            /* Initial check in case page is short */
+            setTimeout(checkScroll,500);
+        })();
+
+        /* Multi-map toggle */
+        function toggleMultiMap(){var b=document.getElementById('multi-map-body'),t=document.getElementById('multi-map-toggle-text');if(b.style.display==='none'){b.style.display='';t.textContent='Hide';if(window._multiMap)window._multiMap.invalidateSize();}else{b.style.display='none';t.textContent='Show';}}
+    </script>
+
+    {# ═══════════ MULTI-PIN MAP SCRIPT ═══════════ #}
+    {% if map_location_count >= 2 and not show_images and not show_map_view %}
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+    (function(){
+        var COLORS=['#bc4749','#2d6a4f','#d4a03a','#6366f1','#ec4899','#0891b2','#ea580c','#7c3aed','#059669','#dc2626'];
+
+        var locations = [
+            {% for loc in map_locations %}
+            {lat:{{ loc.lat }},lng:{{ loc.lng }},id:"{{ loc.id|escapejs }}",title:"{{ loc.title|escapejs }}",addr:"{{ loc.address|escapejs }}",dir:"{{ loc.directions_url|escapejs }}",phone:"{{ loc.phone|escapejs }}",website:"{{ loc.website|escapejs }}"}{% if not forloop.last %},{% endif %}
+            {% endfor %}
+        ];
+        if(!locations.length||!document.getElementById('multi-map'))return;
+
+        function makeIcon(num,color){
+            var svg='<svg width="30" height="40" viewBox="0 0 30 40" xmlns="http://www.w3.org/2000/svg">'
+                +'<path d="M15 0C6.72 0 0 6.72 0 15c0 11.25 15 25 15 25s15-13.75 15-25C30 6.72 23.28 0 15 0z" fill="'+color+'"/>'
+                +'<circle cx="15" cy="14" r="10" fill="white"/>'
+                +'<text x="15" y="18" text-anchor="middle" font-family="DM Sans,sans-serif" font-size="12" font-weight="700" fill="'+color+'">'+num+'</text>'
+                +'</svg>';
+            return L.divIcon({className:'afrotodo-marker',html:svg,iconSize:[30,40],iconAnchor:[15,40],popupAnchor:[0,-38]});
+        }
+
+        var m=L.map('multi-map',{zoomControl:true,scrollWheelZoom:false,dragging:true,tap:true,attributionControl:false});
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(m);
+        window._multiMap=m;
+
+        var markers=[];
+        var bounds=L.latLngBounds();
+
+        locations.forEach(function(loc,i){
+            var color=COLORS[i%COLORS.length];
+            var num=i+1;
+
+            var pop='<div style="font-family:DM Sans,sans-serif;min-width:160px">';
+            pop+='<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px"><span style="width:22px;height:22px;border-radius:50%;background:'+color+';color:white;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0">'+num+'</span>';
+            pop+='<strong style="font-size:14px">'+loc.title+'</strong></div>';
+            if(loc.addr)pop+='<span style="color:#6b645b;font-size:12px">'+loc.addr+'</span><br>';
+            if(loc.phone)pop+='<a href="tel:'+loc.phone+'" style="color:#2d6a4f;font-size:12px">'+loc.phone+'</a><br>';
+            if(loc.website)pop+='<a href="'+loc.website+'" target="_blank" style="color:#2d6a4f;font-size:12px">Website</a><br>';
+            pop+='<a href="'+loc.dir+'" target="_blank" style="color:#2d6a4f;font-size:12px;font-weight:600">Directions →</a>';
+            pop+='</div>';
+
+            var mk=L.marker([loc.lat,loc.lng],{icon:makeIcon(num,color)}).addTo(m).bindPopup(pop,{maxWidth:280});
+            markers.push(mk);
+            bounds.extend([loc.lat,loc.lng]);
+
+            var chipNum=document.querySelector('.multi-map-chip-num[data-pin-idx="'+i+'"]');
+            if(chipNum) chipNum.style.background=color;
+
+            var badges=document.querySelectorAll('[data-map-badge-for="'+loc.id+'"]');
+            badges.forEach(function(badge){
+                badge.style.display='flex';
+                badge.style.background=color;
+                badge.textContent=num;
+                var article=badge.closest('.result-item');
+                if(article){
+                    article.classList.add('map-linked');
+                    article.dataset.mapIdx=i;
+                }
+            });
+        });
+
+        m.fitBounds(bounds,{padding:[40,40],maxZoom:15});
+        setTimeout(function(){m.invalidateSize();},300);
+
+        window.focusPin=function(idx){
+            if(markers[idx]){
+                m.setView(markers[idx].getLatLng(),16,{animate:true});
+                markers[idx].openPopup();
+                document.querySelectorAll('.multi-map-chip').forEach(function(c){c.classList.remove('active');});
+                var chip=document.querySelector('.multi-map-chip[data-idx="'+idx+'"]');
+                if(chip) chip.classList.add('active');
+                document.querySelectorAll('.result-item.map-highlighted').forEach(function(el){el.classList.remove('map-highlighted');});
+                var card=document.querySelector('.result-item[data-map-idx="'+idx+'"]');
+                if(card){
+                    card.classList.add('map-highlighted');
+                    card.scrollIntoView({behavior:'smooth',block:'nearest'});
+                }
+            }
+        };
+
+        document.querySelectorAll('.result-item.map-linked').forEach(function(card){
+            card.addEventListener('click',function(e){
+                if(e.target.closest('a'))return;
+                var idx=+this.dataset.mapIdx;
+                if(!isNaN(idx)){
+                    focusPin(idx);
+                    document.getElementById('multi-map').scrollIntoView({behavior:'smooth',block:'nearest'});
+                }
+            });
+        });
+
+        document.querySelectorAll('.result-item.map-linked').forEach(function(card){
+            card.addEventListener('mouseenter',function(){
+                var idx=this.dataset.mapIdx;
+                var chip=document.querySelector('.multi-map-chip[data-idx="'+idx+'"]');
+                if(chip) chip.classList.add('active');
+            });
+            card.addEventListener('mouseleave',function(){
+                var idx=this.dataset.mapIdx;
+                var chip=document.querySelector('.multi-map-chip[data-idx="'+idx+'"]');
+                if(chip) chip.classList.remove('active');
+            });
+        });
+    })();
+    </script>
+
+    {% elif address_map and not show_map_view and map_location_count < 2 %}
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+    (function(){
+        var lat={{ address_map.lat }},lng={{ address_map.lng }};
+        var addr="{{ address_map.short_address|escapejs }}, {{ address_map.location_line|escapejs }}";
+        var el=document.getElementById('address-map');
+        if(!el)return;
+        var m=L.map('address-map',{zoomControl:true,scrollWheelZoom:false,dragging:true,attributionControl:false}).setView([lat,lng],16);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(m);
+        var ic=L.divIcon({className:'afrotodo-marker',html:'<svg width="32" height="42" viewBox="0 0 32 42"><path d="M16 0C7.16 0 0 7.16 0 16c0 12 16 26 16 26s16-14 16-26C32 7.16 24.84 0 16 0z" fill="#bc4749"/><circle cx="16" cy="15" r="6" fill="white"/></svg>',iconSize:[32,42],iconAnchor:[16,42],popupAnchor:[0,-42]});
+        L.marker([lat,lng],{icon:ic}).addTo(m).bindPopup('<strong style="font-family:DM Sans,sans-serif">'+addr+'</strong>').openPopup();
+        setTimeout(function(){m.invalidateSize();},200);
+    })();
+    </script>
+
+    {% elif show_map_view and map_view_data and not map_view_data.error %}
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+    (function(){
+        var lat={{ map_view_data.lat }},lng={{ map_view_data.lng }};
+        var addr="{{ map_view_data.short_address|escapejs }}";
+        var loc="{{ map_view_data.location_line|escapejs }}";
+        var nm={{ map_view_data.is_nearme|yesno:"true,false" }};
+        var m=L.map('full-map',{zoomControl:true,attributionControl:false}).setView([lat,lng],nm?14:17);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(m);
+        var ic=L.divIcon({className:'afrotodo-marker',html:'<svg width="38" height="50" viewBox="0 0 32 42"><path d="M16 0C7.16 0 0 7.16 0 16c0 12 16 26 16 26s16-14 16-26C32 7.16 24.84 0 16 0z" fill="#bc4749"/><circle cx="16" cy="15" r="6" fill="white"/></svg>',iconSize:[38,50],iconAnchor:[19,50],popupAnchor:[0,-50]});
+        var pop='<div style="font-family:DM Sans,sans-serif"><strong>'+addr+'</strong>';
+        if(loc)pop+='<br><span style="color:#6b645b;font-size:12px">'+loc+'</span>';
+        pop+='<br><a href="https://www.google.com/maps/dir/?api=1&destination='+lat+','+lng+'" target="_blank" style="color:#2d6a4f;font-size:12px;font-weight:600">Get Directions →</a></div>';
+        L.marker([lat,lng],{icon:ic}).addTo(m).bindPopup(pop,{maxWidth:280}).openPopup();
+    })();
+    </script>
+    {% endif %}
+
+
+
+</body>
+</html>

@@ -348,6 +348,9 @@
         </nav>
         {% endif %}
     </header>
+
+
+    
     {% if show_map_view %}
     {# ═══════════ FULL MAP VIEW ═══════════ #}
     <div class="full-map-page">
@@ -383,6 +386,8 @@
         </div>
         {% endif %}
     </div>
+
+
 
     {% else %}
     {# ═══════════ NORMAL SEARCH RESULTS VIEW ═══════════ #}
@@ -424,42 +429,9 @@
 </div>
 {% endif %}
 
-{% if results.0.humanized_summary and map_location_count < 2 and not show_images and not active_data_type and not active_category and not active_schema %}
-<div class="featured-snippet" style="background: var(--warm-white); border: 1px solid var(--gray-200); border-radius: 12px; padding: var(--space-lg); margin-bottom: var(--space-lg); box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
-    <!-- <div style="display: flex; align-items: center; gap: var(--space-sm); margin-bottom: var(--space-md);">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="flex-shrink:0;">
-            <circle cx="8" cy="8" r="7" stroke="var(--green)" stroke-width="1.5" fill="var(--green-soft)"/>
-            <circle cx="8" cy="8" r="3" fill="var(--green)">
-                <animate attributeName="r" values="3;4;3" dur="2s" repeatCount="indefinite"/>
-                <animate attributeName="opacity" values="1;0.6;1" dur="2s" repeatCount="indefinite"/>
-            </circle>
-        </svg>
-        <span style="font-family: var(--font-display); font-size: 15px; font-weight: 600; color: var(--black);"></span>
-    </div> -->
-    <!-- <p style="font-size: 15px; line-height: 1.8; color: var(--gray-700); margin-bottom: var(--space-md);"> -->
-        <!-- {{ results.0.humanized_summary }} -->
-    <!-- </p>
-    <div style="display: flex; align-items: center; gap: var(--space-sm); padding-top: var(--space-sm); border-top: 1px solid var(--gray-200);">
-        <a href="{{ results.0.url }}" target="_blank" style="font-size: 13px; color: var(--green); font-weight: 500; text-decoration: none;">{{ results.0.site_name|default:results.0.source }}</a>
-        <span style="font-size: 12px; color: var(--gray-400);">·</span>
-        <a href="{{ results.0.url }}" target="_blank" style="font-size: 12px; color: var(--gray-400); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 300px;">{{ results.0.url|truncatechars:50 }}</a>
-    </div>  -->
 
-    {% if results.0.key_facts %}
-    <div style="margin-top: var(--space-md); padding-top: var(--space-md); ">
-        <span style="font-size: 13px; font-weight: 600; color: var(--gray-500); text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: var(--space-sm);">Within this article</span>
-        {% for fact in results.0.key_facts %}
-        <div style="display: flex; align-items: flex-start; gap: 8px; padding: 8px 0;{% if not forloop.last %} border-bottom: 1px solid var(--gray-100);{% endif %}">
-            <svg width="6" height="6" viewBox="0 0 6 6" style="flex-shrink: 0; margin-top: 7px;">
-                <circle cx="3" cy="3" r="3" fill="var(--green)"/>
-            </svg>
-            <span style="font-size: 14px; color: var(--gray-700); line-height: 1.6;">{{ fact }}</span>
-        </div>
-        {% endfor %}
-    </div>
-    {% endif %}
-</div>
-{% endif %}
+
+
 
 
 
@@ -590,6 +562,30 @@
                         </div>
                     </div>
                 </article>
+
+                {# ═══════════ KEY FACTS / WITHIN THIS ARTICLE — shown only for question-answer results, after the first result ═══════════ #}
+                {% if forloop.first %}
+                {% if is_question_path or results.0.schema == "history" %}
+                {% if results.0.humanized_summary and map_location_count < 2 and not show_images and not active_data_type and not active_category and not active_schema %}
+                <div class="featured-snippet" style="background: var(--warm-white); border: 1px solid var(--gray-200); border-radius: 12px; padding: var(--space-lg); margin-bottom: var(--space-md); box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
+                    {% if results.0.key_facts %}
+                    <div style="padding-top: var(--space-md); ">
+                        <span style="font-size: 13px; font-weight: 600; color: var(--gray-500); text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: var(--space-sm);">Within this article</span>
+                        {% for fact in results.0.key_facts %}
+                        <div style="display: flex; align-items: flex-start; gap: 8px; padding: 8px 0;{% if not forloop.last %} border-bottom: 1px solid var(--gray-100);{% endif %}">
+                            <svg width="6" height="6" viewBox="0 0 6 6" style="flex-shrink: 0; margin-top: 7px;">
+                                <circle cx="3" cy="3" r="3" fill="var(--green)"/>
+                            </svg>
+                            <span style="font-size: 14px; color: var(--gray-700); line-height: 1.6;">{{ fact }}</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                </div>
+                {% endif %}
+                {% endif %}
+                {% endif %}
+
                 {% endfor %}
                 {% if related_searches %}<div class="related-searches-inline"><h3 class="related-searches-inline-title">Related Searches</h3><div class="related-searches-inline-list">{% for s in related_searches|slice:":5" %}<a href="{% url 'searchengine:search' %}?query={{ s.query|urlencode }}&session_id={{ session_id }}&alt_mode=y" class="related-searches-inline-item">{{ s.query }}</a>{% endfor %}</div></div>{% endif %}
                 {% if pagination.total_pages > 1 %}<nav class="pagination"><div class="pagination-info">Showing {{ pagination.start_result }}-{{ pagination.end_result }} of {{ total_results|default:pagination.total_results }}</div><div class="pagination-controls">{% if pagination.has_previous %}<a href="?query={{ query|urlencode }}&page={{ pagination.previous_page }}&per_page={{ per_page }}{% if active_data_type %}&data_type={{ active_data_type }}{% endif %}&session_id={{ session_id }}" class="pagination-btn">← Prev</a>{% else %}<span class="pagination-btn disabled">← Prev</span>{% endif %}<div class="pagination-pages">{% for p in pagination.page_range %}{% if p == pagination.current_page %}<span class="pagination-page active">{{ p }}</span>{% else %}<a href="?query={{ query|urlencode }}&page={{ p }}&per_page={{ per_page }}{% if active_data_type %}&data_type={{ active_data_type }}{% endif %}&session_id={{ session_id }}" class="pagination-page">{{ p }}</a>{% endif %}{% endfor %}</div>{% if pagination.has_next %}<a href="?query={{ query|urlencode }}&page={{ pagination.next_page }}&per_page={{ per_page }}{% if active_data_type %}&data_type={{ active_data_type }}{% endif %}&session_id={{ session_id }}" class="pagination-btn">Next →</a>{% else %}<span class="pagination-btn disabled">Next →</span>{% endif %}</div></nav>{% endif %}
