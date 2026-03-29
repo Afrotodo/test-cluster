@@ -29,7 +29,17 @@ from .vocabulary_cache import (
     reload_cache_from_file,
     get_cache_status,
     add_terms_to_cache,
+    add_terms_nosave,
+    reload_cache_nosave,
+    save_cache,
 )
+# from .vocabulary_cache import (
+#     vocab_cache,
+#     reload_cache_from_dict,
+#     reload_cache_from_file,
+#     get_cache_status,
+#     add_terms_to_cache,
+# )
 
 logger = logging.getLogger(__name__)
 
@@ -391,3 +401,108 @@ def cache_test_view(request):
             'success': False,
             'error': f'Server error: {str(e)}'
         }, status=500)
+
+@csrf_exempt
+@require_http_methods(["POST"])
+@require_api_key
+def reload_cache_nosave_view(request):
+    """Reload cache from POST data WITHOUT saving to file."""
+    try:
+        content_length = int(request.headers.get('Content-Length', 0))
+        if content_length > MAX_PAYLOAD_SIZE:
+            return JsonResponse({
+                'success': False,
+                'error': f'Payload too large (max {MAX_PAYLOAD_SIZE // 1024 // 1024}MB)'
+            }, status=413)
+
+        try:
+            data = json.loads(request.body)
+        except json.JSONDecodeError as e:
+            return JsonResponse({'success': False, 'error': f'Invalid JSON: {str(e)}'}, status=400)
+
+        if not isinstance(data, dict) or len(data) == 0:
+            return JsonResponse({'success': False, 'error': 'Expected non-empty JSON object'}, status=400)
+
+        logger.info(f"Received cache RELOAD-NOSAVE request with {len(data):,} terms")
+        success = reload_cache_nosave(data)
+
+        if success:
+            return JsonResponse({
+                'success': True,
+                'message': f'Cache reloaded with {len(data):,} terms (not saved to file yet)',
+                'stats': get_cache_status()
+            })
+        else:
+            return JsonResponse({'success': False, 'error': 'Failed to load cache'}, status=500)
+
+    except Exception as e:
+        logger.exception(f"Error in reload-nosave: {e}")
+        return JsonResponse({'success': False, 'error': f'Server error: {str(e)}'}, status=500)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+@require_api_key
+def add_to_cache_nosave_view(request):
+    """Add terms to cache WITHOUT saving to file."""
+    try:
+        content_length = int(request.headers.get('Content-Length', 0))
+        if content_length > MAX_PAYLOAD_SIZE:
+            return JsonResponse({
+                'success': False,
+                'error': f'Payload too large (max {MAX_PAYLOAD_SIZE // 1024 // 1024}MB)'
+            }, status=413)
+
+        try:
+            data = json.loads(request.body)
+        except json.JSONDecodeError as e:
+            return JsonResponse({'success': False, 'error': f'Invalid JSON: {str(e)}'}, status=400)
+
+        if not isinstance(data, dict) or len(data) == 0:
+            return JsonResponse({'success': False, 'error': 'Expected non-empty JSON object'}, status=400)
+
+        logger.info(f"Received cache ADD-NOSAVE request with {len(data):,} terms")
+        result = add_terms_nosave(data)
+
+        return JsonResponse({
+            'success': True,
+            'message': f"Added {result['added']:,} terms (not saved to file yet)",
+            'stats': {
+                'added': result['added'],
+                'skipped': result['skipped'],
+                'total_after': vocab_cache.term_count
+            }
+        })
+
+    except Exception as e:
+        logger.exception(f"Error in add-nosave: {e}")
+        return JsonResponse({'success': False, 'error': f'Server error: {str(e)}'}, status=500)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+@require_api_key
+def save_cache_view(request):
+    """Save current in-memory cache to file. Call once after all chunks are uploaded."""
+    try:
+        if not vocab_cache.loaded:
+            return JsonResponse({
+                'success': False,
+                'error': 'Cache not loaded — nothing to save'
+            }, status=400)
+
+        success = save_cache()
+
+        if success:
+            status = get_cache_status()
+            return JsonResponse({
+                'success': True,
+                'message': f"Cache saved to file ({status['term_count']:,} terms). Restart gunicorn to sync all workers.",
+                'stats': status
+            })
+        else:
+            return JsonResponse({'success': False, 'error': 'Failed to save cache to file'}, status=500)
+
+    except Exception as e:
+        logger.exception(f"Error saving cache: {e}")
+        return JsonResponse({'success': False, 'error': f'Server error: {str(e)}'}, status=500)

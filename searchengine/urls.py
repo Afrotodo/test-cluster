@@ -51,6 +51,14 @@ urlpatterns = [
     path('api/cache/test/', cache_views.cache_test_view, name='cache_test'),
     path('api/cache/add/', cache_views.add_to_cache_view, name='cache_add'),
 
+
+    # path('api/cache/reload-nosave/', cache_views.reload_cache_nosave_view, name='cache_reload_nosave'),
+    # path('api/cache/add-nosave/', cache_views.add_to_cache_nosave_view, name='cache_add_nosave'),
+    # path('api/cache/save/', cache_views.save_cache_view, name='cache_save'),
+
+    path('api/cache/reload-nosave/', cache_views.reload_cache_nosave_view, name='cache_reload_nosave'),
+    path('api/cache/add-nosave/', cache_views.add_to_cache_nosave_view, name='cache_add_nosave'),
+    path('api/cache/save/', cache_views.save_cache_view, name='cache_save'),
     
     # ==================== CATEGORY PAGES ====================
     # Generic category router (handles all categories)

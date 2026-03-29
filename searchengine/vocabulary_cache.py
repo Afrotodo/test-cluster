@@ -2889,3 +2889,123 @@ if __name__ == "__main__":
         print(f"Matches for '{args.term}': {len(matches)}")
         for m in matches:
             print(json.dumps(m, indent=2))
+
+def add_terms_nosave(self, data: Dict[str, Dict]) -> Dict[str, int]:
+        """Same as add_terms but does NOT save to file after each call."""
+        if not self.loaded:
+            logger.info("Cache not loaded — loading from file before adding terms...")
+            self.load_from_file()
+
+        with self._lock:
+            added = 0
+            skipped = 0
+            counts = {'unigram': 0, 'bigram': 0, 'trigram': 0, 'quadgram': 0, 'ngram': 0}
+
+            for key, metadata in data.items():
+                if key in self._raw_data:
+                    skipped += 1
+                    continue
+
+                try:
+                    self._raw_data[key] = metadata
+                    parts = key.split(':')
+                    if len(parts) >= 2:
+                        term = parts[1].lower()
+                    else:
+                        term = metadata.get('term', '').lower()
+                    if not term:
+                        continue
+
+                    category = metadata.get('category', '')
+                    entity_type = metadata.get('entity_type', '')
+                    ngram_type = self._store_term(term, metadata, category, entity_type)
+                    counts[ngram_type] = counts.get(ngram_type, 0) + 1
+                    added += 1
+
+                except Exception as e:
+                    logger.warning(f"Error processing key '{key}': {e}")
+                    continue
+
+            self.term_count = len(self._raw_data)
+            self.last_updated = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+            logger.info(
+                f"Added {added:,} terms (skipped {skipped:,}) [NO SAVE]: "
+                f"{counts['unigram']} unigrams, {counts['bigram']} bigrams, "
+                f"{counts['trigram']} trigrams, {counts['quadgram']} quadgrams"
+            )
+
+            return {
+                'added': added,
+                'skipped': skipped,
+                'unigrams_added': counts['unigram'],
+                'bigrams_added': counts['bigram'],
+                'trigrams_added': counts['trigram'],
+                'quadgrams_added': counts['quadgram'],
+                'ngrams_added': counts['ngram'],
+            }
+
+def load_from_dict_nosave(self, data: Dict[str, Dict], source: str = "api") -> bool:
+        """Same as load_from_dict but does NOT save to file."""
+        with self._lock:
+            start_time = time.perf_counter()
+            logger.info(f"Loading vocabulary cache from {source} (no save)...")
+
+            self.cities.clear()
+            self.states.clear()
+            self.locations.clear()
+            self.unigrams.clear()
+            self.bigrams.clear()
+            self.trigrams.clear()
+            self.quadgrams.clear()
+            self.ngrams.clear()
+            self.unigram_matches.clear()
+            self.bigram_matches.clear()
+            self.trigram_matches.clear()
+            self.quadgram_matches.clear()
+            self.ngram_matches.clear()
+            self._raw_data.clear()
+
+            counts = {'unigram': 0, 'bigram': 0, 'trigram': 0, 'quadgram': 0, 'ngram': 0}
+
+            for key, metadata in data.items():
+                try:
+                    self._raw_data[key] = metadata
+                    parts = key.split(':')
+                    if len(parts) >= 2:
+                        term = parts[1].lower()
+                    else:
+                        term = metadata.get('term', '').lower()
+                    if not term:
+                        continue
+                    category = metadata.get('category', '')
+                    entity_type = metadata.get('entity_type', '')
+                    ngram_type = self._store_term(term, metadata, category, entity_type)
+                    counts[ngram_type] = counts.get(ngram_type, 0) + 1
+                except Exception as e:
+                    logger.warning(f"Error processing key '{key}': {e}")
+                    continue
+
+            self.term_count = len(self._raw_data)
+            self.load_time = time.perf_counter() - start_time
+            self.load_source = source
+            self.last_updated = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            self.loaded = True
+
+            logger.info(f"Cache loaded (no save): {self.term_count:,} terms in {self.load_time:.2f}s")
+            return True
+
+def save(self) -> bool:
+        """Explicitly save current cache data to file."""
+        with self._lock:
+            return self._save_to_file(self._raw_data)
+        
+
+def add_terms_nosave(data: Dict) -> Dict[str, int]:
+    return vocab_cache.add_terms_nosave(data)
+
+def reload_cache_nosave(data: Dict) -> bool:
+    return vocab_cache.load_from_dict_nosave(data, source="api")
+
+def save_cache() -> bool:
+    return vocab_cache.save()
