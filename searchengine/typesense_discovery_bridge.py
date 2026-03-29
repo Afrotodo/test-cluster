@@ -2055,67 +2055,67 @@ def _validate_question_hit(
 # # STAGE 1 COMBINED: Run both in parallel, merge + dedup
 # # ============================================================================
 
-# def fetch_all_candidate_uuids(
-#     search_query: str,
-#     profile: Dict,
-#     query_embedding: List[float],
-#     signals: Dict = None,
-# ) -> List[str]:
-#     """
-#     Runs Stage 1A (document) and Stage 1B (questions) in parallel.
+def fetch_all_candidate_uuids(
+    search_query: str,
+    profile: Dict,
+    query_embedding: List[float],
+    signals: Dict = None,
+) -> List[str]:
+    """
+    Runs Stage 1A (document) and Stage 1B (questions) in parallel.
 
-#     Merge order:
-#     1. Overlap — found by both paths (highest confidence)
-#     2. Document-only hits
-#     3. Question-only hits
+    Merge order:
+    1. Overlap — found by both paths (highest confidence)
+    2. Document-only hits
+    3. Question-only hits
 
-#     Stage 1B runs independently of Stage 1A results.
-#     Even if Stage 1A returns 0 (e.g. bad keyword graph), Stage 1B
-#     can still surface the right document via vector search.
-#     """
-#     signals = signals or {}
+    Stage 1B runs independently of Stage 1A results.
+    Even if Stage 1A returns 0 (e.g. bad keyword graph), Stage 1B
+    can still surface the right document via vector search.
+    """
+    signals = signals or {}
 
-#     doc_future = _executor.submit(
-#         fetch_candidate_uuids, search_query, profile, signals, 100
-#     )
-#     q_future = _executor.submit(
-#         fetch_candidate_uuids_from_questions, profile, query_embedding, signals, 50
-#     )
+    doc_future = _executor.submit(
+        fetch_candidate_uuids, search_query, profile, signals, 100
+    )
+    q_future = _executor.submit(
+        fetch_candidate_uuids_from_questions, profile, query_embedding, signals, 50
+    )
 
-#     doc_uuids = doc_future.result()
-#     q_uuids   = q_future.result()
+    doc_uuids = doc_future.result()
+    q_uuids   = q_future.result()
 
-#     # Find overlap
-#     doc_set = set(doc_uuids)
-#     q_set   = set(q_uuids)
-#     overlap  = doc_set & q_set
+    # Find overlap
+    doc_set = set(doc_uuids)
+    q_set   = set(q_uuids)
+    overlap  = doc_set & q_set
 
-#     # Merge: overlap first, then document-only, then question-only
-#     merged = []
-#     seen   = set()
+    # Merge: overlap first, then document-only, then question-only
+    merged = []
+    seen   = set()
 
-#     for uuid in doc_uuids:
-#         if uuid in overlap and uuid not in seen:
-#             merged.append(uuid)
-#             seen.add(uuid)
+    for uuid in doc_uuids:
+        if uuid in overlap and uuid not in seen:
+            merged.append(uuid)
+            seen.add(uuid)
 
-#     for uuid in doc_uuids:
-#         if uuid not in seen:
-#             merged.append(uuid)
-#             seen.add(uuid)
+    for uuid in doc_uuids:
+        if uuid not in seen:
+            merged.append(uuid)
+            seen.add(uuid)
 
-#     for uuid in q_uuids:
-#         if uuid not in seen:
-#             merged.append(uuid)
-#             seen.add(uuid)
+    for uuid in q_uuids:
+        if uuid not in seen:
+            merged.append(uuid)
+            seen.add(uuid)
 
-#     print(f"📊 Stage 1 COMBINED:")
-#     print(f"   document pool    : {len(doc_uuids)}")
-#     print(f"   questions pool   : {len(q_uuids)}")
-#     print(f"   overlap (both)   : {len(overlap)}")
-#     print(f"   merged total     : {len(merged)}")
+    print(f"📊 Stage 1 COMBINED:")
+    print(f"   document pool    : {len(doc_uuids)}")
+    print(f"   questions pool   : {len(q_uuids)}")
+    print(f"   overlap (both)   : {len(overlap)}")
+    print(f"   merged total     : {len(merged)}")
 
-#     return merged
+    return merged
 
 def fetch_candidate_uuids_from_questions(
     profile: Dict,
