@@ -59,6 +59,9 @@ urlpatterns = [
     path('api/cache/reload-nosave/', cache_views.reload_cache_nosave_view, name='cache_reload_nosave'),
     path('api/cache/add-nosave/', cache_views.add_to_cache_nosave_view, name='cache_add_nosave'),
     path('api/cache/save/', cache_views.save_cache_view, name='cache_save'),
+
+    path('api/cache/upload-chunk/', cache_views.upload_chunk_view, name='cache_upload_chunk'),
+    path('api/cache/finalize/', cache_views.finalize_upload_view, name='cache_finalize'),
     
     # ==================== CATEGORY PAGES ====================
     # Generic category router (handles all categories)
