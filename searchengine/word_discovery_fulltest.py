@@ -11558,11 +11558,241 @@ class WordDiscovery:
             print("  (no new n-grams found)")
         return new_ngrams, new_consumed
 
+
+
+
     # =========================================================================
     # STEP 6: Build Complete Profile
     # ISSUE 2 FIX: POS gate for modifier words
     # ISSUE 3 FIX (Part B): Adjacent location merge
     # =========================================================================
+
+    # def _step6_build_profile(self, query, word_data, ngrams, consumed_positions, corrections, start_time):
+    #     """Step 6: Build Complete Profile (entities, locations, search terms, boosts)."""
+    #     if self.verbose:
+    #         print("\n" + "-" * 70)
+    #         print("📊 STEP 6: Build Complete Profile")
+    #         print("-" * 70)
+
+    #     query_array = []
+    #     corrected_array = []
+    #     for wd in word_data:
+    #         query_array.append({'position': wd['position'], 'word': wd['word'], 'status': wd['status']})
+    #         if wd['status'] in ('corrected', 'pos_corrected') and wd.get('corrected'):
+    #             corrected_array.append({'position': wd['position'], 'word': wd['corrected']})
+    #         elif wd['status'] == 'unknown_suggest' and wd.get('suggestion'):
+    #             corrected_array.append({'position': wd['position'], 'word': wd['suggestion']})
+    #         else:
+    #             corrected_array.append({'position': wd['position'], 'word': wd['word']})
+
+    #     working_words = self._get_working_words(word_data)
+    #     corrected_query = ' '.join(working_words)
+
+    #     display_words = []
+    #     for wd in word_data:
+    #         if wd['status'] in ('corrected', 'pos_corrected') and wd.get('corrected'):
+    #             display_words.append(wd['corrected'])
+    #         elif wd['status'] == 'unknown_suggest' and wd.get('suggestion'):
+    #             display_words.append(wd['suggestion'])
+    #         else:
+    #             display_words.append(wd['word'])
+    #     corrected_display_query = ' '.join(display_words)
+
+    #     for wd in word_data:
+    #         wd['part_of_ngram'] = wd['position'] in consumed_positions
+
+    #     persons = []
+    #     organizations = []
+    #     keywords = []
+    #     media = []
+    #     cities = []
+    #     states = []
+    #     location_terms = []
+    #     intent_scores = {'person': 0, 'organization': 0, 'location': 0, 'keyword': 0, 'media': 0}
+
+    #     # ISSUE 2 FIX: POS values that indicate modifier function
+    #     MODIFIER_POS = frozenset({'adjective', 'adverb', 'verb', 'determiner'})
+
+    #     # Classify from n-grams first
+    #     for ng in ngrams:
+    #         cat_lower = ng.get('category', '').lower()
+    #         rank = ng.get('rank', 0)
+    #         entry = {'phrase': ng['phrase'], 'display': ng['display'], 'rank': rank, 'category': ng['category'], 'type': ng['type']}
+    #         if cat_lower in PERSON_CATEGORIES:
+    #             persons.append(entry); intent_scores['person'] += rank
+    #         elif cat_lower in ORGANIZATION_CATEGORIES:
+    #             organizations.append(entry); intent_scores['organization'] += rank
+    #         elif cat_lower in LOCATION_CATEGORIES:
+    #             intent_scores['location'] += rank
+    #             if cat_lower in CITY_CATEGORIES:
+    #                 cities.append({'name': ng['display'], 'rank': rank, 'category': ng['category']})
+    #             elif cat_lower in STATE_CATEGORIES:
+    #                 states.append({'name': ng['display'], 'rank': rank, 'category': ng['category'], 'variants': self._get_state_variants(ng['display'])})
+    #             else:
+    #                 location_terms.extend(ng.get('words', []))
+    #         elif cat_lower in MEDIA_CATEGORIES:
+    #             media.append(entry); intent_scores['media'] += rank
+    #         elif cat_lower in KEYWORD_CATEGORIES:
+    #             keywords.append(entry); intent_scores['keyword'] += rank
+    #         else:
+    #             keywords.append(entry); intent_scores['keyword'] += rank
+
+    #     # Classify from individual terms (not consumed by n-grams)
+    #     for wd in word_data:
+    #         if wd['is_stopword']:
+    #             continue
+    #         if wd['position'] in consumed_positions:
+    #             continue
+    #         sm = wd.get('selected_match')
+    #         if not sm:
+    #             continue
+    #         cat_lower = sm.get('category', '').lower()
+    #         rank = sm.get('rank', 0)
+    #         entry = {'phrase': sm.get('term', wd['word']), 'display': sm.get('display', wd['word']), 'rank': rank, 'category': sm.get('category', ''), 'type': 'unigram'}
+
+    #         # ISSUE 2 FIX: POS gate — if grammar says modifier but match is noun entity, demote
+    #         predicted_pos = normalize_pos_string(wd.get('predicted_pos'))
+    #         match_pos = normalize_pos_string(sm.get('pos'))
+    #         if (predicted_pos in MODIFIER_POS and match_pos in ('noun', 'proper_noun')
+    #                 and not is_pos_compatible(match_pos, predicted_pos)):
+    #             keywords.append(entry)
+    #             intent_scores['keyword'] += rank
+    #             if self.verbose:
+    #                 print(f"  POS GATE: '{wd['word']}' predicted={predicted_pos}, match={match_pos}/{cat_lower} → demoted to keyword")
+    #             continue
+
+    #         if cat_lower in PERSON_CATEGORIES:
+    #             persons.append(entry); intent_scores['person'] += rank
+    #         elif cat_lower in ORGANIZATION_CATEGORIES:
+    #             organizations.append(entry); intent_scores['organization'] += rank
+    #         elif cat_lower in LOCATION_CATEGORIES:
+    #             intent_scores['location'] += rank
+    #             if cat_lower in CITY_CATEGORIES:
+    #                 cities.append({'name': sm['display'], 'rank': rank, 'category': sm['category']})
+    #             elif cat_lower in STATE_CATEGORIES:
+    #                 states.append({'name': sm['display'], 'rank': rank, 'category': sm['category'], 'variants': self._get_state_variants(sm['display'])})
+    #             else:
+    #                 location_terms.append(wd['word'])
+    #         elif cat_lower in MEDIA_CATEGORIES:
+    #             media.append(entry); intent_scores['media'] += rank
+    #         elif cat_lower in KEYWORD_CATEGORIES:
+    #             keywords.append(entry); intent_scores['keyword'] += rank
+    #         else:
+    #             if rank > 0:
+    #                 keywords.append(entry); intent_scores['keyword'] += rank
+
+    #     # ISSUE 3 FIX (Part B): Adjacent location merge pass
+    #     self._merge_adjacent_locations(word_data, consumed_positions, cities, states, location_terms, keywords, intent_scores)
+
+    #     primary_intent = 'general'
+    #     max_score = 0
+    #     for intent_type, score in intent_scores.items():
+    #         if score > max_score:
+    #             max_score = score
+    #             primary_intent = intent_type
+
+    #     search_terms = []
+    #     for wd in word_data:
+    #         if wd['is_stopword'] or wd['position'] in consumed_positions:
+    #             continue
+    #         effective_pos = normalize_pos_string(wd.get('pos') or wd.get('predicted_pos') or 'unknown')
+    #         if effective_pos in SEARCHABLE_POS:
+    #             search_terms.append(wd.get('corrected', wd['word']))
+    #     for ng in ngrams:
+    #         search_terms.append(ng['phrase'])
+
+    #     field_boosts = {'document_title': 10, 'entity_names': 2, 'primary_keywords': 15, 'key_facts': 3, 'semantic_keywords': 7}
+    #     if persons:
+    #         field_boosts['entity_names'] += 8; field_boosts['document_title'] += 5
+    #     if organizations:
+    #         field_boosts['entity_names'] += 5; field_boosts['primary_keywords'] += 3
+    #     if keywords:
+    #         field_boosts['primary_keywords'] += 2; field_boosts['semantic_keywords'] += 3; field_boosts['key_facts'] += 2
+    #     if media:
+    #         field_boosts['document_title'] += 8; field_boosts['primary_keywords'] += 5
+    #     if any(wd['status'] in ('unknown', 'unknown_suggest') for wd in word_data):
+    #         for key in field_boosts:
+    #             field_boosts[key] += 2
+
+    #     terms = []
+    #     for wd in word_data:
+    #         pos_value = normalize_pos_string(wd.get('pos') or wd.get('predicted_pos') or 'unknown')
+    #         predicted_pos = wd.get('predicted_pos')
+    #         if predicted_pos:
+    #             predicted_pos = normalize_pos_string(predicted_pos)
+    #         term = {
+    #             'position': wd['position'], 'word': wd['word'], 'status': wd['status'],
+    #             'is_stopword': wd['is_stopword'], 'part_of_ngram': wd.get('part_of_ngram', False),
+    #             'pos': pos_value, 'predicted_pos': predicted_pos, 'context_flags': wd.get('context_flags', []),
+    #         }
+    #         if wd.get('selected_match'):
+    #             sm = wd['selected_match']
+    #             term.update({'category': sm.get('category', ''), 'description': sm.get('description', ''),
+    #                 'display': sm.get('display', wd['word']), 'rank': sm.get('rank', 0), 'entity_type': sm.get('entity_type', 'unigram')})
+    #         elif wd.get('all_matches'):
+    #             bm = wd['all_matches'][0]
+    #             term.update({'category': bm.get('category', ''), 'description': bm.get('description', ''),
+    #                 'display': bm.get('display', wd['word']), 'rank': bm.get('rank', 0), 'entity_type': bm.get('entity_type', 'unigram')})
+    #         else:
+    #             term.update({'category': '', 'description': '', 'display': wd['word'], 'rank': 0, 'entity_type': 'unigram'})
+    #         if wd['status'] in ('corrected', 'pos_corrected'):
+    #             term['corrected'] = wd.get('corrected')
+    #             term['corrected_display'] = wd.get('corrected_display')
+    #             term['distance'] = wd.get('distance')
+    #         if wd['status'] == 'unknown_suggest':
+    #             term['suggestion'] = wd.get('suggestion')
+    #             term['suggestion_display'] = wd.get('suggestion_display')
+    #             term['suggestion_distance'] = wd.get('suggestion_distance')
+    #         if wd.get('abbreviation'):
+    #             term['abbreviation'] = {'original': wd['abbreviation']['original_abbreviation'], 'expanded_to': wd['abbreviation']['expanded_to']}
+    #         term['match_count'] = len(wd.get('all_matches', []))
+    #         terms.append(term)
+
+    #     elapsed = (time.perf_counter() - start_time) * 1000
+    #     stats = {
+    #         'total_words': len(word_data),
+    #         'valid_words': sum(1 for wd in word_data if wd['status'] == 'resolved'),
+    #         'corrected_words': sum(1 for wd in word_data if wd['status'] in ('corrected', 'pos_corrected')),
+    #         'unknown_words': sum(1 for wd in word_data if wd['status'] in ('unknown', 'unknown_suggest')),
+    #         'stopwords': sum(1 for wd in word_data if wd['is_stopword']),
+    #         'ngram_count': len(ngrams),
+    #     }
+
+    #     profile = {
+    #         'query_array': query_array, 'corrected_array': corrected_array,
+    #         'query': query, 'corrected_query': corrected_query,
+    #         'corrected_display_query': corrected_display_query, 'processing_time_ms': round(elapsed, 2),
+    #         'search_terms': search_terms, 'persons': persons, 'organizations': organizations,
+    #         'keywords': keywords, 'media': media, 'cities': cities, 'states': states,
+    #         'location_terms': location_terms, 'primary_intent': primary_intent,
+    #         'intent_scores': intent_scores, 'field_boosts': field_boosts,
+    #         'corrections': corrections, 'stats': stats, 'terms': terms, 'ngrams': ngrams,
+    #     }
+
+    #     if self.verbose:
+    #         print("\n" + "=" * 70)
+    #         print("📊 COMPLETE PROFILE")
+    #         print("=" * 70)
+    #         print(f"  Query:           '{query}'")
+    #         print(f"  Corrected:       '{corrected_query}'")
+    #         print(f"  Display:         '{corrected_display_query}'")
+    #         print(f"  Search terms:    {search_terms}")
+    #         print(f"  Primary intent:  {primary_intent}")
+    #         print(f"  Intent scores:   {intent_scores}")
+    #         print(f"  Persons:         {[p['display'] for p in persons]}")
+    #         print(f"  Organizations:   {[o['display'] for o in organizations]}")
+    #         print(f"  Keywords:        {[k['display'] for k in keywords]}")
+    #         print(f"  Media:           {[m['display'] for m in media]}")
+    #         print(f"  Cities:          {[c['name'] for c in cities]}")
+    #         print(f"  States:          {[s['name'] for s in states]}")
+    #         print(f"  Location terms:  {location_terms}")
+    #         print(f"  Field boosts:    {field_boosts}")
+    #         print(f"  Time:            {elapsed:.2f}ms")
+    #         print(f"  Stats:           {stats}")
+    #         print(f"  Source:          {'RAM cache' if RAM_CACHE_AVAILABLE else 'Redis fallback'}")
+    #     return profile
+    
+
 
     def _step6_build_profile(self, query, word_data, ngrams, consumed_positions, corrections, start_time):
         """Step 6: Build Complete Profile (entities, locations, search terms, boosts)."""
@@ -11610,6 +11840,14 @@ class WordDiscovery:
         # ISSUE 2 FIX: POS values that indicate modifier function
         MODIFIER_POS = frozenset({'adjective', 'adverb', 'verb', 'determiner'})
 
+        # Superlatives — always function as modifiers, never as entities
+        SUPERLATIVES = frozenset({
+            'best', 'worst', 'top', 'biggest', 'largest', 'smallest',
+            'oldest', 'newest', 'cheapest', 'fastest', 'highest',
+            'lowest', 'richest', 'poorest', 'strongest', 'weakest',
+            'most', 'least', 'greatest', 'finest',
+        })
+
         # Classify from n-grams first
         for ng in ngrams:
             cat_lower = ng.get('category', '').lower()
@@ -11648,14 +11886,20 @@ class WordDiscovery:
             entry = {'phrase': sm.get('term', wd['word']), 'display': sm.get('display', wd['word']), 'rank': rank, 'category': sm.get('category', ''), 'type': 'unigram'}
 
             # ISSUE 2 FIX: POS gate — if grammar says modifier but match is noun entity, demote
+            # Also catches superlatives where POS prediction went wrong
             predicted_pos = normalize_pos_string(wd.get('predicted_pos'))
             match_pos = normalize_pos_string(sm.get('pos'))
-            if (predicted_pos in MODIFIER_POS and match_pos in ('noun', 'proper_noun')
-                    and not is_pos_compatible(match_pos, predicted_pos)):
+            is_superlative = wd['word'].lower() in SUPERLATIVES
+
+            if is_superlative or (
+                predicted_pos in MODIFIER_POS and match_pos in ('noun', 'proper_noun')
+                and not is_pos_compatible(match_pos, predicted_pos)
+            ):
                 keywords.append(entry)
                 intent_scores['keyword'] += rank
                 if self.verbose:
-                    print(f"  POS GATE: '{wd['word']}' predicted={predicted_pos}, match={match_pos}/{cat_lower} → demoted to keyword")
+                    gate_reason = "SUPERLATIVE" if is_superlative else "POS_MISMATCH"
+                    print(f"  POS GATE [{gate_reason}]: '{wd['word']}' predicted={predicted_pos}, match={match_pos}/{cat_lower} → demoted to keyword")
                 continue
 
             if cat_lower in PERSON_CATEGORIES:
@@ -12065,6 +12309,8 @@ class WordDiscovery:
         profile['stats'] = {'total_words': 1, 'valid_words': 0, 'corrected_words': 0, 'unknown_words': 1, 'stopwords': 0, 'ngram_count': 0}
         profile['terms'] = [{'position': 0, 'word': word_lower, 'status': 'unknown', 'is_stopword': False, 'part_of_ngram': False, 'pos': 'unknown', 'predicted_pos': 'noun', 'category': '', 'description': '', 'display': word_lower, 'rank': 0, 'match_count': 0}]
         return profile
+    
+
 
 
 # =============================================================================
