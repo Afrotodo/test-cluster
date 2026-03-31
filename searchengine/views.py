@@ -3690,18 +3690,94 @@ def contact(request):
 
 
 
+
+
+
+
+
+
+
+
+
+
 # ============================================================================
-# DEBUG VIEW — Add to views.py
+# DEBUG VIEWS — debug_views.py
 # ============================================================================
 # In urls.py, add:
 #   path('debug/search/', views.debug_search_view, name='debug_search'),
+#   path('debug/word-discovery/', views.debug_word_discovery_view, name='debug_word_discovery'),
 # ============================================================================
 
 import json
 import time
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_http_methods
+from django.views.decorators.http import require_http_methods, require_GET
+
+
+# ── Import word discovery ────────────────────────────────────────────────
+try:
+    from .word_discovery_fulltest import (
+        WordDiscovery,
+        vocab_cache_wrapper,
+        get_fuzzy_suggestions_batch,
+        damerau_levenshtein_distance,
+        is_pos_compatible,
+        normalize_pos_string,
+        STOPWORDS,
+        GRAMMAR_RULES,
+        RAM_CACHE_AVAILABLE,
+        vocab_cache,
+    )
+    WD_AVAILABLE = True
+except ImportError:
+    try:
+        from word_discovery_fulltest import (
+            WordDiscovery,
+            vocab_cache_wrapper,
+            get_fuzzy_suggestions_batch,
+            damerau_levenshtein_distance,
+            is_pos_compatible,
+            normalize_pos_string,
+            STOPWORDS,
+            GRAMMAR_RULES,
+            RAM_CACHE_AVAILABLE,
+            vocab_cache,
+        )
+        WD_AVAILABLE = True
+    except ImportError:
+        WD_AVAILABLE = False
+
+
+# ── Import bridge + intent ───────────────────────────────────────────────
+try:
+    from .typesense_discovery_bridge import (
+        execute_full_search,
+        run_parallel_prep,
+        build_query_profile,
+        fetch_candidate_uuids,
+        fetch_all_candidate_uuids,
+        client as typesense_client,
+        COLLECTION_NAME,
+    )
+    BRIDGE_AVAILABLE = True
+except ImportError:
+    BRIDGE_AVAILABLE = False
+
+try:
+    from .intent_detect import detect_intent
+    INTENT_AVAILABLE = True
+except ImportError:
+    try:
+        from intent_detect import detect_intent
+        INTENT_AVAILABLE = True
+    except ImportError:
+        INTENT_AVAILABLE = False
+
+
+# ============================================================================
+# DEBUG SEARCH VIEW — Full Pipeline Trace
+# ============================================================================
 
 @csrf_exempt
 @require_http_methods(["GET", "POST"])
@@ -3713,15 +3789,20 @@ def debug_search_view(request):
     POST /debug/search/  { "query": "...", "alt_mode": "y", ... }
 
     Returns detailed JSON showing every stage including:
-    - Matched questions with vector distance + confidence
+    - Word discovery output with term-level detail
+    - Intent signals
+    - Query profile (entities, locations, field boosts)
     - Stage 1A document pool
-    - Stage 1B questions pool
+    - Stage 1B questions pool with vector distances
     - Overlap between both pools
-    - Full pipeline results
+    - Full pipeline results with AI overview
     """
+    if not BRIDGE_AVAILABLE:
+        return JsonResponse({"error": "typesense_discovery_bridge not available"}, status=500)
+
     t0 = time.time()
 
-    # ── Parse params ──────────────────────────────────────────────────────
+    # ── Parse params ──────────────────────────────────────────────────
     if request.method == "POST":
         try:
             body = json.loads(request.body)
@@ -3750,124 +3831,186 @@ def debug_search_view(request):
             }
         }, status=400)
 
-    # ── Imports ───────────────────────────────────────────────────────────
-    try:
-        from .typesense_discovery_bridge import (
-            execute_full_search,
-            run_parallel_prep,
-            build_query_profile,
-            fetch_candidate_uuids,
-            fetch_all_candidate_uuids,
-        )
-        from .intent_detect import detect_intent
-        INTENT_AVAILABLE = True
-    except ImportError as e:
-        return JsonResponse({"error": f"Import error: {str(e)}"}, status=500)
-
     debug  = {}
     errors = []
 
-    # ── Step 1: Word discovery + embedding ───────────────────────────────
+    # ── Step 1: Word discovery + embedding ────────────────────────────
+    discovery = {
+        "query": query, "corrected_query": query,
+        "terms": [], "ngrams": [], "corrections": [], "stats": {},
+    }
+    query_embedding = None
+
     try:
         t1 = time.time()
         discovery, query_embedding = run_parallel_prep(query, skip_embedding=False)
         debug["step1_parallel_prep_ms"] = round((time.time() - t1) * 1000, 2)
+
         debug["step1_word_discovery"] = {
             "original_query":  discovery.get("query", query),
             "corrected_query": discovery.get("corrected_query", query),
             "corrections":     discovery.get("corrections", []),
             "terms": [
                 {
+                    "position":      t.get("position"),
                     "word":          t.get("word"),
+                    "status":        t.get("status"),
                     "pos":           t.get("pos"),
+                    "predicted_pos": t.get("predicted_pos"),
                     "category":      t.get("category"),
                     "rank":          t.get("rank"),
+                    "display":       t.get("display"),
+                    "entity_type":   t.get("entity_type"),
                     "is_stopword":   t.get("is_stopword"),
                     "part_of_ngram": t.get("part_of_ngram"),
+                    "match_count":   t.get("match_count"),
+                    # Suggestion fields
+                    "suggestion":          t.get("suggestion"),
+                    "suggestion_display":  t.get("suggestion_display"),
+                    "suggestion_distance": t.get("suggestion_distance"),
+                    # Correction fields
+                    "corrected":         t.get("corrected"),
+                    "corrected_display": t.get("corrected_display"),
+                    "distance":          t.get("distance"),
                 }
                 for t in discovery.get("terms", [])
             ],
             "ngrams": [
                 {
+                    "type":     n.get("type"),
                     "phrase":   n.get("phrase"),
+                    "display":  n.get("display"),
                     "category": n.get("category"),
                     "rank":     n.get("rank"),
+                    "positions": n.get("positions"),
+                    "words":    n.get("words"),
                 }
                 for n in discovery.get("ngrams", [])
             ],
             "stats": discovery.get("stats", {}),
         }
+
         debug["step1_embedding"] = {
-            "generated":  query_embedding is not None,
-            "dims":       len(query_embedding) if query_embedding else 0,
-            "sample":     query_embedding[:5] if query_embedding else [],
-        }
-    except Exception as e:
-        errors.append(f"parallel_prep: {str(e)}")
-        query_embedding = None
-        discovery = {
-            "query": query,
-            "corrected_query": query,
-            "terms": [],
-            "ngrams": [],
-            "corrections": [],
-            "stats": {},
+            "generated": query_embedding is not None,
+            "dims":      len(query_embedding) if query_embedding else 0,
+            "sample":    query_embedding[:5] if query_embedding else [],
         }
 
-    # ── Step 2: Intent detection ──────────────────────────────────────────
+    except Exception as e:
+        errors.append(f"parallel_prep: {str(e)}")
+
+    # ── Step 2: Intent detection ──────────────────────────────────────
     signals = {}
     try:
         if INTENT_AVAILABLE:
             discovery = detect_intent(discovery)
             signals   = discovery.get("signals", {})
+
             debug["step2_intent_signals"] = {
                 "query_mode":            signals.get("query_mode"),
                 "question_word":         signals.get("question_word"),
                 "has_question_word":     signals.get("has_question_word"),
                 "wants_single_result":   signals.get("wants_single_result"),
+                "wants_multiple_results": signals.get("wants_multiple_results"),
                 "is_local_search":       signals.get("is_local_search"),
                 "local_search_strength": signals.get("local_search_strength"),
                 "has_location":          signals.get("has_location"),
+                "has_location_entity":   signals.get("has_location_entity"),
+                "has_person":            signals.get("has_person"),
+                "has_organization":      signals.get("has_organization"),
+                "has_media":             signals.get("has_media"),
                 "has_black_owned":       signals.get("has_black_owned"),
-                "temporal_direction":    signals.get("temporal_direction"),
-                "has_unknown_terms":     signals.get("has_unknown_terms"),
+                "has_service_word":      signals.get("has_service_word"),
+                "has_product_word":      signals.get("has_product_word"),
+                "has_role_word":         signals.get("has_role_word"),
                 "has_superlative":       signals.get("has_superlative"),
-                "domains_detected":      signals.get("domains_detected", []),
+                "has_temporal":          signals.get("has_temporal"),
+                "temporal_direction":    signals.get("temporal_direction"),
+                "has_price_signal":      signals.get("has_price_signal"),
+                "price_direction":       signals.get("price_direction"),
+                "has_negation":          signals.get("has_negation"),
+                "has_unknown_terms":     signals.get("has_unknown_terms"),
+                "is_comparison_query":   signals.get("is_comparison_query"),
+                "is_definition_query":   signals.get("is_definition_query"),
+                "action_type":           signals.get("action_type"),
                 "service_words":         signals.get("service_words", []),
+                "product_words":         signals.get("product_words", []),
+                "domains_detected":      signals.get("domains_detected", []),
+                "primary_domain":        signals.get("primary_domain"),
+                "signal_count":          signals.get("signal_count"),
+                "detected_entities":     signals.get("detected_entities", [])[:10],
             }
     except Exception as e:
         errors.append(f"intent_detect: {str(e)}")
 
-    # ── Step 3: Build query profile ───────────────────────────────────────
-    profile = {"search_terms": query.split(), "cities": [], "states": [], "field_boosts": {}}
+    # ── Step 3: Build query profile ───────────────────────────────────
+    # v3 MIGRATION NOTE: When word discovery v3 is active, the profile
+    # will come directly from discovery output. build_query_profile()
+    # will be removed. Check for profile in discovery first.
+    profile = {
+        "search_terms": query.split(), "cities": [], "states": [],
+        "field_boosts": {}, "location_terms": [],
+    }
+
     try:
         t3 = time.time()
-        profile = build_query_profile(discovery, signals=signals)
+
+        # v3 path: profile already in discovery output
+        if "search_terms" in discovery and "cities" in discovery and "field_boosts" in discovery:
+            profile = discovery
+            debug["step3_source"] = "word_discovery_v3_profile"
+        else:
+            # v2 path: bridge builds profile
+            profile = build_query_profile(discovery, signals=signals)
+            debug["step3_source"] = "bridge_build_query_profile"
+
         debug["step3_build_profile_ms"] = round((time.time() - t3) * 1000, 2)
+
         debug["step3_query_profile"] = {
             "primary_intent":   profile.get("primary_intent"),
             "search_terms":     profile.get("search_terms", []),
             "location_terms":   profile.get("location_terms", []),
-            "cities":           [c.get("name") for c in profile.get("cities", [])],
-            "states":           [s.get("name") for s in profile.get("states", [])],
-            "persons":          [p.get("phrase") or p.get("word") for p in profile.get("persons", [])],
-            "organizations":    [o.get("phrase") or o.get("word") for o in profile.get("organizations", [])],
-            "keywords":         [k.get("phrase") or k.get("word") for k in profile.get("keywords", [])],
+            "cities":           [c.get("name") if isinstance(c, dict) else c
+                                 for c in profile.get("cities", [])],
+            "states":           [s.get("name") if isinstance(s, dict) else s
+                                 for s in profile.get("states", [])],
+            "persons": [
+                p.get("phrase") or p.get("word")
+                for p in profile.get("persons", [])
+            ],
+            "organizations": [
+                o.get("phrase") or o.get("word")
+                for o in profile.get("organizations", [])
+            ],
+            "keywords": [
+                k.get("phrase") or k.get("word")
+                for k in profile.get("keywords", [])
+            ],
+            "media": [
+                m.get("phrase") or m.get("word")
+                for m in profile.get("media", [])
+            ],
             "has_person":       profile.get("has_person"),
             "has_organization": profile.get("has_organization"),
             "has_location":     profile.get("has_location"),
             "has_keyword":      profile.get("has_keyword"),
+            "has_media":        profile.get("has_media"),
             "field_boosts":     profile.get("field_boosts", {}),
-            "person_score":     profile.get("person_score"),
-            "keyword_score":    profile.get("keyword_score"),
-            "location_score":   profile.get("location_score"),
+            "intent_scores": {
+                "person":       profile.get("person_score", 0),
+                "organization": profile.get("organization_score", 0),
+                "location":     profile.get("location_score", 0),
+                "keyword":      profile.get("keyword_score", 0),
+                "media":        profile.get("media_score", 0),
+            },
         }
+
     except Exception as e:
         errors.append(f"build_profile: {str(e)}")
 
     corrected_query = discovery.get("corrected_query", query)
 
-    # ── Step 4A: Stage 1A — document collection ───────────────────────────
+    # ── Step 4A: Stage 1A — document collection ───────────────────────
     doc_uuids = []
     try:
         t4a = time.time()
@@ -3883,57 +4026,66 @@ def debug_search_view(request):
         errors.append(f"stage1a: {str(e)}")
         debug["step4a_error"] = str(e)
 
-    # ── Step 4B: Stage 1B — questions collection with full debug ─────────
+    # ── Step 4B: Stage 1B — questions collection ──────────────────────
     q_debug = {}
     q_uuids = []
     try:
         t4b = time.time()
         q_debug = _fetch_questions_debug(
-            profile, query_embedding, signals=signals, max_results=50
+            profile, query_embedding, signals=signals, discovery=discovery, max_results=50
         )
         q_uuids = q_debug.get("uuids", [])
         debug["step4b_stage1_questions_ms"] = round((time.time() - t4b) * 1000, 2)
         debug["step4b_stage1_questions"] = {
             "filter_used":          q_debug.get("filter_used"),
             "filter_parts":         q_debug.get("filter_parts", []),
+            "location_filter":      q_debug.get("location_filter", "none"),
+            "used_fallback":        q_debug.get("used_fallback", False),
             "primary_kws_used":     q_debug.get("primary_kws_used", []),
             "entity_names_used":    q_debug.get("entity_names_used", []),
             "semantic_kws_used":    q_debug.get("semantic_kws_used", []),
             "question_type_filter": q_debug.get("question_type_filter"),
             "total_hits":           q_debug.get("total_hits", 0),
+            "accepted":             q_debug.get("accepted", 0),
+            "rejected":             q_debug.get("rejected", 0),
             "unique_doc_uuids":     q_debug.get("unique_doc_uuids", 0),
-
-            # ── This is the key section — closest questions with distances ──
-            "matched_questions": q_debug.get("matched_questions", []),
-
-            # Error if any
-            "error": q_debug.get("error"),
+            "matched_questions":    q_debug.get("matched_questions", []),
+            "rejected_questions":   q_debug.get("rejected_questions", [])[:10],
+            "error":                q_debug.get("error"),
         }
     except Exception as e:
         errors.append(f"stage1b: {str(e)}")
         debug["step4b_error"] = str(e)
 
-    # ── Step 4C: Overlap analysis ─────────────────────────────────────────
+    # ── Step 4C: Overlap analysis ─────────────────────────────────────
     try:
         doc_set = set(doc_uuids)
         q_set   = set(q_uuids)
         overlap = doc_set & q_set
+        doc_only = doc_set - q_set
+        q_only   = q_set - doc_set
+
         debug["step4c_overlap"] = {
-            "document_pool":  len(doc_uuids),
-            "questions_pool": len(q_uuids),
-            "overlap_count":  len(overlap),
-            "overlap_uuids":  list(overlap)[:10],
-            "total_merged":   len(doc_set | q_set),
+            "document_pool":      len(doc_uuids),
+            "questions_pool":     len(q_uuids),
+            "overlap_count":      len(overlap),
+            "overlap_uuids":      list(overlap)[:10],
+            "document_only_count": len(doc_only),
+            "questions_only_count": len(q_only),
+            "total_merged":       len(doc_set | q_set),
+            "merge_order":        "overlap first → document-only → questions-only",
             "interpretation": (
                 "HIGH CONFIDENCE — same docs found by both paths"
+                if len(overlap) >= 3 else
+                "MODERATE — some overlap between paths"
                 if overlap else
-                "No overlap — paths found different documents"
+                "NO OVERLAP — paths found different documents"
             ),
         }
     except Exception as e:
         errors.append(f"overlap: {str(e)}")
 
-    # ── Step 5: Full pipeline ─────────────────────────────────────────────
+    # ── Step 5: Full pipeline ─────────────────────────────────────────
     full_result = {}
     try:
         t5 = time.time()
@@ -3947,31 +4099,42 @@ def debug_search_view(request):
             search_source=search_source,
         )
         debug["step5_full_pipeline_ms"] = round((time.time() - t5) * 1000, 2)
+        debug["step5_search_strategy"] = full_result.get("search_strategy")
+        debug["step5_semantic_enabled"] = full_result.get("semantic_enabled")
     except Exception as e:
         errors.append(f"execute_full_search: {str(e)}")
         debug["step5_error"] = str(e)
 
-    # ── Build results summary ─────────────────────────────────────────────
+    # ── Build results summary ─────────────────────────────────────────
     results_summary = []
-    for r in full_result.get("results", []):
-        results_summary.append({
+    for i, r in enumerate(full_result.get("results", [])):
+        result_entry = {
+            "rank":              i + 1,
             "title":             r.get("title"),
             "url":               r.get("url"),
             "data_type":         r.get("data_type"),
             "category":          r.get("category"),
+            "schema":            r.get("schema"),
             "authority_score":   r.get("authority_score"),
             "semantic_score":    r.get("semantic_score"),
-            "humanized_summary": r.get("humanized_summary", ""),
+            "date":              r.get("date"),
+            "source":            r.get("source"),
             "location": {
                 "city":    r.get("location", {}).get("city"),
                 "state":   r.get("location", {}).get("state"),
                 "country": r.get("location", {}).get("country"),
             },
-            "key_facts_count":  len(r.get("key_facts", [])),
-            "key_facts_sample": r.get("key_facts", []),
-        })
+            "key_facts_count":   len(r.get("key_facts", [])),
+            "key_facts":         r.get("key_facts", [])[:5],
+            "has_image":         bool(r.get("image")),
+        }
 
-    # ── Final response ────────────────────────────────────────────────────
+        if r.get("humanized_summary"):
+            result_entry["ai_overview"] = r["humanized_summary"]
+
+        results_summary.append(result_entry)
+
+    # ── Final response ────────────────────────────────────────────────
     return JsonResponse({
         "meta": {
             "query":            query,
@@ -3981,6 +4144,7 @@ def debug_search_view(request):
             "search_strategy":  full_result.get("search_strategy"),
             "semantic_enabled": full_result.get("semantic_enabled"),
             "alt_mode":         alt_mode,
+            "search_source":    search_source,
             "total_ms":         round((time.time() - t0) * 1000, 2),
         },
         "counts": {
@@ -3990,8 +4154,9 @@ def debug_search_view(request):
             "results_this_page": len(full_result.get("results", [])),
         },
         "facets": {
-            "data_types": full_result.get("data_type_facets", []),
-            "categories": full_result.get("category_facets", []),
+            "data_types":  full_result.get("data_type_facets", []),
+            "categories":  full_result.get("category_facets", []),
+            "schemas":     full_result.get("schema_facets", []),
         },
         "results":         results_summary,
         "pipeline_debug":  debug,
@@ -3999,167 +4164,50 @@ def debug_search_view(request):
         "filters_applied": full_result.get("filters_applied", {}),
         "valid_terms":     full_result.get("valid_terms", []),
         "unknown_terms":   full_result.get("unknown_terms", []),
+        "word_discovery":  full_result.get("word_discovery", {}),
+        "signals":         full_result.get("signals", {}),
         "errors":          errors if errors else None,
     }, json_dumps_params={"indent": 2})
 
-# def _fetch_questions_debug(
-#     profile: dict,
-#     query_embedding: list,
-#     signals: dict = None,
-#     max_results: int = 50,
-# ) -> dict:
-#         """
-#         Stage 1B with full debug output.
-#         Returns matched questions with vector distance, question text,
-#         answer, question_type, and the document_uuid they resolve to.
-#         """
-#         from .typesense_discovery_bridge import client
 
-#         signals = signals or {}
-
-#         if not query_embedding:
-#             return {"error": "no embedding", "hits": [], "uuids": [], "filter_used": ""}
-
-#         # ── Build facet filter (same logic as fetch_candidate_uuids_from_questions) ──
-#         filter_parts = []
-
-#         primary_kws = profile.get("primary_keywords", [])
-#         if not primary_kws:
-#             primary_kws = [
-#                 k.get("phrase") or k.get("word", "")
-#                 for k in profile.get("keywords", [])
-#             ]
-#         primary_kws = [kw for kw in primary_kws if kw][:3]
-#         if primary_kws:
-#             kw_values = ",".join([f"`{kw}`" for kw in primary_kws])
-#             filter_parts.append(f"primary_keywords:[{kw_values}]")
-
-#         entity_names = []
-#         for p in profile.get("persons", []):
-#             entity_names.append(p.get("phrase") or p.get("word", ""))
-#         for o in profile.get("organizations", []):
-#             entity_names.append(o.get("phrase") or o.get("word", ""))
-#         entity_names = [e for e in entity_names if e][:3]
-#         if entity_names:
-#             ent_values = ",".join([f"`{e}`" for e in entity_names])
-#             filter_parts.append(f"entities:[{ent_values}]")
-
-#         semantic_kws = profile.get("semantic_keywords", [])
-#         semantic_kws = [kw for kw in semantic_kws if kw][:3]
-#         if semantic_kws:
-#             sem_values = ",".join([f"`{kw}`" for kw in semantic_kws])
-#             filter_parts.append(f"semantic_keywords:[{sem_values}]")
-
-#         # ★ FIX: use `or ''` to guard against None value
-#         question_word = signals.get("question_word") or ""
-#         question_type_map = {
-#             "when":  "TEMPORAL",
-#             "where": "LOCATION",
-#             "who":   "PERSON",
-#             "what":  "FACTUAL",
-#             "which": "FACTUAL",
-#             "why":   "REASON",
-#             "how":   "PROCESS",
-#         }
-#         question_type = question_type_map.get(question_word.lower(), "")
-#         if question_type:
-#             filter_parts.append(f"question_type:={question_type}")
-
-#         filter_str = " || ".join(filter_parts) if filter_parts else ""
-
-#         embedding_str = ",".join(str(x) for x in query_embedding)
-
-#         search_params = {
-#             "q":              "*",
-#             "vector_query":   f"embedding:([{embedding_str}], k:{max_results})",
-#             "per_page":       max_results,
-#             "include_fields": "question_id,question,answer,answer_type,question_type,document_uuid,semantic_uuid,primary_keywords,entities,authority_rank_score",
-#         }
-#         if filter_str:
-#             search_params["filter_by"] = filter_str
-
-#         try:
-#             search_requests = {"searches": [{"collection": "questions", **search_params}]}
-#             response = client.multi_search.perform(search_requests, {})
-#             result = response["results"][0]
-#             hits = result.get("hits", [])
-
-#             matched_questions = []
-#             uuids = []
-#             seen = set()
-
-#             for hit in hits:
-#                 doc = hit.get("document", {})
-#                 uuid = doc.get("document_uuid")
-#                 vector_distance = hit.get("vector_distance", 1.0)
-#                 semantic_score  = round(1 - vector_distance, 4)
-
-#                 matched_questions.append({
-#                     "question":         doc.get("question", ""),
-#                     "answer":           doc.get("answer", ""),
-#                     "answer_type":      doc.get("answer_type", ""),
-#                     "question_type":    doc.get("question_type", ""),
-#                     "document_uuid":    uuid,
-#                     "semantic_uuid":    doc.get("semantic_uuid", ""),
-#                     "vector_distance":  round(vector_distance, 4),
-#                     "semantic_score":   semantic_score,
-#                     "confidence":       "HIGH" if vector_distance < 0.25 else
-#                                         "MEDIUM" if vector_distance < 0.45 else
-#                                         "LOW",
-#                     "primary_keywords": doc.get("primary_keywords", [])[:3],
-#                     "entities":         doc.get("entities", [])[:5],
-#                     "authority_rank_score": doc.get("authority_rank_score", 0),
-#                 })
-
-#                 if uuid and uuid not in seen:
-#                     seen.add(uuid)
-#                     uuids.append(uuid)
-
-#             return {
-#                 "filter_used":          filter_str or "none (full scan)",
-#                 "filter_parts":         filter_parts,
-#                 "primary_kws_used":     primary_kws,
-#                 "entity_names_used":    entity_names,
-#                 "semantic_kws_used":    semantic_kws,
-#                 "question_type_filter": question_type or "none",
-#                 "total_hits":           len(hits),
-#                 "unique_doc_uuids":     len(uuids),
-#                 "uuids":                uuids,
-#                 "matched_questions":    matched_questions,
-#             }
-
-#         except Exception as e:
-#             return {
-#                 "error":             str(e),
-#                 "filter_used":       filter_str,
-#                 "hits":              [],
-#                 "uuids":             [],
-#                 "matched_questions": [],
-#             }
+# ============================================================================
+# QUESTIONS DEBUG HELPER — Stage 1B with validation trace
+# ============================================================================
 
 def _fetch_questions_debug(
     profile: dict,
     query_embedding: list,
     signals: dict = None,
+    discovery: dict = None,
     max_results: int = 50,
 ) -> dict:
     """
-    Stage 1B with full debug output.
-    Returns matched questions with vector distance, question text,
-    answer, question_type, and the document_uuid they resolve to.
+    Stage 1B with full debug output including validation trace.
 
-    FIX: Location filter (city/state) is now AND'd onto the facet filter
-         so question hits are constrained to the detected geographic area.
-         Matches the fix applied to fetch_candidate_uuids_from_questions.
+    Returns matched questions with vector distance, question text,
+    answer, question_type, the document_uuid they resolve to,
+    and validation accept/reject reasoning.
     """
-    from .typesense_discovery_bridge import client
+    if not BRIDGE_AVAILABLE:
+        return {"error": "bridge not available", "uuids": [], "matched_questions": []}
 
     signals = signals or {}
 
     if not query_embedding:
-        return {"error": "no embedding", "hits": [], "uuids": [], "filter_used": ""}
+        return {"error": "no embedding", "uuids": [], "matched_questions": [], "filter_used": ""}
 
-    # ── Build facet filter (same logic as fetch_candidate_uuids_from_questions) ──
+    # ── Import validation function ────────────────────────────────────
+    try:
+        from .typesense_discovery_bridge import (
+            _extract_query_signals,
+            _validate_question_hit,
+            _normalize_signal,
+        )
+        VALIDATION_AVAILABLE = True
+    except ImportError:
+        VALIDATION_AVAILABLE = False
+
+    # ── Build facet filter ────────────────────────────────────────────
     filter_parts = []
 
     primary_kws = profile.get("primary_keywords", [])
@@ -4175,9 +4223,15 @@ def _fetch_questions_debug(
 
     entity_names = []
     for p in profile.get("persons", []):
-        entity_names.append(p.get("phrase") or p.get("word", ""))
+        name = p.get("phrase") or p.get("word", "")
+        rank = p.get("rank", 0)
+        if name and (" " in name or rank > 100):
+            entity_names.append(name)
     for o in profile.get("organizations", []):
-        entity_names.append(o.get("phrase") or o.get("word", ""))
+        name = o.get("phrase") or o.get("word", "")
+        rank = o.get("rank", 0)
+        if name and (" " in name or rank > 100):
+            entity_names.append(name)
     entity_names = [e for e in entity_names if e][:3]
     if entity_names:
         ent_values = ",".join([f"`{e}`" for e in entity_names])
@@ -4189,32 +4243,24 @@ def _fetch_questions_debug(
         sem_values = ",".join([f"`{kw}`" for kw in semantic_kws])
         filter_parts.append(f"semantic_keywords:[{sem_values}]")
 
-    # ★ FIX: use `or ''` to guard against None value
     question_word = signals.get("question_word") or ""
     question_type_map = {
-        "when":  "TEMPORAL",
-        "where": "LOCATION",
-        "who":   "PERSON",
-        "what":  "FACTUAL",
-        "which": "FACTUAL",
-        "why":   "REASON",
-        "how":   "PROCESS",
+        "when": "TEMPORAL", "where": "LOCATION", "who": "PERSON",
+        "what": "FACTUAL", "which": "FACTUAL", "why": "REASON", "how": "PROCESS",
     }
     question_type = question_type_map.get(question_word.lower(), "")
     if question_type:
         filter_parts.append(f"question_type:={question_type}")
 
-    # ── Location filter: enforce city/state on questions collection ────────
-    # Mirrors the fix in fetch_candidate_uuids_from_questions.
-    # Location is AND'd (hard constraint) while facet filters are OR'd.
+    # ── Location filter ───────────────────────────────────────────────
     location_filter_parts = []
 
     query_mode = signals.get("query_mode", "explore")
     is_location_subject = (
-        query_mode == "answer" and
-        signals.get("has_question_word") and
-        signals.get("question_word") in ("where",) and
-        signals.get("has_location_entity", False)
+        query_mode == "answer"
+        and signals.get("has_question_word")
+        and signals.get("question_word") in ("where",)
+        and signals.get("has_location_entity", False)
     )
 
     if not is_location_subject:
@@ -4238,9 +4284,6 @@ def _fetch_questions_debug(
             else:
                 location_filter_parts.append("(" + " || ".join(state_conditions) + ")")
 
-    # Build final filter:
-    # - Facet filters (keywords, entities, question_type) are OR'd together
-    # - Location filter is AND'd to enforce geographic constraint
     facet_filter = " || ".join(filter_parts) if filter_parts else ""
     location_filter = " && ".join(location_filter_parts) if location_filter_parts else ""
 
@@ -4251,88 +4294,124 @@ def _fetch_questions_debug(
     else:
         filter_str = facet_filter
 
+    # ── Extract validation signals ────────────────────────────────────
+    query_tokens, query_phrases, primary_subject = set(), [], None
+    if VALIDATION_AVAILABLE:
+        try:
+            query_tokens, query_phrases, primary_subject = _extract_query_signals(
+                profile, discovery=discovery
+            )
+        except Exception:
+            pass
+
+    # ── Vector search ─────────────────────────────────────────────────
     embedding_str = ",".join(str(x) for x in query_embedding)
 
     search_params = {
         "q":              "*",
-        "vector_query":   f"embedding:([{embedding_str}], k:{max_results})",
-        "per_page":       max_results,
-        "include_fields": "question_id,question,answer,answer_type,question_type,document_uuid,semantic_uuid,primary_keywords,entities,authority_rank_score",
+        "vector_query":   f"embedding:([{embedding_str}], k:{max_results * 2})",
+        "per_page":       max_results * 2,
+        "include_fields": "question_id,question,answer,answer_type,question_type,"
+                          "document_uuid,semantic_uuid,primary_keywords,entities,"
+                          "semantic_keywords,authority_rank_score",
     }
     if filter_str:
         search_params["filter_by"] = filter_str
 
     try:
         search_requests = {"searches": [{"collection": "questions", **search_params}]}
-        response = client.multi_search.perform(search_requests, {})
+        response = typesense_client.multi_search.perform(search_requests, {})
         result = response["results"][0]
         hits = result.get("hits", [])
 
-        # Fallback: if location filter returned too few hits, retry without
-        # location but keep facet filters. Then retry with no filter.
-        used_fallback = False
+        # Fallback logic
+        used_fallback = None
         if len(hits) < 5 and filter_str and location_filter:
-            # First fallback: facet filter only
             fallback_filter = facet_filter if facet_filter else ""
-            search_params_fb = {
-                "q":              "*",
-                "vector_query":   f"embedding:([{embedding_str}], k:{max_results})",
-                "per_page":       max_results,
-                "include_fields": "question_id,question,answer,answer_type,question_type,document_uuid,semantic_uuid,primary_keywords,entities,authority_rank_score",
-            }
+            search_params_fb = dict(search_params)
             if fallback_filter:
                 search_params_fb["filter_by"] = fallback_filter
+            else:
+                search_params_fb.pop("filter_by", None)
 
             search_requests_fb = {"searches": [{"collection": "questions", **search_params_fb}]}
-            response_fb = client.multi_search.perform(search_requests_fb, {})
+            response_fb = typesense_client.multi_search.perform(search_requests_fb, {})
             fallback_hits = response_fb["results"][0].get("hits", [])
 
             if len(fallback_hits) >= 5:
                 hits = fallback_hits
-                used_fallback = True
+                used_fallback = "facet_only"
             else:
-                # Second fallback: no filter at all
-                search_params_nf = {
-                    "q":              "*",
-                    "vector_query":   f"embedding:([{embedding_str}], k:{max_results})",
-                    "per_page":       max_results,
-                    "include_fields": "question_id,question,answer,answer_type,question_type,document_uuid,semantic_uuid,primary_keywords,entities,authority_rank_score",
-                }
+                search_params_nf = dict(search_params)
+                search_params_nf.pop("filter_by", None)
                 search_requests_nf = {"searches": [{"collection": "questions", **search_params_nf}]}
-                response_nf = client.multi_search.perform(search_requests_nf, {})
+                response_nf = typesense_client.multi_search.perform(search_requests_nf, {})
                 hits = response_nf["results"][0].get("hits", [])
-                used_fallback = True
+                used_fallback = "no_filter"
 
+        # ── Process hits with validation ──────────────────────────────
         matched_questions = []
+        rejected_questions = []
         uuids = []
         seen = set()
+        accepted_count = 0
+        rejected_count = 0
 
         for hit in hits:
             doc = hit.get("document", {})
             uuid = doc.get("document_uuid")
             vector_distance = hit.get("vector_distance", 1.0)
-            semantic_score  = round(1 - vector_distance, 4)
+            semantic_score = round(1 - vector_distance, 4)
 
-            matched_questions.append({
-                "question":         doc.get("question", ""),
-                "answer":           doc.get("answer", ""),
-                "answer_type":      doc.get("answer_type", ""),
-                "question_type":    doc.get("question_type", ""),
-                "document_uuid":    uuid,
-                "semantic_uuid":    doc.get("semantic_uuid", ""),
-                "vector_distance":  round(vector_distance, 4),
-                "semantic_score":   semantic_score,
-                "confidence":       "HIGH" if vector_distance < 0.25 else
-                                    "MEDIUM" if vector_distance < 0.45 else
-                                    "LOW",
-                "primary_keywords": doc.get("primary_keywords", [])[:3],
-                "entities":         doc.get("entities", [])[:5],
+            question_entry = {
+                "question":            doc.get("question", ""),
+                "answer":              doc.get("answer", ""),
+                "answer_type":         doc.get("answer_type", ""),
+                "question_type":       doc.get("question_type", ""),
+                "document_uuid":       uuid,
+                "semantic_uuid":       doc.get("semantic_uuid", ""),
+                "vector_distance":     round(vector_distance, 4),
+                "semantic_score":      semantic_score,
+                "confidence":          (
+                    "HIGH" if vector_distance < 0.25 else
+                    "MEDIUM" if vector_distance < 0.45 else
+                    "LOW"
+                ),
+                "primary_keywords":    doc.get("primary_keywords", [])[:5],
+                "entities":            doc.get("entities", [])[:5],
+                "semantic_keywords":   doc.get("semantic_keywords", [])[:5],
                 "authority_rank_score": doc.get("authority_rank_score", 0),
-            })
+            }
 
-            if uuid and uuid not in seen:
-                seen.add(uuid)
-                uuids.append(uuid)
+            # Validate
+            is_valid = True
+            if VALIDATION_AVAILABLE and query_tokens:
+                try:
+                    is_valid = _validate_question_hit(
+                        hit_doc=doc,
+                        query_tokens=query_tokens,
+                        query_phrases=query_phrases,
+                        primary_subject=primary_subject,
+                        min_matches=1,
+                    )
+                except Exception:
+                    is_valid = True
+
+            question_entry["validated"] = is_valid
+
+            if is_valid:
+                accepted_count += 1
+                matched_questions.append(question_entry)
+                if uuid and uuid not in seen:
+                    seen.add(uuid)
+                    uuids.append(uuid)
+            else:
+                rejected_count += 1
+                question_entry["rejection_reason"] = "failed signal validation"
+                rejected_questions.append(question_entry)
+
+            if len(uuids) >= max_results:
+                break
 
         return {
             "filter_used":          filter_str or "none (full scan)",
@@ -4343,10 +4422,18 @@ def _fetch_questions_debug(
             "entity_names_used":    entity_names,
             "semantic_kws_used":    semantic_kws,
             "question_type_filter": question_type or "none",
+            "validation_signals": {
+                "query_tokens":    sorted(query_tokens) if query_tokens else [],
+                "query_phrases":   query_phrases,
+                "primary_subject": sorted(primary_subject) if primary_subject else None,
+            },
             "total_hits":           len(hits),
+            "accepted":             accepted_count,
+            "rejected":             rejected_count,
             "unique_doc_uuids":     len(uuids),
             "uuids":                uuids,
             "matched_questions":    matched_questions,
+            "rejected_questions":   rejected_questions,
         }
 
     except Exception as e:
@@ -4354,534 +4441,589 @@ def _fetch_questions_debug(
             "error":             str(e),
             "filter_used":       filter_str,
             "location_filter":   location_filter or "none",
-            "hits":              [],
             "uuids":             [],
             "matched_questions": [],
+            "rejected_questions": [],
         }
 
 
-import json
-import time
-from django.http import JsonResponse
-from django.views.decorators.http import require_GET
- 
-# ── Import word discovery ────────────────────────────────────────────────
-try:
-    from .word_discovery_fulltest import (
-        WordDiscovery,
-        vocab_cache_wrapper,
-        get_fuzzy_suggestions,
-        get_fuzzy_suggestions_batch,
-        damerau_levenshtein_distance,
-        is_pos_compatible,
-        normalize_pos_string,
-        STOPWORDS,
-        GRAMMAR_RULES,
-        RAM_CACHE_AVAILABLE,
-        vocab_cache,
-    )
-    WD_AVAILABLE = True
-except ImportError:
-    try:
-        from word_discovery_fulltest import (
-            WordDiscovery,
-            vocab_cache_wrapper,
-            get_fuzzy_suggestions,
-            get_fuzzy_suggestions_batch,
-            damerau_levenshtein_distance,
-            is_pos_compatible,
-            normalize_pos_string,
-            STOPWORDS,
-            GRAMMAR_RULES,
-            RAM_CACHE_AVAILABLE,
-            vocab_cache,
-        )
-        WD_AVAILABLE = True
-    except ImportError:
-        WD_AVAILABLE = False
- 
- 
+# ============================================================================
+# DEBUG WORD DISCOVERY VIEW — Step-by-Step Trace
+# ============================================================================
+
 @require_GET
 def debug_word_discovery_view(request):
     """
     Debug endpoint that traces every step of word discovery.
- 
+
     GET /debug/word-discovery/?q=restuarants+in+atlanta
+
+    Returns step-by-step breakdown:
+    - Step 1: RAM hash lookup per word
+    - Step 2: N-gram detection with rank comparisons
+    - Step 3: POS prediction with grammar rules
+    - Step 3.5: Suffix refinement
+    - Step 4: Best match selection
+    - Step 5: Unknown word correction (Redis fuzzy)
+    - Step 6-7: Final output with profile
     """
-    query = request.GET.get('q', '').strip()
- 
+    query = request.GET.get("q", "").strip()
+
     if not query:
         return JsonResponse({
-            'error': 'Missing ?q= parameter',
-            'usage': '/debug/word-discovery/?q=restuarants+in+atlanta',
+            "error": "Missing ?q= parameter",
+            "usage": "/debug/word-discovery/?q=restuarants+in+atlanta",
         }, status=400)
- 
+
     if not WD_AVAILABLE:
-        return JsonResponse({
-            'error': 'word_discovery_fulltest not available',
-        }, status=500)
- 
+        return JsonResponse({"error": "word_discovery_fulltest not available"}, status=500)
+
     trace = {
-        'query': query,
-        'ram_cache_available': RAM_CACHE_AVAILABLE,
-        'ram_cache_loaded': bool(vocab_cache and vocab_cache.loaded) if vocab_cache else False,
-        'steps': {},
+        "query": query,
+        "ram_cache_available": RAM_CACHE_AVAILABLE,
+        "ram_cache_loaded": bool(vocab_cache and vocab_cache.loaded) if vocab_cache else False,
+        "steps": {},
     }
- 
+
     t0 = time.perf_counter()
- 
-    # ── Tokenize ─────────────────────────────────────────────────────
+
+    # ── Tokenize ──────────────────────────────────────────────────────
     words = [w.strip('?!.,;:"\'"()[]{}') for w in query.lower().split()]
     words = [w for w in words if w]
-    trace['tokens'] = words
- 
+    trace["tokens"] = words
+
+    cache = vocab_cache_wrapper
+
     # ================================================================
     # STEP 1: RAM Cache Lookup
     # ================================================================
     step1 = []
-    cache = vocab_cache_wrapper
- 
+
     for i, word in enumerate(words):
         word_lower = word.lower().strip()
-        entry = {
-            'position': i + 1,
-            'word': word_lower,
-        }
- 
-        # Check stopwords first
+        entry = {"position": i + 1, "word": word_lower}
+
         if word_lower in STOPWORDS:
-            entry['result'] = 'STOPWORD'
-            entry['pos'] = STOPWORDS[word_lower]
-            entry['matches'] = []
-            entry['match_count'] = 0
+            entry["result"] = "STOPWORD"
+            entry["pos"] = STOPWORDS[word_lower]
+            entry["matches"] = []
             step1.append(entry)
             continue
- 
-        # RAM hash lookup
+
         matches = cache.get_term_matches(word_lower)
- 
+
         if matches:
-            entry['result'] = 'FOUND'
-            entry['match_count'] = len(matches)
-            entry['matches'] = [
+            entry["result"] = "FOUND"
+            entry["match_count"] = len(matches)
+            entry["matches"] = [
                 {
-                    'term': m.get('term', ''),
-                    'category': m.get('category', ''),
-                    'pos': m.get('pos', ''),
-                    'rank': m.get('rank', 0),
-                    'entity_type': m.get('entity_type', ''),
+                    "term":        m.get("term", ""),
+                    "display":     m.get("display", ""),
+                    "category":    m.get("category", ""),
+                    "pos":         m.get("pos", ""),
+                    "rank":        m.get("rank", 0),
+                    "entity_type": m.get("entity_type", ""),
                 }
                 for m in matches
             ]
+            entry["best_by_rank"] = {
+                "term":     matches[0].get("term", ""),
+                "category": matches[0].get("category", ""),
+                "rank":     matches[0].get("rank", 0),
+            }
         else:
-            entry['result'] = 'NOT_IN_RAM'
-            entry['match_count'] = 0
-            entry['matches'] = []
- 
-            # Also check what the RAM cache has for similar words
-            # (helps debug — shows nearby entries)
-            nearby = []
-            for variant in _generate_variants(word_lower):
-                variant_matches = cache.get_term_matches(variant)
-                if variant_matches:
-                    nearby.append({
-                        'variant': variant,
-                        'distance': damerau_levenshtein_distance(word_lower, variant),
-                        'top_match': {
-                            'term': variant_matches[0].get('term', ''),
-                            'category': variant_matches[0].get('category', ''),
-                            'rank': variant_matches[0].get('rank', 0),
-                        }
-                    })
+            entry["result"] = "NOT_IN_RAM"
+            entry["match_count"] = 0
+            entry["matches"] = []
+            nearby = _find_nearby_in_ram(cache, word_lower)
             if nearby:
-                nearby.sort(key=lambda x: x['distance'])
-                entry['nearby_in_ram'] = nearby[:5]
- 
+                entry["nearby_in_ram"] = nearby[:5]
+
         step1.append(entry)
- 
-    trace['steps']['step1_ram_lookup'] = step1
- 
+
+    trace["steps"]["step1_ram_lookup"] = step1
+
     # ================================================================
-    # STEP 2: N-gram Detection
+    # STEP 2: N-gram Detection (with rank comparison trace)
     # ================================================================
-    step2 = {'ngrams_found': [], 'consumed_positions': []}
- 
-    # Check all possible n-grams
+    step2 = {"checks": [], "ngrams_found": [], "consumed_positions": []}
+
+    consumed = set()
+
     for n in [4, 3, 2]:
-        if len(words) >= n:
-            for i in range(len(words) - n + 1):
-                chunk = words[i:i + n]
-                result = cache.get_ngram(chunk)
-                if result:
-                    step2['ngrams_found'].append({
-                        'type': f'{n}-gram',
-                        'words': chunk,
-                        'positions': list(range(i + 1, i + n + 1)),
-                        'term': result.get('term', ''),
-                        'category': result.get('category', ''),
-                        'pos': normalize_pos_string(result.get('pos', '')),
-                        'rank': result.get('rank', 0),
+        if len(words) < n:
+            continue
+        for i in range(len(words) - n + 1):
+            if any(p in consumed for p in range(i, i + n)):
+                continue
+
+            chunk = words[i:i + n]
+            ngram_type = {4: "quadgram", 3: "trigram", 2: "bigram"}[n]
+
+            result = cache.get_ngram(chunk)
+
+            check_entry = {
+                "type":     ngram_type,
+                "words":    chunk,
+                "positions": list(range(i + 1, i + n + 1)),
+                "found":    result is not None,
+            }
+
+            if result:
+                ngram_rank = result.get("rank", 0)
+                ngram_category = result.get("category", "")
+
+                # Get individual word best ranks for comparison
+                individual_ranks = []
+                for j in range(i, i + n):
+                    word_matches = step1[j].get("matches", [])
+                    best_rank = word_matches[0].get("rank", 0) if word_matches else 0
+                    individual_ranks.append({
+                        "word": words[j],
+                        "best_rank": best_rank,
                     })
- 
-    trace['steps']['step2_ngrams'] = step2
- 
+
+                max_individual = max(ir["best_rank"] for ir in individual_ranks)
+
+                check_entry["ngram_rank"] = ngram_rank
+                check_entry["ngram_category"] = ngram_category
+                check_entry["ngram_display"] = result.get("display", "")
+                check_entry["individual_ranks"] = individual_ranks
+                check_entry["max_individual_rank"] = max_individual
+                check_entry["rank_comparison"] = (
+                    f"ngram({ngram_rank}) vs max_individual({max_individual})"
+                )
+
+                # v2 behavior: auto-consume (always wins)
+                # v3 will compare ranks here
+                check_entry["consumed"] = True
+                check_entry["reason"] = "v2: auto-consume (v3 will compare ranks)"
+
+                positions = list(range(i, i + n))
+                consumed.update(positions)
+
+                step2["ngrams_found"].append({
+                    "type":     ngram_type,
+                    "words":    chunk,
+                    "positions": list(range(i + 1, i + n + 1)),
+                    "term":     result.get("term", ""),
+                    "display":  result.get("display", ""),
+                    "category": ngram_category,
+                    "pos":      normalize_pos_string(result.get("pos", "")),
+                    "rank":     ngram_rank,
+                })
+
+            step2["checks"].append(check_entry)
+
+    step2["consumed_positions"] = sorted(p + 1 for p in consumed)
+    trace["steps"]["step2_ngrams"] = step2
+
     # ================================================================
-    # STEP 3: POS Prediction (Grammar Rules)
+    # STEP 3: POS Prediction
     # ================================================================
     step3 = []
- 
+
     for i, word_info in enumerate(step1):
-        word = word_info['word']
-        pos_entry = {
-            'position': i + 1,
-            'word': word,
-        }
- 
-        if word_info['result'] == 'STOPWORD':
-            pos_entry['predicted_pos'] = word_info['pos']
-            pos_entry['source'] = 'stopword'
-            pos_entry['left'] = None
-            pos_entry['right'] = None
+        word = word_info["word"]
+        pos_entry = {"position": i + 1, "word": word}
+
+        if word_info["result"] == "STOPWORD":
+            pos_entry["predicted_pos"] = word_info["pos"]
+            pos_entry["source"] = "stopword"
             step3.append(pos_entry)
             continue
- 
+
         # Get left neighbor POS
-        left_pos = 'start' if i == 0 else None
+        left_pos = "start" if i == 0 else None
         if left_pos is None:
             for j in range(i - 1, -1, -1):
                 prev = step1[j]
-                if prev['result'] == 'STOPWORD':
-                    left_pos = prev['pos']
+                if prev["result"] == "STOPWORD":
+                    left_pos = prev["pos"]
                     break
-                elif prev['matches']:
-                    left_pos = normalize_pos_string(prev['matches'][0].get('pos', ''))
+                elif prev["matches"]:
+                    left_pos = normalize_pos_string(prev["matches"][0].get("pos", ""))
                     break
- 
+
         # Get right neighbor POS
-        right_pos = 'end' if i == len(step1) - 1 else None
+        right_pos = "end" if i == len(step1) - 1 else None
         if right_pos is None:
             for j in range(i + 1, len(step1)):
                 nxt = step1[j]
-                if nxt['result'] == 'STOPWORD':
-                    right_pos = nxt['pos']
+                if nxt["result"] == "STOPWORD":
+                    right_pos = nxt["pos"]
                     break
-                elif nxt['matches']:
-                    right_pos = normalize_pos_string(nxt['matches'][0].get('pos', ''))
+                elif nxt["matches"]:
+                    right_pos = normalize_pos_string(nxt["matches"][0].get("pos", ""))
                     break
- 
-        pos_entry['left'] = left_pos
-        pos_entry['right'] = right_pos
- 
-        # Look up grammar rule
+
+        pos_entry["left_neighbor"] = left_pos
+        pos_entry["right_neighbor"] = right_pos
+        pos_entry["context"] = f"[{left_pos or '???'}] _{word}_ [{right_pos or '???'}]"
+
         predicted = None
         rule_used = None
- 
+
         if left_pos and right_pos:
             predicted = GRAMMAR_RULES.get((left_pos, right_pos))
             if predicted:
-                rule_used = f'({left_pos}, {right_pos})'
- 
+                rule_used = f"({left_pos}, {right_pos})"
+
         if not predicted and left_pos:
             predicted = GRAMMAR_RULES.get((left_pos, None))
             if predicted:
-                rule_used = f'({left_pos}, None)'
- 
+                rule_used = f"({left_pos}, None)"
+
         if not predicted and right_pos:
             predicted = GRAMMAR_RULES.get((None, right_pos))
             if predicted:
-                rule_used = f'(None, {right_pos})'
- 
+                rule_used = f"(None, {right_pos})"
+
         if not predicted:
-            predicted = [('noun', 0.75)]
-            rule_used = 'default (no rule matched)'
- 
-        pos_entry['predicted_pos_list'] = predicted
-        pos_entry['predicted_pos'] = predicted[0][0] if predicted else 'noun'
-        pos_entry['rule_used'] = rule_used
- 
+            predicted = [("noun", 0.75)]
+            rule_used = "default (no rule matched)"
+
+        pos_entry["predicted_pos_list"] = predicted
+        pos_entry["predicted_pos"] = predicted[0][0] if predicted else "noun"
+        pos_entry["rule_used"] = rule_used
+
         step3.append(pos_entry)
- 
-    trace['steps']['step3_pos_prediction'] = step3
- 
+
+    trace["steps"]["step3_pos_prediction"] = step3
+
     # ================================================================
     # STEP 3.5: Suffix Refinement
     # ================================================================
     step3_5 = []
- 
     SUFFIX_POS_RULES = WordDiscovery.SUFFIX_POS_RULES
     SUFFIX_EXCEPTIONS = WordDiscovery.SUFFIX_EXCEPTIONS
     MIN_LEN = WordDiscovery.MIN_SUFFIX_WORD_LENGTH
- 
     sorted_suffixes = sorted(SUFFIX_POS_RULES.keys(), key=len, reverse=True)
- 
+
     for i, word_info in enumerate(step1):
-        word = word_info['word']
- 
-        if word_info['result'] == 'STOPWORD':
+        word = word_info["word"]
+        if word_info["result"] == "STOPWORD":
             continue
- 
-        suffix_entry = {
-            'position': i + 1,
-            'word': word,
-        }
- 
+
+        suffix_entry = {"position": i + 1, "word": word}
+
         if len(word) < MIN_LEN:
-            suffix_entry['result'] = 'too_short'
+            suffix_entry["result"] = "too_short"
             step3_5.append(suffix_entry)
             continue
- 
+
         if word in SUFFIX_EXCEPTIONS:
-            suffix_entry['result'] = 'exception'
+            suffix_entry["result"] = "exception"
             step3_5.append(suffix_entry)
             continue
- 
+
         matched_suffix = None
         for suffix in sorted_suffixes:
             if word.endswith(suffix) and len(word) > len(suffix) + 1:
                 matched_suffix = suffix
                 break
- 
+
         if matched_suffix:
-            suffix_entry['matched_suffix'] = matched_suffix
-            suffix_entry['suffix_predictions'] = SUFFIX_POS_RULES[matched_suffix]
-            suffix_entry['result'] = 'refined'
+            suffix_entry["matched_suffix"] = matched_suffix
+            suffix_entry["suffix_predictions"] = SUFFIX_POS_RULES[matched_suffix]
+            suffix_entry["result"] = "refined"
         else:
-            suffix_entry['result'] = 'no_suffix_match'
- 
+            suffix_entry["result"] = "no_suffix_match"
+
         step3_5.append(suffix_entry)
- 
-    trace['steps']['step3_5_suffix'] = step3_5
- 
+
+    trace["steps"]["step3_5_suffix"] = step3_5
+
     # ================================================================
     # STEP 4: Best Match Selection
     # ================================================================
     step4 = []
- 
+
     for i, word_info in enumerate(step1):
-        word = word_info['word']
- 
-        if word_info['result'] == 'STOPWORD':
+        word = word_info["word"]
+        if word_info["result"] == "STOPWORD":
             continue
- 
-        match_entry = {
-            'position': i + 1,
-            'word': word,
-        }
- 
-        if word_info['result'] == 'NOT_IN_RAM':
-            match_entry['result'] = 'UNKNOWN — deferred to Step 5'
-            match_entry['selected'] = None
+
+        match_entry = {"position": i + 1, "word": word}
+
+        if word_info["result"] == "NOT_IN_RAM":
+            match_entry["result"] = "UNKNOWN — deferred to Step 5"
+            match_entry["selected"] = None
             step4.append(match_entry)
             continue
- 
-        matches = word_info['matches']
-        predicted_pos = step3[i]['predicted_pos'] if i < len(step3) else 'noun'
-        match_entry['predicted_pos'] = predicted_pos
- 
-        # Filter by POS compatibility
+
+        matches = word_info["matches"]
+        predicted_pos = step3[i]["predicted_pos"] if i < len(step3) else "noun"
+        match_entry["predicted_pos"] = predicted_pos
+
         compatible = []
         incompatible = []
         for m in matches:
-            match_pos = normalize_pos_string(m['pos'])
+            match_pos = normalize_pos_string(m["pos"])
             if is_pos_compatible(match_pos, predicted_pos):
                 compatible.append(m)
             else:
                 incompatible.append(m)
- 
-        match_entry['compatible_matches'] = compatible
-        match_entry['incompatible_matches'] = [
+
+        match_entry["compatible_count"] = len(compatible)
+        match_entry["incompatible_count"] = len(incompatible)
+        match_entry["incompatible"] = [
             f"{m['category']}({normalize_pos_string(m['pos'])})" for m in incompatible
         ]
- 
+
         if compatible:
-            # Sort by rank, pick best
-            compatible.sort(key=lambda x: x['rank'], reverse=True)
-            match_entry['selected'] = compatible[0]
-            match_entry['result'] = 'SELECTED (POS compatible)'
+            compatible.sort(key=lambda x: x["rank"], reverse=True)
+            match_entry["selected"] = compatible[0]
+            match_entry["result"] = "SELECTED (POS compatible)"
         elif matches:
-            match_entry['selected'] = matches[0]
-            match_entry['result'] = 'FALLBACK (no POS match, using highest rank)'
+            match_entry["selected"] = matches[0]
+            match_entry["result"] = "FALLBACK (no POS match, using highest rank)"
         else:
-            match_entry['selected'] = None
-            match_entry['result'] = 'NO MATCHES'
- 
+            match_entry["selected"] = None
+            match_entry["result"] = "NO MATCHES"
+
         step4.append(match_entry)
- 
-    trace['steps']['step4_match_selection'] = step4
- 
+
+    trace["steps"]["step4_match_selection"] = step4
+
     # ================================================================
-    # STEP 5: Unknown Word Correction (Redis Fuzzy Search)
+    # STEP 5: Unknown Word Correction (Redis Fuzzy)
     # ================================================================
     step5 = {
-        'unknowns': [],
-        'pos_mismatches': [],
-        'redis_calls': [],
-        'corrections': [],
+        "unknowns": [],
+        "words_sent_to_redis": [],
+        "corrections": [],
+        "outcome": None,
     }
- 
+
     unknown_words = []
     for i, word_info in enumerate(step1):
-        if word_info['result'] == 'NOT_IN_RAM':
-            predicted_pos = step3[i]['predicted_pos'] if i < len(step3) else 'noun'
+        if word_info["result"] == "NOT_IN_RAM":
+            predicted_pos = step3[i]["predicted_pos"] if i < len(step3) else "noun"
             unknown_words.append({
-                'position': i + 1,
-                'word': word_info['word'],
-                'predicted_pos': predicted_pos,
+                "position": i + 1,
+                "word": word_info["word"],
+                "predicted_pos": predicted_pos,
             })
- 
-    step5['unknowns'] = unknown_words
- 
+
+    step5["unknowns"] = unknown_words
+
     if unknown_words:
-        words_to_fetch = [u['word'] for u in unknown_words]
-        step5['words_sent_to_redis'] = words_to_fetch
- 
-        # Call the actual batch function
+        words_to_fetch = [u["word"] for u in unknown_words]
+        step5["words_sent_to_redis"] = words_to_fetch
+
         try:
             t_redis = time.perf_counter()
             batch_results = get_fuzzy_suggestions_batch(
                 words_to_fetch, limit=10, max_distance=2
             )
-            redis_time = (time.perf_counter() - t_redis) * 1000
-            step5['redis_time_ms'] = round(redis_time, 2)
- 
+            step5["redis_time_ms"] = round((time.perf_counter() - t_redis) * 1000, 2)
+
             for u in unknown_words:
-                word = u['word']
-                predicted_pos = u['predicted_pos']
+                word = u["word"]
+                predicted_pos = u["predicted_pos"]
                 suggestions = batch_results.get(word.lower().strip(), [])
- 
+
                 word_result = {
-                    'word': word,
-                    'position': u['position'],
-                    'predicted_pos': predicted_pos,
-                    'total_suggestions': len(suggestions),
-                    'suggestions': [],
+                    "word": word,
+                    "position": u["position"],
+                    "predicted_pos": predicted_pos,
+                    "total_suggestions": len(suggestions),
+                    "suggestions": [
+                        {
+                            "term":           s["term"],
+                            "category":       s.get("category", ""),
+                            "pos":            normalize_pos_string(s.get("pos", "unknown")),
+                            "rank":           s.get("rank", 0),
+                            "distance":       s.get("distance", 99),
+                            "pos_compatible": is_pos_compatible(
+                                normalize_pos_string(s.get("pos", "unknown")),
+                                predicted_pos,
+                            ),
+                        }
+                        for s in suggestions[:10]
+                    ],
                 }
- 
-                for s in suggestions[:10]:
-                    s_pos = normalize_pos_string(s.get('pos', 'unknown'))
-                    compatible = is_pos_compatible(s_pos, predicted_pos)
-                    word_result['suggestions'].append({
-                        'term': s['term'],
-                        'category': s.get('category', ''),
-                        'pos': s_pos,
-                        'rank': s.get('rank', 0),
-                        'distance': s.get('distance', 99),
-                        'pos_compatible': compatible,
-                    })
- 
-                # What would Step 5 do with this?
+
                 compatible_suggestions = [
                     s for s in suggestions
                     if is_pos_compatible(
-                        normalize_pos_string(s.get('pos', 'unknown')),
-                        predicted_pos
+                        normalize_pos_string(s.get("pos", "unknown")),
+                        predicted_pos,
                     )
                 ]
- 
+
                 if compatible_suggestions:
                     best = compatible_suggestions[0]
-                    word_result['best_compatible'] = {
-                        'term': best['term'],
-                        'distance': best.get('distance', 99),
-                        'rank': best.get('rank', 0),
-                        'pos': normalize_pos_string(best.get('pos', '')),
-                        'category': best.get('category', ''),
+                    word_result["best_compatible"] = {
+                        "term":     best["term"],
+                        "display":  best.get("display", best["term"]),
+                        "distance": best.get("distance", 99),
+                        "rank":     best.get("rank", 0),
+                        "pos":      normalize_pos_string(best.get("pos", "")),
+                        "category": best.get("category", ""),
                     }
-                    word_result['outcome'] = (
+                    word_result["outcome"] = (
                         f"SUGGESTION: '{best['term']}' "
-                        f"(distance={best.get('distance', '?')}, rank={best.get('rank', 0)})"
+                        f"(distance={best.get('distance', '?')}, rank={best.get('rank', 0)}, "
+                        f"pos={normalize_pos_string(best.get('pos', ''))})"
                     )
                 elif suggestions:
                     best = suggestions[0]
-                    word_result['best_any'] = {
-                        'term': best['term'],
-                        'distance': best.get('distance', 99),
-                        'rank': best.get('rank', 0),
-                        'pos': normalize_pos_string(best.get('pos', '')),
+                    word_result["best_any"] = {
+                        "term":     best["term"],
+                        "distance": best.get("distance", 99),
+                        "rank":     best.get("rank", 0),
+                        "pos":      normalize_pos_string(best.get("pos", "")),
                     }
-                    word_result['outcome'] = (
+                    word_result["outcome"] = (
                         f"SUGGESTION (no POS match): '{best['term']}' "
                         f"(distance={best.get('distance', '?')})"
                     )
                 else:
-                    word_result['outcome'] = 'NO SUGGESTIONS — word stays as-is'
- 
-                step5['corrections'].append(word_result)
- 
+                    word_result["outcome"] = "NO SUGGESTIONS — word stays as-is"
+
+                step5["corrections"].append(word_result)
+
         except Exception as e:
-            step5['redis_error'] = str(e)
+            step5["redis_error"] = str(e)
     else:
-        step5['outcome'] = 'No unknown words — Step 5 skipped'
- 
-    trace['steps']['step5_corrections'] = step5
- 
+        step5["outcome"] = "No unknown words — Step 5 skipped"
+
+    trace["steps"]["step5_corrections"] = step5
+
     # ================================================================
-    # STEP 6 & 7: Run the full pipeline for comparison
+    # STEP 6-7: Full pipeline output
     # ================================================================
     try:
         wd = WordDiscovery(verbose=False)
         t_full = time.perf_counter()
         full_output = wd.process(query)
         full_time = (time.perf_counter() - t_full) * 1000
- 
-        trace['steps']['step7_final_output'] = {
-            'corrected_query': full_output.get('corrected_query', ''),
-            'processing_time_ms': round(full_time, 2),
-            'stats': full_output.get('stats', {}),
-            'corrections': full_output.get('corrections', []),
-            'terms': [
+
+        trace["steps"]["step7_final_output"] = {
+            "corrected_query":    full_output.get("corrected_query", ""),
+            "processing_time_ms": round(full_time, 2),
+            "stats":              full_output.get("stats", {}),
+            "corrections":        full_output.get("corrections", []),
+            "terms": [
                 {
-                    'position': t.get('position'),
-                    'word': t.get('word'),
-                    'status': t.get('status'),
-                    'pos': t.get('pos'),
-                    'predicted_pos': t.get('predicted_pos'),
-                    'category': t.get('category', ''),
-                    'rank': t.get('rank', 0),
-                    'display': t.get('display', ''),
-                    'is_stopword': t.get('is_stopword', False),
-                    'part_of_ngram': t.get('part_of_ngram', False),
-                    'match_count': t.get('match_count', 0),
-                    # Suggestion fields (if present)
-                    'suggestion': t.get('suggestion'),
-                    'suggestion_display': t.get('suggestion_display'),
-                    'suggestion_distance': t.get('suggestion_distance'),
-                    # Corrected fields (if present)
-                    'corrected': t.get('corrected'),
-                    'corrected_display': t.get('corrected_display'),
-                    'distance': t.get('distance'),
+                    "position":      t.get("position"),
+                    "word":          t.get("word"),
+                    "status":        t.get("status"),
+                    "pos":           t.get("pos"),
+                    "predicted_pos": t.get("predicted_pos"),
+                    "category":      t.get("category", ""),
+                    "rank":          t.get("rank", 0),
+                    "display":       t.get("display", ""),
+                    "entity_type":   t.get("entity_type", ""),
+                    "is_stopword":   t.get("is_stopword", False),
+                    "part_of_ngram": t.get("part_of_ngram", False),
+                    "match_count":   t.get("match_count", 0),
+                    "suggestion":          t.get("suggestion"),
+                    "suggestion_display":  t.get("suggestion_display"),
+                    "suggestion_distance": t.get("suggestion_distance"),
+                    "corrected":         t.get("corrected"),
+                    "corrected_display": t.get("corrected_display"),
+                    "distance":          t.get("distance"),
                 }
-                for t in full_output.get('terms', [])
+                for t in full_output.get("terms", [])
             ],
-            'ngrams': full_output.get('ngrams', []),
+            "ngrams": full_output.get("ngrams", []),
         }
+
+        # v3 MIGRATION: Show profile if present in output
+        if "search_terms" in full_output and "cities" in full_output:
+            trace["steps"]["step7_v3_profile"] = {
+                "search_terms":  full_output.get("search_terms", []),
+                "cities":        full_output.get("cities", []),
+                "states":        full_output.get("states", []),
+                "persons":       full_output.get("persons", []),
+                "organizations": full_output.get("organizations", []),
+                "keywords":      full_output.get("keywords", []),
+                "media":         full_output.get("media", []),
+                "primary_intent": full_output.get("primary_intent"),
+                "field_boosts":  full_output.get("field_boosts", {}),
+            }
+
     except Exception as e:
-        trace['steps']['step7_final_output'] = {'error': str(e)}
- 
+        trace["steps"]["step7_final_output"] = {"error": str(e)}
+
+    # ── Intent detection trace ────────────────────────────────────────
+    if INTENT_AVAILABLE:
+        try:
+            full_output_copy = dict(full_output) if 'full_output' in dir() else {}
+            if full_output_copy:
+                intent_result = detect_intent(full_output_copy)
+                sigs = intent_result.get("signals", {})
+                trace["steps"]["intent_detection"] = {
+                    "query_mode":            sigs.get("query_mode"),
+                    "question_word":         sigs.get("question_word"),
+                    "wants_single_result":   sigs.get("wants_single_result"),
+                    "wants_multiple_results": sigs.get("wants_multiple_results"),
+                    "is_local_search":       sigs.get("is_local_search"),
+                    "local_search_strength": sigs.get("local_search_strength"),
+                    "has_location":          sigs.get("has_location"),
+                    "has_person":            sigs.get("has_person"),
+                    "has_organization":      sigs.get("has_organization"),
+                    "has_service_word":      sigs.get("has_service_word"),
+                    "has_product_word":      sigs.get("has_product_word"),
+                    "has_superlative":       sigs.get("has_superlative"),
+                    "has_temporal":          sigs.get("has_temporal"),
+                    "temporal_direction":    sigs.get("temporal_direction"),
+                    "has_price_signal":      sigs.get("has_price_signal"),
+                    "has_black_owned":       sigs.get("has_black_owned"),
+                    "has_unknown_terms":     sigs.get("has_unknown_terms"),
+                    "domains_detected":      sigs.get("domains_detected", []),
+                    "primary_domain":        sigs.get("primary_domain"),
+                    "signal_count":          sigs.get("signal_count"),
+                    "detected_entities":     sigs.get("detected_entities", [])[:8],
+                }
+        except Exception as e:
+            trace["steps"]["intent_detection"] = {"error": str(e)}
+
     total_time = (time.perf_counter() - t0) * 1000
-    trace['total_debug_time_ms'] = round(total_time, 2)
- 
-    return JsonResponse(trace, json_dumps_params={'indent': 2})
- 
- 
-def _generate_variants(word: str) -> list:
+    trace["total_debug_time_ms"] = round(total_time, 2)
+
+    return JsonResponse(trace, json_dumps_params={"indent": 2})
+
+
+# ============================================================================
+# HELPERS
+# ============================================================================
+
+def _find_nearby_in_ram(cache, word: str) -> list:
     """
-    Generate common typo variants of a word to check in RAM cache.
-    This helps the debug output show what IS in the cache near the misspelling.
+    Generate common typo variants and check RAM cache.
+    Helps debug output show what IS in the cache near a misspelling.
     """
+    nearby = []
     variants = set()
- 
-    # Adjacent transpositions (Damerau)
+
+    # Adjacent transpositions
     for i in range(len(word) - 1):
         swapped = list(word)
         swapped[i], swapped[i + 1] = swapped[i + 1], swapped[i]
-        variants.add(''.join(swapped))
- 
+        variants.add("".join(swapped))
+
     # Single character deletions
     for i in range(len(word)):
         variants.add(word[:i] + word[i + 1:])
- 
-    # Remove the original word
+
     variants.discard(word)
- 
-    return sorted(variants)
+
+    for variant in sorted(variants):
+        variant_matches = cache.get_term_matches(variant)
+        if variant_matches:
+            nearby.append({
+                "variant":  variant,
+                "distance": damerau_levenshtein_distance(word, variant),
+                "top_match": {
+                    "term":     variant_matches[0].get("term", ""),
+                    "category": variant_matches[0].get("category", ""),
+                    "rank":     variant_matches[0].get("rank", 0),
+                },
+            })
+
+    nearby.sort(key=lambda x: x["distance"])
+    return nearby
