@@ -3699,7 +3699,6 @@ def contact(request):
 
 
 
-
 # ============================================================================
 # DEBUG VIEWS — debug_views.py
 # ============================================================================
@@ -4695,10 +4694,20 @@ def debug_word_discovery_view(request):
     # STEP 3.5: Suffix Refinement
     # ================================================================
     step3_5 = []
-    SUFFIX_POS_RULES = WordDiscovery.SUFFIX_POS_RULES
-    SUFFIX_EXCEPTIONS = WordDiscovery.SUFFIX_EXCEPTIONS
-    MIN_LEN = WordDiscovery.MIN_SUFFIX_WORD_LENGTH
-    sorted_suffixes = sorted(SUFFIX_POS_RULES.keys(), key=len, reverse=True)
+
+    # SUFFIX_POS_RULES etc. are defined inline in the class body.
+    # Access via an instance to be safe, with fallback.
+    try:
+        _wd_instance = WordDiscovery(verbose=False)
+        SUFFIX_POS_RULES = _wd_instance.SUFFIX_POS_RULES
+        SUFFIX_EXCEPTIONS = _wd_instance.SUFFIX_EXCEPTIONS
+        MIN_LEN = _wd_instance.MIN_SUFFIX_WORD_LENGTH
+    except AttributeError:
+        SUFFIX_POS_RULES = {}
+        SUFFIX_EXCEPTIONS = frozenset()
+        MIN_LEN = 4
+
+    sorted_suffixes = sorted(SUFFIX_POS_RULES.keys(), key=len, reverse=True) if SUFFIX_POS_RULES else []
 
     for i, word_info in enumerate(step1):
         word = word_info["word"]
