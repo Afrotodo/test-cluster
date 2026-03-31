@@ -6308,20 +6308,43 @@ class WordDiscovery:
             print("-" * 70)
 
         # --- Helper: find nearest known POS in a direction ---
+        # def get_nearest_known_pos(index: int, direction: int) -> Optional[str]:
+        #     i = index + direction
+        #     while 0 <= i < len(word_data):
+        #         wd = word_data[i]
+        #         if wd['is_stopword']:
+        #             return wd['pos']
+        #         if wd.get('pos'):
+        #             return wd['pos']
+        #         if wd.get('predicted_pos'):
+        #             return wd['predicted_pos']
+        #         if wd['all_matches']:
+        #             return normalize_pos_string(wd['all_matches'][0]['pos'])
+        #         i += direction
+        #     return None
+        
+        # --- ISSUE 1 FIX: Pre-populate resolved set with stopword indices ---
+        resolved = set()
+        for i, wd in enumerate(word_data):
+            if wd['is_stopword']:
+                resolved.add(i)
+
+        # --- Helper: find nearest known POS in a direction ---
+        # Only returns POS from words already in `resolved`.
         def get_nearest_known_pos(index: int, direction: int) -> Optional[str]:
             i = index + direction
             while 0 <= i < len(word_data):
-                wd = word_data[i]
-                if wd['is_stopword']:
-                    return wd['pos']
-                if wd.get('pos'):
-                    return wd['pos']
-                if wd.get('predicted_pos'):
-                    return wd['predicted_pos']
-                if wd['all_matches']:
-                    return normalize_pos_string(wd['all_matches'][0]['pos'])
+                if i in resolved:
+                    wd = word_data[i]
+                    if wd['is_stopword']:
+                        return wd['pos']
+                    if wd.get('pos'):
+                        return wd['pos']
+                    if wd.get('predicted_pos'):
+                        return wd['predicted_pos']
                 i += direction
             return None
+        
 
         # --- Helper: apply suffix refinement to POS predictions ---
         def apply_suffix_refinement(word: str, current_list: List[Tuple[str, float]]) -> List[Tuple[str, float]]:
@@ -6485,8 +6508,9 @@ class WordDiscovery:
             return True
 
         # --- Multi-pass loop ---
+        # max_passes = len(word_data)
+        # resolved = set()
         max_passes = len(word_data)
-        resolved = set()
 
         for pass_num in range(max_passes):
             progress = False
