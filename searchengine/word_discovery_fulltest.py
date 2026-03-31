@@ -7739,6 +7739,2180 @@
 # if __name__ == "__main__":
 #     main()
 
+# """
+# word_discovery_v3.py
+# ====================
+# Word Discovery v3 — Complete profile builder.
+
+# Returns a COMPLETE profile with all entity classification, location
+# detection, and search term routing done. The bridge takes the profile
+# and builds Typesense params — no re-analysis.
+
+# PIPELINE (6 Steps):
+#     Step 1: Tokenize + RAM Hash Lookup + Inline Triggers
+#     Step 2: Context-Aware N-gram Resolution (rank comparison + signals)
+#     Step 3: POS Determination + Best Match Selection (merged from v2 3, 3.5, 4)
+#     Step 4: Batch Correct Unknowns (Redis fuzzy — only Redis step)
+#     Step 5: Re-check N-grams After Correction
+#     Step 6: Build Complete Profile (entities, locations, search terms, boosts)
+
+# TWO ARRAYS maintained throughout:
+#     query_array     — never changes. What the user typed. Used for search.
+#     corrected_array — updated when Step 4 finds corrections. "did you mean?"
+
+# PERFORMANCE:
+#     Steps 1-3, 5-6: RAM only (~0.01ms per lookup)
+#     Step 4: Redis only for unknown words (~50ms per correction)
+#     Typical query (no typos): ~1-3ms
+#     Query with 1-2 typos: ~50-100ms
+
+# WORD STATUS GUIDE:
+#     'resolved'       - found in RAM hash, match selected
+#     'stopword'       - recognized stopword with known POS
+#     'unknown'        - not in RAM hash, no fuzzy suggestion found;
+#                        original word passed through as-is
+#     'unknown_suggest'- not in RAM hash, fuzzy suggestion available;
+#                        original word KEPT for search, suggestion shown
+#                        as "did you mean?" hint only
+#     'pos_corrected'  - found in RAM hash but wrong POS; replaced with
+#                        a better-fitting word (genuine typo path)
+#     'corrected'      - was NOT in RAM hash but IS a genuine typo;
+#                        word has been replaced for the search
+#                        NOTE: currently unused — kept for forward compat
+# """
+
+# import json
+# import time
+# import redis
+# from typing import Dict, Any, List, Optional, Tuple, Set
+# from decouple import config
+
+
+# # =============================================================================
+# # CONFIGURATION
+# # =============================================================================
+
+# REDIS_LOCATION = config('REDIS_LOCATION')
+# REDIS_PORT = config('REDIS_PORT', cast=int)
+# REDIS_DB = config('REDIS_DB', default=0, cast=int)
+# REDIS_PASSWORD = config('REDIS_PASSWORD', default='')
+# REDIS_USERNAME = config('REDIS_USERNAME', default='')
+
+# # N-gram rank boost multiplier for location n-grams when location_context is set
+# NGRAM_LOCATION_BOOST = 1.5
+
+
+# # =============================================================================
+# # REDIS CONNECTION (Only for spelling correction — Step 4)
+# # =============================================================================
+
+# class RedisClient:
+#     """Redis client for spelling correction only."""
+
+#     _client: Optional[redis.Redis] = None
+
+#     @classmethod
+#     def get_client(cls) -> Optional[redis.Redis]:
+#         if cls._client is not None:
+#             try:
+#                 cls._client.ping()
+#                 return cls._client
+#             except (redis.ConnectionError, redis.TimeoutError):
+#                 cls._client = None
+
+#         try:
+#             redis_config = {
+#                 'host': REDIS_LOCATION,
+#                 'port': REDIS_PORT,
+#                 'db': REDIS_DB,
+#                 'decode_responses': True,
+#                 'socket_connect_timeout': 5,
+#                 'socket_timeout': 5,
+#             }
+
+#             if REDIS_PASSWORD:
+#                 redis_config['password'] = REDIS_PASSWORD
+#             if REDIS_USERNAME:
+#                 redis_config['username'] = REDIS_USERNAME
+
+#             cls._client = redis.Redis(**redis_config)
+#             cls._client.ping()
+#             return cls._client
+
+#         except Exception as e:
+#             print(f"Redis connection error: {e}")
+#             return None
+
+
+# # =============================================================================
+# # RAM CACHE — Uses vocabulary_cache.py singleton
+# # =============================================================================
+
+# try:
+#     from .vocabulary_cache import vocab_cache
+#     RAM_CACHE_AVAILABLE = True
+#     print("✅ vocab_cache imported from .vocabulary_cache (RAM)")
+# except ImportError:
+#     try:
+#         from vocabulary_cache import vocab_cache
+#         RAM_CACHE_AVAILABLE = True
+#         print("✅ vocab_cache imported from vocabulary_cache (RAM)")
+#     except ImportError:
+#         RAM_CACHE_AVAILABLE = False
+#         vocab_cache = None
+#         print("⚠️ vocabulary_cache not available — falling back to Redis for all lookups")
+
+
+# class VocabCache:
+#     """
+#     RAM-based vocabulary cache wrapper.
+
+#     Uses vocab_cache singleton from vocabulary_cache.py for O(1) lookups.
+#     Falls back to Redis if RAM cache is not available.
+#     """
+
+#     def __init__(self):
+#         self._ram = vocab_cache if RAM_CACHE_AVAILABLE else None
+#         self._redis_client = None
+
+#     def _get_redis_client(self) -> Optional[redis.Redis]:
+#         """Get Redis client (fallback only)."""
+#         if self._redis_client is None:
+#             self._redis_client = RedisClient.get_client()
+#         return self._redis_client
+
+#     def get_term_matches(self, word: str) -> List[Dict[str, Any]]:
+#         """
+#         Get ALL matches for a word from RAM cache.
+#         Returns list of all category variants, sorted by rank desc.
+#         """
+#         # === RAM PATH (fast) ===
+#         if self._ram and self._ram.loaded:
+#             matches = self._ram.get_all_term_matches(word.lower().strip())
+#             if not matches:
+#                 return []
+
+#             normalized = []
+#             for m in matches:
+#                 rank = self._parse_rank(m.get('rank', 0))
+#                 normalized.append({
+#                     'term': m.get('term', word.lower()),
+#                     'display': m.get('display', word.lower()),
+#                     'category': m.get('category', ''),
+#                     'description': m.get('description', ''),
+#                     'pos': self._normalize_pos(m.get('pos')),
+#                     'entity_type': m.get('entity_type', 'unigram'),
+#                     'rank': rank,
+#                 })
+
+#             normalized.sort(key=lambda x: x['rank'], reverse=True)
+#             return normalized
+
+#         # === REDIS FALLBACK (slow) ===
+#         client = self._get_redis_client()
+#         if not client:
+#             return []
+
+#         word_lower = word.lower().strip()
+#         pattern = f"term:{word_lower}:*"
+
+#         try:
+#             keys = client.keys(pattern)
+#             if not keys:
+#                 return []
+
+#             matches = []
+#             for key in keys:
+#                 metadata = client.hgetall(key)
+#                 if metadata:
+#                     rank = self._parse_rank(metadata.get('rank', 0))
+#                     matches.append({
+#                         'term': metadata.get('term', word_lower),
+#                         'display': metadata.get('display', word_lower),
+#                         'category': metadata.get('category', ''),
+#                         'description': metadata.get('description', ''),
+#                         'pos': self._normalize_pos(metadata.get('pos')),
+#                         'entity_type': metadata.get('entity_type', 'unigram'),
+#                         'rank': rank,
+#                     })
+
+#             matches.sort(key=lambda x: x['rank'], reverse=True)
+#             return matches
+
+#         except Exception as e:
+#             print(f"Error getting term matches for '{word}': {e}")
+#             return []
+
+#     def get_ngram(self, words: List[str]) -> Optional[Dict[str, Any]]:
+#         """
+#         Check if words form an n-gram (bigram, trigram, quadgram).
+#         Uses RAM cache first, falls back to Redis.
+#         """
+#         if len(words) < 2:
+#             return None
+
+#         # === RAM PATH (fast) ===
+#         if self._ram and self._ram.loaded:
+#             words_lower = [w.lower() for w in words]
+#             metadata = None
+
+#             if len(words_lower) == 2:
+#                 metadata = self._ram.get_bigram(words_lower[0], words_lower[1])
+#             elif len(words_lower) == 3:
+#                 metadata = self._ram.get_trigram(words_lower[0], words_lower[1], words_lower[2])
+#             elif len(words_lower) == 4:
+#                 metadata = self._ram.get_quadgram(words_lower[0], words_lower[1], words_lower[2], words_lower[3])
+
+#             if not metadata:
+#                 return None
+
+#             phrase = ' '.join(words_lower)
+#             ngram_type = 'bigram' if len(words) == 2 else 'trigram' if len(words) == 3 else 'quadgram'
+
+#             return {
+#                 'key': f"term:{phrase}:{metadata.get('category', '')}",
+#                 'term': metadata.get('term', phrase),
+#                 'display': metadata.get('display', phrase.title()),
+#                 'category': metadata.get('category', ''),
+#                 'description': metadata.get('description', ''),
+#                 'pos': self._normalize_pos(metadata.get('pos')),
+#                 'entity_type': metadata.get('entity_type', ngram_type),
+#                 'rank': self._parse_rank(metadata.get('rank', 0)),
+#                 'words': words,
+#                 'ngram_type': ngram_type,
+#             }
+
+#         # === REDIS FALLBACK (slow) ===
+#         client = self._get_redis_client()
+#         if not client:
+#             return None
+
+#         phrase = ' '.join(w.lower() for w in words)
+#         phrase_underscore = '_'.join(w.lower() for w in words)
+
+#         pattern = f"term:{phrase_underscore}:*"
+#         try:
+#             keys = client.keys(pattern)
+#         except Exception:
+#             keys = []
+
+#         if not keys:
+#             pattern = f"term:{phrase}:*"
+#             try:
+#                 keys = client.keys(pattern)
+#             except Exception:
+#                 keys = []
+
+#         if not keys:
+#             return None
+
+#         try:
+#             key = keys[0]
+#             metadata = client.hgetall(key)
+
+#             if metadata:
+#                 rank = self._parse_rank(metadata.get('rank', 0))
+#                 ngram_type = 'bigram' if len(words) == 2 else 'trigram' if len(words) == 3 else 'quadgram'
+
+#                 return {
+#                     'key': key,
+#                     'term': metadata.get('term', phrase),
+#                     'display': metadata.get('display', phrase.title()),
+#                     'category': metadata.get('category', ''),
+#                     'description': metadata.get('description', ''),
+#                     'pos': self._normalize_pos(metadata.get('pos')),
+#                     'entity_type': metadata.get('entity_type', ngram_type),
+#                     'rank': rank,
+#                     'words': words,
+#                     'ngram_type': ngram_type,
+#                 }
+
+#             return None
+
+#         except Exception as e:
+#             print(f"Error getting ngram for '{phrase}': {e}")
+#             return None
+
+#     def _normalize_pos(self, pos_value: Any) -> str:
+#         """Normalize POS value from various formats."""
+#         if pos_value is None:
+#             return 'unknown'
+
+#         if isinstance(pos_value, str):
+#             if pos_value.startswith('['):
+#                 try:
+#                     parsed = json.loads(pos_value)
+#                     if isinstance(parsed, list) and parsed:
+#                         return str(parsed[0]).lower()
+#                 except json.JSONDecodeError:
+#                     pass
+
+#                 try:
+#                     fixed = pos_value.replace("'", '"')
+#                     parsed = json.loads(fixed)
+#                     if isinstance(parsed, list) and parsed:
+#                         return str(parsed[0]).lower()
+#                 except json.JSONDecodeError:
+#                     pass
+
+#                 if pos_value.startswith("['") and pos_value.endswith("']"):
+#                     inner = pos_value[2:-2]
+#                     return inner.lower()
+
+#             return pos_value.lower()
+
+#         if isinstance(pos_value, list):
+#             return str(pos_value[0]).lower() if pos_value else 'unknown'
+
+#         return str(pos_value).lower()
+
+#     def _parse_rank(self, rank_value: Any) -> int:
+#         """Parse rank to integer."""
+#         try:
+#             return int(float(rank_value))
+#         except (ValueError, TypeError):
+#             return 0
+
+
+# # Global cache instance
+# vocab_cache_wrapper = VocabCache()
+
+
+# # =============================================================================
+# # STOPWORDS
+# # =============================================================================
+
+# STOPWORDS = {
+#     # Determiners/Articles
+#     "the": "determiner", "a": "article", "an": "article",
+#     "this": "determiner", "that": "determiner", "these": "determiner", "those": "determiner",
+#     "my": "determiner", "your": "determiner", "his": "determiner", "her": "determiner",
+#     "its": "determiner", "our": "determiner", "their": "determiner",
+#     "some": "determiner", "any": "determiner", "no": "determiner",
+#     "every": "determiner", "each": "determiner", "all": "determiner",
+
+#     # Prepositions
+#     "in": "preposition", "on": "preposition", "at": "preposition", "to": "preposition",
+#     "for": "preposition", "of": "preposition", "with": "preposition", "by": "preposition",
+#     "from": "preposition", "about": "preposition", "into": "preposition", "through": "preposition",
+#     "during": "preposition", "before": "preposition", "after": "preposition",
+#     "above": "preposition", "below": "preposition", "between": "preposition",
+#     "under": "preposition", "over": "preposition", "near": "preposition",
+
+#     # Conjunctions
+#     "and": "conjunction", "or": "conjunction", "but": "conjunction",
+#     "nor": "conjunction", "so": "conjunction", "yet": "conjunction",
+
+#     # Pronouns
+#     "i": "pronoun", "you": "pronoun", "he": "pronoun", "she": "pronoun",
+#     "it": "pronoun", "we": "pronoun", "they": "pronoun",
+#     "me": "pronoun", "him": "pronoun", "her": "pronoun", "us": "pronoun", "them": "pronoun",
+#     "who": "pronoun", "whom": "pronoun", "what": "pronoun", "which": "pronoun",
+#     "whose": "pronoun", "whoever": "pronoun", "whatever": "pronoun",
+
+#     # Be verbs
+#     "is": "be", "are": "be", "was": "be", "were": "be",
+#     "be": "be", "been": "be", "being": "be",
+#     "am": "be",
+
+#     # Auxiliary/Modal verbs
+#     "have": "auxiliary", "has": "auxiliary", "had": "auxiliary",
+#     "do": "auxiliary", "does": "auxiliary", "did": "auxiliary",
+#     "will": "modal", "would": "modal", "could": "modal", "should": "modal",
+#     "may": "modal", "might": "modal", "must": "modal", "can": "modal",
+
+#     # Other common words
+#     "not": "negation", "no": "negation",
+#     "as": "conjunction", "if": "conjunction", "when": "conjunction",
+#     "than": "conjunction", "because": "conjunction", "while": "conjunction",
+#     "where": "adverb", "how": "adverb", "why": "adverb",
+#     "very": "adverb", "just": "adverb", "also": "adverb",
+#     "only": "adverb", "even": "adverb", "still": "adverb",
+#     "then": "adverb", "now": "adverb", "here": "adverb", "there": "adverb",
+# }
+
+# # Location context signal words — when these stopwords appear,
+# # the NEXT non-stopword gets location_context=True
+# LOCATION_SIGNAL_WORDS = frozenset({
+#     'in', 'near', 'around', 'from', 'at', 'outside', 'within',
+# })
+
+
+# # =============================================================================
+# # ABBREVIATION TRIGGERS (NEW in v3)
+# # =============================================================================
+
+# ABBREVIATION_TRIGGERS = {
+#     # --- US Cities ---
+#     'atl': 'atlanta',
+#     'chi': 'chicago',
+#     'dc': 'washington dc',
+#     'la': 'los angeles',
+#     'philly': 'philadelphia',
+#     'nola': 'new orleans',
+#     'bmore': 'baltimore',
+#     'nyc': 'new york city',
+#     'sf': 'san francisco',
+#     'stl': 'st louis',
+#     'kc': 'kansas city',
+#     'det': 'detroit',
+#     'hou': 'houston',
+#     'dal': 'dallas',
+#     'den': 'denver',
+#     'mem': 'memphis',
+#     'jax': 'jacksonville',
+
+#     # --- US States ---
+#     'nc': 'north carolina',
+#     'sc': 'south carolina',
+#     'ny': 'new york',
+#     'ga': 'georgia',
+#     'fl': 'florida',
+#     'tx': 'texas',
+#     'va': 'virginia',
+#     'md': 'maryland',
+#     'al': 'alabama',
+#     'tn': 'tennessee',
+#     'ms': 'mississippi',
+#     'nj': 'new jersey',
+#     'ct': 'connecticut',
+#     'pa': 'pennsylvania',
+#     'oh': 'ohio',
+#     'il': 'illinois',
+#     'mi': 'michigan',
+#     'wi': 'wisconsin',
+#     'mn': 'minnesota',
+#     'co': 'colorado',
+#     'az': 'arizona',
+#     'wa': 'washington',
+#     'or': 'oregon',
+#     'ca': 'california',
+#     'ma': 'massachusetts',
+#     'in': 'indiana',
+# }
+
+# ABBREVIATION_SKIP_IF_STOPWORD = frozenset({'in', 'or'})
+
+
+# # =============================================================================
+# # GRAMMAR RULES FOR POS PREDICTION
+# # =============================================================================
+
+# GRAMMAR_RULES = {
+#     # BOTH NEIGHBORS KNOWN
+#     ("determiner", "noun"): [("adjective", 0.95), ("noun", 0.60)],
+#     ("determiner", "adjective"): [("adverb", 0.90), ("adjective", 0.70)],
+#     ("determiner", "verb"): [("noun", 0.90), ("adjective", 0.65)],
+#     ("determiner", "preposition"): [("noun", 0.90), ("adjective", 0.60)],
+#     ("determiner", "adverb"): [("adjective", 0.85), ("noun", 0.70)],
+#     ("determiner", "conjunction"): [("noun", 0.85)],
+#     ("determiner", "end"): [("noun", 0.95), ("adjective", 0.70)],
+
+#     ("article", "noun"): [("adjective", 0.95), ("noun", 0.55)],
+#     ("article", "adjective"): [("adverb", 0.90), ("adjective", 0.70)],
+#     ("article", "verb"): [("noun", 0.90), ("adjective", 0.65)],
+#     ("article", "preposition"): [("noun", 0.90), ("adjective", 0.60)],
+#     ("article", "adverb"): [("adjective", 0.85), ("noun", 0.70)],
+#     ("article", "conjunction"): [("noun", 0.85)],
+#     ("article", "end"): [("noun", 0.95), ("adjective", 0.70)],
+
+#     ("adjective", "noun"): [("adjective", 0.90), ("noun", 0.50)],
+#     ("adjective", "adjective"): [("adjective", 0.85), ("noun", 0.65), ("adverb", 0.50)],
+#     ("adjective", "verb"): [("noun", 0.90), ("proper_noun", 0.75)],
+#     ("adjective", "preposition"): [("noun", 0.90), ("proper_noun", 0.75)],
+#     ("adjective", "adverb"): [("noun", 0.85), ("verb", 0.65)],
+#     ("adjective", "conjunction"): [("noun", 0.90)],
+#     ("adjective", "end"): [("noun", 0.95), ("proper_noun", 0.80)],
+
+#     ("noun", "noun"): [("verb", 0.75), ("adjective", 0.65), ("noun", 0.50)],
+#     ("noun", "adjective"): [("verb", 0.90), ("be", 0.80), ("adverb", 0.55)],
+#     ("noun", "adverb"): [("verb", 0.90), ("be", 0.70)],
+#     ("noun", "preposition"): [("verb", 0.85), ("noun", 0.55)],
+#     ("noun", "verb"): [("adverb", 0.85), ("noun", 0.60)],
+#     ("noun", "conjunction"): [("verb", 0.80), ("noun", 0.60)],
+#     ("noun", "determiner"): [("verb", 0.90), ("be", 0.70)],
+#     ("noun", "article"): [("verb", 0.90), ("be", 0.70)],
+#     ("noun", "pronoun"): [("verb", 0.90)],
+#     ("noun", "end"): [("verb", 0.80), ("noun", 0.65), ("proper_noun", 0.55)],
+
+#     ("proper_noun", "noun"): [("verb", 0.80), ("noun", 0.60)],
+#     ("proper_noun", "adjective"): [("verb", 0.90), ("be", 0.80)],
+#     ("proper_noun", "adverb"): [("verb", 0.90)],
+#     ("proper_noun", "preposition"): [("verb", 0.85)],
+#     ("proper_noun", "verb"): [("adverb", 0.85), ("proper_noun", 0.60)],
+#     ("proper_noun", "conjunction"): [("verb", 0.80)],
+#     ("proper_noun", "end"): [("verb", 0.75), ("proper_noun", 0.70)],
+
+#     ("verb", "noun"): [("adjective", 0.85), ("determiner", 0.80), ("adverb", 0.60)],
+#     ("verb", "adjective"): [("adverb", 0.90), ("noun", 0.55)],
+#     ("verb", "adverb"): [("adverb", 0.85), ("noun", 0.60)],
+#     ("verb", "verb"): [("adverb", 0.85), ("noun", 0.60), ("preposition", 0.50)],
+#     ("verb", "preposition"): [("noun", 0.85), ("adverb", 0.75), ("pronoun", 0.55)],
+#     ("verb", "conjunction"): [("noun", 0.85), ("adverb", 0.65)],
+#     ("verb", "determiner"): [("adverb", 0.80), ("noun", 0.65)],
+#     ("verb", "article"): [("adverb", 0.80), ("noun", 0.65)],
+#     ("verb", "pronoun"): [("adverb", 0.80), ("preposition", 0.65)],
+#     ("verb", "end"): [("noun", 0.85), ("adverb", 0.75), ("proper_noun", 0.65)],
+
+#     ("preposition", "noun"): [("adjective", 0.90), ("determiner", 0.80), ("adverb", 0.55)],
+#     ("preposition", "adjective"): [("adverb", 0.90), ("adjective", 0.65)],
+#     ("preposition", "adverb"): [("adjective", 0.80), ("noun", 0.70)],
+#     ("preposition", "verb"): [("noun", 0.90), ("proper_noun", 0.75), ("pronoun", 0.60)],
+#     ("preposition", "preposition"): [("noun", 0.85), ("proper_noun", 0.75)],
+#     ("preposition", "conjunction"): [("noun", 0.85), ("proper_noun", 0.70)],
+#     ("preposition", "determiner"): [("noun", 0.80), ("adjective", 0.65)],
+#     ("preposition", "article"): [("noun", 0.80), ("adjective", 0.65)],
+#     ("preposition", "pronoun"): [("noun", 0.75), ("verb", 0.60)],
+#     ("preposition", "end"): [("noun", 0.95), ("proper_noun", 0.85), ("adjective", 0.60)],
+
+#     ("pronoun", "noun"): [("verb", 0.95), ("be", 0.80)],
+#     ("pronoun", "adjective"): [("verb", 0.95), ("be", 0.85), ("adverb", 0.55)],
+#     ("pronoun", "adverb"): [("verb", 0.95), ("be", 0.75)],
+#     ("pronoun", "preposition"): [("verb", 0.90), ("be", 0.70)],
+#     ("pronoun", "verb"): [("adverb", 0.85), ("modal", 0.70)],
+#     ("pronoun", "conjunction"): [("verb", 0.85)],
+#     ("pronoun", "end"): [("verb", 0.90), ("noun", 0.60)],
+
+#     ("be", "noun"): [("adjective", 0.90), ("determiner", 0.80), ("adverb", 0.55)],
+#     ("be", "adjective"): [("adverb", 0.95), ("adjective", 0.60)],
+#     ("be", "adverb"): [("adjective", 0.85), ("verb", 0.70)],
+#     ("be", "verb"): [("adverb", 0.90), ("noun", 0.55)],
+#     ("be", "preposition"): [("noun", 0.90), ("adverb", 0.70)],
+#     ("be", "conjunction"): [("adjective", 0.80), ("noun", 0.65)],
+#     ("be", "end"): [("adjective", 0.90), ("noun", 0.75), ("adverb", 0.60)],
+
+#     ("adverb", "noun"): [("adjective", 0.90), ("verb", 0.65)],
+#     ("adverb", "adjective"): [("adverb", 0.85), ("adjective", 0.70)],
+#     ("adverb", "adverb"): [("adverb", 0.80), ("verb", 0.65)],
+#     ("adverb", "verb"): [("adverb", 0.90), ("noun", 0.50)],
+#     ("adverb", "preposition"): [("verb", 0.85), ("noun", 0.65)],
+#     ("adverb", "conjunction"): [("verb", 0.80), ("adjective", 0.65)],
+#     ("adverb", "end"): [("adjective", 0.85), ("verb", 0.75), ("noun", 0.60)],
+
+#     ("conjunction", "noun"): [("adjective", 0.85), ("determiner", 0.80), ("verb", 0.55)],
+#     ("conjunction", "adjective"): [("adverb", 0.85), ("noun", 0.65)],
+#     ("conjunction", "adverb"): [("noun", 0.80), ("verb", 0.70)],
+#     ("conjunction", "verb"): [("noun", 0.90), ("pronoun", 0.75)],
+#     ("conjunction", "preposition"): [("noun", 0.85), ("pronoun", 0.70)],
+#     ("conjunction", "conjunction"): [("noun", 0.80)],
+#     ("conjunction", "end"): [("noun", 0.90), ("proper_noun", 0.75)],
+
+#     ("modal", "noun"): [("verb", 0.90), ("adverb", 0.65)],
+#     ("modal", "adjective"): [("verb", 0.85), ("adverb", 0.70)],
+#     ("modal", "adverb"): [("verb", 0.95)],
+#     ("modal", "verb"): [("adverb", 0.90)],
+#     ("modal", "preposition"): [("verb", 0.85)],
+#     ("modal", "end"): [("verb", 0.95), ("noun", 0.55)],
+
+#     ("auxiliary", "noun"): [("verb", 0.90), ("adjective", 0.65)],
+#     ("auxiliary", "adjective"): [("verb", 0.85), ("adverb", 0.70)],
+#     ("auxiliary", "adverb"): [("verb", 0.95)],
+#     ("auxiliary", "verb"): [("adverb", 0.90)],
+#     ("auxiliary", "preposition"): [("verb", 0.85)],
+#     ("auxiliary", "end"): [("verb", 0.90), ("noun", 0.60)],
+
+#     ("participle", "noun"): [("adjective", 0.85), ("noun", 0.65)],
+#     ("participle", "adjective"): [("adverb", 0.85), ("noun", 0.60)],
+#     ("participle", "adverb"): [("noun", 0.80), ("adjective", 0.65)],
+#     ("participle", "verb"): [("adverb", 0.80), ("noun", 0.65)],
+#     ("participle", "preposition"): [("noun", 0.85), ("adverb", 0.65)],
+#     ("participle", "end"): [("noun", 0.90), ("adverb", 0.70)],
+
+#     ("gerund", "noun"): [("adjective", 0.85), ("noun", 0.70)],
+#     ("gerund", "adjective"): [("adverb", 0.80), ("noun", 0.65)],
+#     ("gerund", "adverb"): [("noun", 0.80)],
+#     ("gerund", "verb"): [("adverb", 0.80), ("noun", 0.60)],
+#     ("gerund", "preposition"): [("noun", 0.85)],
+#     ("gerund", "end"): [("noun", 0.90), ("adverb", 0.65)],
+
+#     ("negation", "noun"): [("adjective", 0.85), ("verb", 0.75)],
+#     ("negation", "adjective"): [("adverb", 0.90)],
+#     ("negation", "adverb"): [("verb", 0.85), ("adjective", 0.70)],
+#     ("negation", "verb"): [("adverb", 0.90)],
+#     ("negation", "preposition"): [("verb", 0.80)],
+#     ("negation", "end"): [("verb", 0.85), ("adjective", 0.70)],
+
+#     ("quantifier", "noun"): [("adjective", 0.90), ("noun", 0.60)],
+#     ("quantifier", "adjective"): [("adverb", 0.85), ("adjective", 0.65)],
+#     ("quantifier", "adverb"): [("adjective", 0.80)],
+#     ("quantifier", "verb"): [("noun", 0.85)],
+#     ("quantifier", "preposition"): [("noun", 0.85)],
+#     ("quantifier", "end"): [("noun", 0.95), ("adjective", 0.65)],
+
+#     ("numeral", "noun"): [("adjective", 0.85), ("noun", 0.70)],
+#     ("numeral", "adjective"): [("adverb", 0.80), ("noun", 0.65)],
+#     ("numeral", "adverb"): [("noun", 0.80)],
+#     ("numeral", "verb"): [("noun", 0.85)],
+#     ("numeral", "preposition"): [("noun", 0.85)],
+#     ("numeral", "end"): [("noun", 0.95)],
+
+#     # ONLY LEFT NEIGHBOR KNOWN
+#     ("determiner", None): [("noun", 0.90), ("adjective", 0.80), ("proper_noun", 0.60)],
+#     ("article", None): [("noun", 0.90), ("adjective", 0.80), ("proper_noun", 0.60)],
+#     ("adjective", None): [("noun", 0.95), ("proper_noun", 0.75)],
+#     ("noun", None): [("verb", 0.80), ("noun", 0.65), ("proper_noun", 0.55)],
+#     ("proper_noun", None): [("verb", 0.80), ("proper_noun", 0.70), ("noun", 0.55)],
+#     ("verb", None): [("noun", 0.80), ("adverb", 0.75), ("adjective", 0.60), ("proper_noun", 0.50)],
+#     ("preposition", None): [("noun", 0.90), ("proper_noun", 0.85), ("adjective", 0.60)],
+#     ("pronoun", None): [("verb", 0.95), ("be", 0.80), ("modal", 0.65)],
+#     ("be", None): [("adjective", 0.90), ("noun", 0.75), ("adverb", 0.65), ("verb", 0.55)],
+#     ("adverb", None): [("adjective", 0.85), ("verb", 0.75), ("adverb", 0.60)],
+#     ("conjunction", None): [("noun", 0.85), ("pronoun", 0.75), ("proper_noun", 0.65), ("verb", 0.55)],
+#     ("modal", None): [("verb", 0.95), ("adverb", 0.65)],
+#     ("auxiliary", None): [("verb", 0.95), ("adverb", 0.65)],
+#     ("participle", None): [("noun", 0.85), ("adverb", 0.70)],
+#     ("gerund", None): [("noun", 0.90), ("adverb", 0.60)],
+#     ("negation", None): [("verb", 0.85), ("adjective", 0.75), ("adverb", 0.60)],
+#     ("quantifier", None): [("noun", 0.95), ("adjective", 0.70)],
+#     ("numeral", None): [("noun", 0.95), ("adjective", 0.60)],
+
+#     # ONLY RIGHT NEIGHBOR KNOWN
+#     (None, "noun"): [("adjective", 0.95), ("determiner", 0.85), ("noun", 0.60), ("proper_noun", 0.50)],
+#     (None, "proper_noun"): [("adjective", 0.80), ("preposition", 0.75), ("verb", 0.65)],
+#     (None, "adjective"): [("adverb", 0.90), ("adjective", 0.70), ("determiner", 0.60)],
+#     (None, "adverb"): [("verb", 0.85), ("adverb", 0.75), ("be", 0.60)],
+#     (None, "verb"): [("noun", 0.90), ("pronoun", 0.85), ("adverb", 0.70), ("proper_noun", 0.60)],
+#     (None, "preposition"): [("noun", 0.90), ("verb", 0.80), ("proper_noun", 0.65)],
+#     (None, "determiner"): [("verb", 0.90), ("preposition", 0.75), ("conjunction", 0.60)],
+#     (None, "article"): [("verb", 0.90), ("preposition", 0.75), ("conjunction", 0.60)],
+#     (None, "pronoun"): [("verb", 0.85), ("preposition", 0.75), ("conjunction", 0.65)],
+#     (None, "conjunction"): [("noun", 0.90), ("verb", 0.75), ("adjective", 0.60)],
+#     (None, "be"): [("noun", 0.90), ("pronoun", 0.85), ("proper_noun", 0.70)],
+#     (None, "modal"): [("noun", 0.90), ("pronoun", 0.85)],
+#     (None, "auxiliary"): [("noun", 0.90), ("pronoun", 0.85)],
+#     (None, "participle"): [("be", 0.85), ("adverb", 0.75), ("noun", 0.60)],
+#     (None, "gerund"): [("preposition", 0.80), ("verb", 0.75), ("be", 0.65)],
+#     (None, "negation"): [("verb", 0.85), ("be", 0.80), ("modal", 0.70)],
+#     (None, "quantifier"): [("preposition", 0.80), ("verb", 0.70)],
+#     (None, "numeral"): [("preposition", 0.80), ("verb", 0.70), ("determiner", 0.60)],
+#     (None, "end"): [("noun", 0.90), ("proper_noun", 0.80), ("verb", 0.65), ("adjective", 0.55)],
+
+#     # SPECIAL CASES — Start of query
+#     ("start", "noun"): [("adjective", 0.90), ("determiner", 0.85)],
+#     ("start", "adjective"): [("adverb", 0.85), ("determiner", 0.75)],
+#     ("start", "verb"): [("noun", 0.90), ("pronoun", 0.80)],
+#     ("start", "adverb"): [("verb", 0.80), ("adjective", 0.70)],
+#     ("start", "preposition"): [("noun", 0.85), ("verb", 0.70)],
+#     ("start", "end"): [("noun", 0.90), ("proper_noun", 0.85), ("verb", 0.60)],
+# }
+
+# POS_COMPATIBILITY = {
+#     'noun': {'noun', 'proper_noun'},
+#     'proper_noun': {'noun', 'proper_noun'},
+#     'verb': {'verb', 'participle', 'gerund'},
+#     'adjective': {'adjective', 'participle'},
+#     'adverb': {'adverb'},
+#     'pronoun': {'pronoun'},
+#     'determiner': {'determiner', 'article'},
+#     'article': {'article', 'determiner'},
+#     'preposition': {'preposition'},
+#     'conjunction': {'conjunction'},
+# }
+
+
+# # =============================================================================
+# # SUFFIX POS RULES (for Step 3 suffix refinement)
+# # =============================================================================
+
+# SUFFIX_POS_RULES = {
+#     'ing': [('gerund', 0.80), ('adjective', 0.75), ('verb', 0.70), ('noun', 0.50)],
+#     'ed': [('verb', 0.85), ('adjective', 0.75), ('participle', 0.70)],
+#     'ly': [('adverb', 0.95), ('adjective', 0.40)],
+#     'tion': [('noun', 0.95)],
+#     'sion': [('noun', 0.95)],
+#     'ment': [('noun', 0.95)],
+#     'ness': [('noun', 0.95)],
+#     'ity': [('noun', 0.95)],
+#     'ence': [('noun', 0.90)],
+#     'ance': [('noun', 0.90)],
+#     'ure': [('noun', 0.80)],
+#     'ism': [('noun', 0.95)],
+#     'ist': [('noun', 0.90)],
+#     'ery': [('noun', 0.85)],
+#     'ory': [('noun', 0.80), ('adjective', 0.60)],
+#     'age': [('noun', 0.80)],
+#     'ship': [('noun', 0.95)],
+#     'dom': [('noun', 0.90)],
+#     'hood': [('noun', 0.95)],
+#     'ling': [('noun', 0.80)],
+#     'ful': [('adjective', 0.95)],
+#     'less': [('adjective', 0.95)],
+#     'able': [('adjective', 0.90)],
+#     'ible': [('adjective', 0.90)],
+#     'ous': [('adjective', 0.95)],
+#     'ious': [('adjective', 0.95)],
+#     'ive': [('adjective', 0.90)],
+#     'al': [('adjective', 0.85), ('noun', 0.50)],
+#     'ial': [('adjective', 0.90)],
+#     'ical': [('adjective', 0.90)],
+#     'ish': [('adjective', 0.85)],
+#     'ern': [('adjective', 0.80)],
+#     'ese': [('adjective', 0.80), ('noun', 0.70)],
+#     'ian': [('adjective', 0.80), ('noun', 0.75)],
+#     'ean': [('adjective', 0.80)],
+#     'ic': [('adjective', 0.85)],
+#     'est': [('adjective', 0.85)],
+#     'ent': [('adjective', 0.75), ('noun', 0.65)],
+#     'ant': [('adjective', 0.75), ('noun', 0.65)],
+#     'ify': [('verb', 0.95)],
+#     'ize': [('verb', 0.95)],
+#     'ise': [('verb', 0.90)],
+#     'ate': [('verb', 0.80), ('adjective', 0.60), ('noun', 0.50)],
+#     'en': [('verb', 0.70), ('adjective', 0.60)],
+#     'er': [('noun', 0.75), ('adjective', 0.65)],
+#     'or': [('noun', 0.80)],
+#     'ee': [('noun', 0.85)],
+#     'eer': [('noun', 0.85)],
+# }
+
+# SUFFIX_EXCEPTIONS = frozenset({
+#     'ring', 'king', 'sing', 'bring', 'thing', 'string', 'spring',
+#     'wing', 'swing', 'sting', 'cling', 'fling', 'sling', 'wring',
+#     'bling', 'ding', 'ping', 'zing', 'ming', 'bing', 'ling',
+#     'beijing', 'sterling', 'viking', 'darling', 'ceiling',
+#     'feeling', 'dealing', 'healing', 'meaning', 'evening',
+#     'bed', 'red', 'shed', 'led', 'fed', 'wed', 'sled',
+#     'fly', 'ply', 'sly', 'holy', 'ugly', 'bully', 'belly',
+#     'lily', 'jelly', 'jolly', 'rally', 'ally', 'tally',
+#     'family', 'italy', 'july', 'daily', 'early',
+#     'water', 'after', 'under', 'over', 'never', 'ever', 'other',
+#     'rather', 'either', 'neither', 'whether', 'together',
+#     'butter', 'letter', 'matter', 'better', 'bitter', 'litter',
+#     'dinner', 'inner', 'upper', 'lower', 'power', 'flower',
+#     'tower', 'shower', 'silver', 'river', 'liver', 'cover',
+#     'fever', 'clever', 'finger', 'ginger', 'tiger', 'anger',
+#     'danger', 'hunger', 'umber', 'number', 'member', 'timber',
+#     'order', 'border', 'murder', 'wonder', 'thunder', 'super',
+#     'paper', 'copper', 'proper', 'whisper', 'chapter', 'master',
+#     'sister', 'mister', 'winter', 'center', 'corner', 'monster',
+#     'soccer', 'cancer', 'rubber', 'hammer', 'summer', 'manner',
+#     'animal', 'hospital', 'capital', 'metal', 'total', 'eral',
+#     'canal', 'eral', 'general', 'mineral', 'festival', 'signal',
+#     'journal', 'rival', 'survival', 'arrival', 'proposal',
+#     'awful',
+#     'age', 'page', 'sage', 'cage', 'rage', 'wage', 'stage',
+#     'cement', 'moment', 'comment', 'segment', 'element',
+#     'music', 'magic', 'basic', 'logic', 'topic', 'panic',
+#     'fabric', 'garlic', 'picnic', 'traffic', 'public',
+#     'west', 'east', 'nest', 'rest', 'test', 'best', 'chest',
+#     'quest', 'guest', 'forest', 'harvest', 'interest', 'protest',
+#     'request', 'suggest', 'modest', 'honest', 'invest',
+#     'gate', 'late', 'mate', 'date', 'fate', 'rate', 'state',
+#     'plate', 'private', 'climate', 'chocolate', 'senate',
+#     'debate', 'estate', 'ultimate', 'intimate', 'accurate',
+#     'delicate', 'separate', 'desperate', 'moderate', 'adequate',
+#     'fish', 'dish', 'wish', 'finish', 'publish', 'polish',
+#     'vanish', 'perish', 'cherish', 'nourish', 'flourish',
+# })
+
+# MIN_SUFFIX_WORD_LENGTH = 4
+
+
+# # =============================================================================
+# # ENTITY CLASSIFICATION CATEGORIES (for Step 6 profile building)
+# # ISSUE 4 FIX: Added 'state/province' and 'dictionary word'
+# # =============================================================================
+
+# PERSON_CATEGORIES = frozenset({
+#     'person', 'historical figure', 'celebrity', 'athlete', 'politician',
+#     'musician', 'actor', 'author', 'artist', 'scientist', 'activist',
+#     'entrepreneur', 'religious figure', 'philosopher',
+# })
+
+# ORGANIZATION_CATEGORIES = frozenset({
+#     'organization', 'company', 'business', 'brand', 'hbcu',
+#     'university', 'college', 'nonprofit', 'agency', 'institution',
+#     'corporation', 'association',
+# })
+
+# LOCATION_CATEGORIES = frozenset({
+#     'us city', 'us state', 'us county', 'city', 'state', 'country',
+#     'location', 'continent', 'region', 'neighborhood', 'territory',
+#     'state/province',
+# })
+
+# CITY_CATEGORIES = frozenset({
+#     'us city', 'city',
+# })
+
+# STATE_CATEGORIES = frozenset({
+#     'us state', 'state',
+#     'state/province',
+# })
+
+# KEYWORD_CATEGORIES = frozenset({
+#     'keyword', 'topic', 'primary keyword', 'concept', 'theme',
+#     'cuisine', 'food', 'service', 'industry', 'profession',
+#     'activity', 'sport', 'style', 'genre', 'tradition',
+#     'dictionary word',
+# })
+
+# MEDIA_CATEGORIES = frozenset({
+#     'song', 'movie', 'album', 'book', 'tv show', 'film',
+#     'documentary', 'podcast', 'series', 'show',
+# })
+
+# SEARCHABLE_POS = frozenset({
+#     'noun', 'proper_noun', 'unknown',
+# })
+
+
+# # =============================================================================
+# # HELPER FUNCTIONS
+# # =============================================================================
+
+# def damerau_levenshtein_distance(s1: str, s2: str) -> int:
+#     """Calculate Damerau-Levenshtein distance."""
+#     len1, len2 = len(s1), len(s2)
+#     d = [[0] * (len2 + 1) for _ in range(len1 + 1)]
+#     for i in range(len1 + 1):
+#         d[i][0] = i
+#     for j in range(len2 + 1):
+#         d[0][j] = j
+#     for i in range(1, len1 + 1):
+#         for j in range(1, len2 + 1):
+#             cost = 0 if s1[i-1] == s2[j-1] else 1
+#             d[i][j] = min(d[i-1][j] + 1, d[i][j-1] + 1, d[i-1][j-1] + cost)
+#             if i > 1 and j > 1 and s1[i-1] == s2[j-2] and s1[i-2] == s2[j-1]:
+#                 d[i][j] = min(d[i][j], d[i-2][j-2] + cost)
+#     return d[len1][len2]
+
+
+# def normalize_pos_string(pos_value: any) -> str:
+#     """Normalize POS value from various formats to clean string."""
+#     if pos_value is None:
+#         return 'unknown'
+#     if isinstance(pos_value, str):
+#         if pos_value.startswith('['):
+#             try:
+#                 parsed = json.loads(pos_value)
+#                 if isinstance(parsed, list) and parsed:
+#                     return str(parsed[0]).lower()
+#             except json.JSONDecodeError:
+#                 pass
+#             try:
+#                 fixed = pos_value.replace("'", '"')
+#                 parsed = json.loads(fixed)
+#                 if isinstance(parsed, list) and parsed:
+#                     return str(parsed[0]).lower()
+#             except json.JSONDecodeError:
+#                 pass
+#             if pos_value.startswith("['") and pos_value.endswith("']"):
+#                 inner = pos_value[2:-2]
+#                 return inner.lower()
+#         return pos_value.lower().strip()
+#     if isinstance(pos_value, list):
+#         return str(pos_value[0]).lower() if pos_value else 'unknown'
+#     return str(pos_value).lower()
+
+
+# def is_pos_compatible(candidate_pos: str, predicted_pos: str) -> bool:
+#     """Check if candidate POS is compatible with predicted POS."""
+#     candidate_pos = normalize_pos_string(candidate_pos)
+#     predicted_pos = normalize_pos_string(predicted_pos)
+#     if candidate_pos == predicted_pos:
+#         return True
+#     compatible_set = POS_COMPATIBILITY.get(predicted_pos, {predicted_pos})
+#     return candidate_pos in compatible_set
+
+
+# def get_fuzzy_suggestions_batch(words: List[str], limit: int = 10, max_distance: int = 2) -> Dict[str, List[Dict[str, Any]]]:
+#     """Get fuzzy suggestions for ALL words in ONE Redis pipeline call."""
+#     client = RedisClient.get_client()
+#     if not client:
+#         return {word: [] for word in words}
+#     unique_words = list({w.lower().strip() for w in words if len(w.strip()) >= 2})
+#     if not unique_words:
+#         return {}
+#     pipe = client.pipeline(transaction=False)
+#     for word in unique_words:
+#         query = f"%{word}%"
+#         pipe.execute_command('FT.SEARCH', 'terms_idx', query, 'SORTBY', 'rank', 'DESC', 'LIMIT', '0', str(limit * 3))
+#     try:
+#         all_results = pipe.execute()
+#     except Exception as e:
+#         print(f"Pipeline batch error: {e}")
+#         return {word: [] for word in unique_words}
+#     batch_suggestions = {}
+#     for word, result in zip(unique_words, all_results):
+#         suggestions = []
+#         if not result or len(result) <= 1:
+#             batch_suggestions[word] = []
+#             continue
+#         i = 1
+#         while i < len(result):
+#             key = result[i]
+#             fields = result[i + 1] if i + 1 < len(result) else []
+#             metadata = {}
+#             for j in range(0, len(fields), 2):
+#                 if j + 1 < len(fields):
+#                     metadata[fields[j]] = fields[j + 1]
+#             if metadata:
+#                 term = metadata.get('term', '')
+#                 distance = damerau_levenshtein_distance(word, term.lower())
+#                 if distance <= max_distance and distance > 0:
+#                     rank = metadata.get('rank', 0)
+#                     try:
+#                         rank = int(float(rank))
+#                     except (ValueError, TypeError):
+#                         rank = 0
+#                     pos = metadata.get('pos', 'unknown')
+#                     if isinstance(pos, str) and pos.startswith('['):
+#                         try:
+#                             parsed = json.loads(pos)
+#                             pos = parsed[0] if parsed else 'unknown'
+#                         except:
+#                             pass
+#                     pos = str(pos).lower()
+#                     suggestions.append({
+#                         'term': term, 'display': metadata.get('display', term),
+#                         'category': metadata.get('category', ''), 'description': metadata.get('description', ''),
+#                         'pos': pos, 'entity_type': metadata.get('entity_type', 'unigram'),
+#                         'rank': rank, 'distance': distance,
+#                     })
+#             i += 2
+#         if not suggestions:
+#             try:
+#                 wider_result = client.execute_command('FT.SEARCH', 'terms_idx', f"%%{word}%%", 'SORTBY', 'rank', 'DESC', 'LIMIT', '0', str(limit * 3))
+#                 i = 1
+#                 while i < len(wider_result):
+#                     fields = wider_result[i + 1] if i + 1 < len(wider_result) else []
+#                     metadata = {}
+#                     for j in range(0, len(fields), 2):
+#                         if j + 1 < len(fields):
+#                             metadata[fields[j]] = fields[j + 1]
+#                     if metadata:
+#                         term = metadata.get('term', '')
+#                         distance = damerau_levenshtein_distance(word, term.lower())
+#                         if distance <= max_distance and distance > 0:
+#                             rank = metadata.get('rank', 0)
+#                             try:
+#                                 rank = int(float(rank))
+#                             except (ValueError, TypeError):
+#                                 rank = 0
+#                             pos = metadata.get('pos', 'unknown')
+#                             if isinstance(pos, str) and pos.startswith('['):
+#                                 try:
+#                                     parsed = json.loads(pos)
+#                                     pos = parsed[0] if parsed else 'unknown'
+#                                 except:
+#                                     pass
+#                             pos = str(pos).lower()
+#                             suggestions.append({
+#                                 'term': term, 'display': metadata.get('display', term),
+#                                 'category': metadata.get('category', ''), 'description': metadata.get('description', ''),
+#                                 'pos': pos, 'entity_type': metadata.get('entity_type', 'unigram'),
+#                                 'rank': rank, 'distance': distance,
+#                             })
+#                     i += 2
+#             except Exception as e:
+#                 print(f"Wider fuzzy search error for '{word}': {e}")
+#         suggestions.sort(key=lambda x: (x['distance'], -x['rank']))
+#         seen = set()
+#         unique = []
+#         for s in suggestions:
+#             if s['term'].lower() not in seen:
+#                 seen.add(s['term'].lower())
+#                 unique.append(s)
+#         batch_suggestions[word] = unique[:limit]
+#     return batch_suggestions
+
+
+# def get_fuzzy_suggestions(word: str, limit: int = 10, max_distance: int = 2) -> List[Dict[str, Any]]:
+#     """Single-word convenience wrapper around the batch function."""
+#     results = get_fuzzy_suggestions_batch([word], limit=limit, max_distance=max_distance)
+#     return results.get(word.lower().strip(), [])
+
+
+# # =============================================================================
+# #   MAIN WORD DISCOVERY v3 CLASS
+# # =============================================================================
+
+# class WordDiscovery:
+#     """
+#     Word Discovery v3 — Complete profile builder.
+#     Uses RAM cache (vocabulary_cache.py) for all lookups.
+#     Only uses Redis for fuzzy spelling correction (Step 4).
+#     """
+
+#     def __init__(self, verbose: bool = False):
+#         self.verbose = verbose
+#         self.cache = vocab_cache_wrapper
+
+#     def process(self, query: str) -> Dict[str, Any]:
+#         """Main entry point — process a query through all 6 steps."""
+#         start_time = time.perf_counter()
+#         if self.verbose:
+#             print("\n" + "=" * 70)
+#             print(f"🔍 WORD DISCOVERY v3: '{query}'")
+#             print(f"   RAM cache: {'✅ loaded' if RAM_CACHE_AVAILABLE and vocab_cache and vocab_cache.loaded else '❌ not available'}")
+#             print("=" * 70)
+#         if not query or not query.strip():
+#             return self._empty_result(query)
+#         words = [w.strip('?!.,;:"\'"()[]{}') for w in query.lower().split()]
+#         words = [w for w in words if w]
+#         if len(words) == 1:
+#             return self._process_single_word(words[0], start_time)
+
+#         word_data = self._step1_tokenize_and_lookup(words)
+#         ngrams, consumed_positions = self._step2_resolve_ngrams(words, word_data)
+#         self._step3_pos_and_select(word_data, consumed_positions)
+#         corrections = self._step4_correct_unknowns(word_data)
+#         corrected_words = self._get_working_words(word_data)
+#         new_ngrams, new_consumed = self._step5_recheck_ngrams(corrected_words, word_data, consumed_positions)
+#         ngrams.extend(new_ngrams)
+#         consumed_positions.update(new_consumed)
+#         profile = self._step6_build_profile(query, word_data, ngrams, consumed_positions, corrections, start_time)
+#         return profile
+
+#     # =========================================================================
+#     # STEP 1: Tokenize + RAM Hash Lookup + Inline Triggers
+#     # ISSUE 5 FIX: When abbreviation fires, also do direct RAM lookup and merge
+#     # =========================================================================
+
+#     def _step1_tokenize_and_lookup(self, words: List[str]) -> List[Dict[str, Any]]:
+#         """Step 1: Tokenize + RAM Hash Lookup + Inline Triggers."""
+#         if self.verbose:
+#             print("\n" + "-" * 70)
+#             print("📖 STEP 1: Tokenize + RAM Hash Lookup + Inline Triggers")
+#             print("-" * 70)
+
+#         word_data = []
+#         location_signal_pending = False
+
+#         for i, word in enumerate(words):
+#             position = i
+#             word_lower = word.lower().strip()
+
+#             # --- Check stopword ---
+#             if word_lower in STOPWORDS:
+#                 is_location_signal = word_lower in LOCATION_SIGNAL_WORDS
+#                 context_flags = ['location_signal'] if is_location_signal else []
+#                 word_data.append({
+#                     'position': position, 'word': word_lower, 'status': 'stopword',
+#                     'is_stopword': True, 'pos': STOPWORDS[word_lower],
+#                     'predicted_pos': STOPWORDS[word_lower],
+#                     'predicted_pos_list': [(STOPWORDS[word_lower], 1.0)],
+#                     'all_matches': [],
+#                     'selected_match': {
+#                         'term': word_lower, 'display': word_lower, 'category': 'stopword',
+#                         'description': '', 'pos': STOPWORDS[word_lower],
+#                         'entity_type': 'stopword', 'rank': 0,
+#                     },
+#                     'context_flags': context_flags, 'location_context': False,
+#                 })
+#                 if is_location_signal:
+#                     location_signal_pending = True
+#                 if self.verbose:
+#                     sig = " [LOCATION_SIGNAL]" if is_location_signal else ""
+#                     print(f"  [{position}] '{word_lower}' → STOPWORD ({STOPWORDS[word_lower]}){sig}")
+#                 continue
+
+#             # --- Check abbreviation triggers ---
+#             expanded = None
+#             if word_lower in ABBREVIATION_TRIGGERS and word_lower not in ABBREVIATION_SKIP_IF_STOPWORD:
+#                 expanded_term = ABBREVIATION_TRIGGERS[word_lower]
+#                 expanded_matches = self.cache.get_term_matches(expanded_term)
+#                 if not expanded_matches:
+#                     expanded_matches = self.cache.get_term_matches(expanded_term.replace(' ', '_'))
+#                 if expanded_matches:
+#                     expanded = {
+#                         'original_abbreviation': word_lower,
+#                         'expanded_to': expanded_term,
+#                         'matches': expanded_matches,
+#                     }
+
+#             # --- RAM hash lookup ---
+#             has_location_ctx = location_signal_pending
+#             location_signal_pending = False
+
+#             if expanded:
+#                 # ISSUE 5 FIX: Also run direct RAM lookup for original word and merge
+#                 direct_matches = self.cache.get_term_matches(word_lower)
+#                 merged_matches = self._merge_match_sets(expanded['matches'], direct_matches)
+#                 expanded['matches'] = merged_matches
+#                 matches = merged_matches
+#                 context_flags = ['abbreviation_expanded']
+#                 if has_location_ctx:
+#                     context_flags.append('location_context')
+#                 word_data.append({
+#                     'position': position, 'word': word_lower, 'status': 'resolved',
+#                     'is_stopword': False, 'pos': None, 'predicted_pos': None,
+#                     'predicted_pos_list': [], 'all_matches': matches, 'selected_match': None,
+#                     'context_flags': context_flags, 'location_context': has_location_ctx,
+#                     'abbreviation': expanded,
+#                 })
+#                 if self.verbose:
+#                     print(f"  [{position}] '{word_lower}' → ABBREVIATION → '{expanded['expanded_to']}' "
+#                           f"({len(matches)} matches, incl. direct)")
+#             else:
+#                 matches = self.cache.get_term_matches(word_lower)
+#                 context_flags = []
+#                 if has_location_ctx:
+#                     context_flags.append('location_context')
+#                 if matches:
+#                     word_data.append({
+#                         'position': position, 'word': word_lower, 'status': 'resolved',
+#                         'is_stopword': False, 'pos': None, 'predicted_pos': None,
+#                         'predicted_pos_list': [], 'all_matches': matches, 'selected_match': None,
+#                         'context_flags': context_flags, 'location_context': has_location_ctx,
+#                     })
+#                     if self.verbose:
+#                         loc = " [LOCATION_CONTEXT]" if has_location_ctx else ""
+#                         print(f"  [{position}] '{word_lower}' → RESOLVED ({len(matches)} matches){loc}")
+#                         for m in matches[:3]:
+#                             print(f"       - {m['category']}: pos={m['pos']}, rank={m['rank']}")
+#                         if len(matches) > 3:
+#                             print(f"       ... and {len(matches) - 3} more")
+#                 else:
+#                     word_data.append({
+#                         'position': position, 'word': word_lower, 'status': 'unknown',
+#                         'is_stopword': False, 'pos': None, 'predicted_pos': None,
+#                         'predicted_pos_list': [], 'all_matches': [], 'selected_match': None,
+#                         'context_flags': context_flags, 'location_context': has_location_ctx,
+#                     })
+#                     if self.verbose:
+#                         loc = " [LOCATION_CONTEXT]" if has_location_ctx else ""
+#                         print(f"  [{position}] '{word_lower}' → UNKNOWN{loc}")
+#         return word_data
+
+#     def _merge_match_sets(self, primary: List[Dict[str, Any]], secondary: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+#         """Merge two match sets, deduplicating by term+category. Keeps higher rank."""
+#         seen = {}
+#         for m in primary:
+#             key = (m['term'].lower(), m['category'].lower())
+#             if key not in seen or m['rank'] > seen[key]['rank']:
+#                 seen[key] = m
+#         for m in secondary:
+#             key = (m['term'].lower(), m['category'].lower())
+#             if key not in seen or m['rank'] > seen[key]['rank']:
+#                 seen[key] = m
+#         merged = list(seen.values())
+#         merged.sort(key=lambda x: x['rank'], reverse=True)
+#         return merged
+
+#     # =========================================================================
+#     # STEP 2: Context-Aware N-gram Resolution
+#     # =========================================================================
+
+#     def _step2_resolve_ngrams(self, words: List[str], word_data: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], Set[int]]:
+#         """Step 2: Context-Aware N-gram Resolution (rank comparison + signals)."""
+#         if self.verbose:
+#             print("\n" + "-" * 70)
+#             print("🔗 STEP 2: Context-Aware N-gram Resolution")
+#             print("-" * 70)
+#         ngrams = []
+#         consumed = set()
+
+#         def _get_max_unigram_rank(indices):
+#             max_rank = 0
+#             for idx in indices:
+#                 if idx < len(word_data):
+#                     wd = word_data[idx]
+#                     if wd['all_matches']:
+#                         best_rank = max(m['rank'] for m in wd['all_matches'])
+#                         if best_rank > max_rank:
+#                             max_rank = best_rank
+#             return max_rank
+
+#         def _has_location_context(indices):
+#             for idx in indices:
+#                 if idx < len(word_data) and word_data[idx].get('location_context'):
+#                     return True
+#             return False
+
+#         def _is_location_category(category):
+#             return category.lower() in LOCATION_CATEGORIES
+
+#         def _try_ngram(word_slice, indices):
+#             for idx in indices:
+#                 if idx in consumed:
+#                     return False
+#                 if idx < len(word_data) and word_data[idx]['is_stopword']:
+#                     return False
+#             result = self.cache.get_ngram(word_slice)
+#             if not result:
+#                 return False
+#             ngram_rank = result['rank']
+#             max_unigram_rank = _get_max_unigram_rank(indices)
+#             effective_ngram_rank = ngram_rank
+#             has_loc_ctx = _has_location_context(indices)
+#             if has_loc_ctx and _is_location_category(result.get('category', '')):
+#                 effective_ngram_rank = int(ngram_rank * NGRAM_LOCATION_BOOST)
+#             if effective_ngram_rank <= max_unigram_rank:
+#                 if self.verbose:
+#                     print(f"  ❌ {result['ngram_type'].upper()}: '{' '.join(word_slice)}' "
+#                           f"(ngram_rank={ngram_rank}, effective={effective_ngram_rank}, "
+#                           f"max_unigram={max_unigram_rank}) → LOST")
+#                 return False
+#             positions = [idx + 1 for idx in indices]
+#             ngram_entry = {
+#                 'type': result['ngram_type'], 'positions': positions, 'words': word_slice,
+#                 'phrase': result['term'], 'display': result['display'],
+#                 'category': result['category'], 'description': result['description'],
+#                 'pos': normalize_pos_string(result['pos']), 'rank': ngram_rank,
+#                 'location_boosted': has_loc_ctx and _is_location_category(result.get('category', '')),
+#             }
+#             ngrams.append(ngram_entry)
+#             consumed.update(indices)
+#             if self.verbose:
+#                 boost_note = f" [LOC_BOOST: {ngram_rank}→{effective_ngram_rank}]" if ngram_entry['location_boosted'] else ""
+#                 print(f"  ✅ {result['ngram_type'].upper()}: '{' '.join(word_slice)}' "
+#                       f"(rank={ngram_rank}, vs unigram={max_unigram_rank}){boost_note}")
+#                 print(f"       Category: {result['category']}")
+#             return True
+
+#         if len(words) >= 4:
+#             for i in range(len(words) - 3):
+#                 _try_ngram(words[i:i+4], [i, i+1, i+2, i+3])
+#         if len(words) >= 3:
+#             for i in range(len(words) - 2):
+#                 _try_ngram(words[i:i+3], [i, i+1, i+2])
+#         if len(words) >= 2:
+#             for i in range(len(words) - 1):
+#                 _try_ngram(words[i:i+2], [i, i+1])
+#         if not ngrams and self.verbose:
+#             print("  (no n-grams found)")
+#         return ngrams, consumed
+
+#     # =========================================================================
+#     # STEP 3: POS Determination + Best Match Selection
+#     # ISSUE 1 FIX: get_nearest_known_pos only trusts resolved words
+#     # =========================================================================
+
+#     def _step3_pos_and_select(self, word_data: List[Dict[str, Any]], consumed_positions: Set[int]) -> None:
+#         """Step 3: POS Determination + Best Match Selection (merged)."""
+#         if self.verbose:
+#             print("\n" + "-" * 70)
+#             print("🧠 STEP 3: POS Determination + Best Match Selection")
+#             print("-" * 70)
+
+#         # ISSUE 1 FIX: Pre-populate resolved set with stopword indices
+#         resolved = set()
+#         for i, wd in enumerate(word_data):
+#             if wd['is_stopword']:
+#                 resolved.add(i)
+
+#         # ISSUE 1 FIX: Only returns POS from words already in resolved
+#         def get_nearest_known_pos(index: int, direction: int) -> Optional[str]:
+#             i = index + direction
+#             while 0 <= i < len(word_data):
+#                 if i in resolved:
+#                     wd = word_data[i]
+#                     if wd['is_stopword']:
+#                         return wd['pos']
+#                     if wd.get('pos'):
+#                         return wd['pos']
+#                     if wd.get('predicted_pos'):
+#                         return wd['predicted_pos']
+#                 i += direction
+#             return None
+
+#         def apply_suffix_refinement(word, current_list):
+#             if len(word) < MIN_SUFFIX_WORD_LENGTH:
+#                 return current_list
+#             if word in SUFFIX_EXCEPTIONS:
+#                 return current_list
+#             matched_suffix = None
+#             suffix_predictions = None
+#             sorted_suffixes = sorted(SUFFIX_POS_RULES.keys(), key=len, reverse=True)
+#             for suffix in sorted_suffixes:
+#                 if word.endswith(suffix) and len(word) > len(suffix) + 1:
+#                     matched_suffix = suffix
+#                     suffix_predictions = SUFFIX_POS_RULES[suffix]
+#                     break
+#             if not matched_suffix:
+#                 return current_list
+#             refined = {}
+#             for pos, conf in current_list:
+#                 refined[pos] = conf
+#             for pos, suffix_conf in suffix_predictions:
+#                 if pos in refined:
+#                     existing = refined[pos]
+#                     boosted = min((existing + suffix_conf) / 2 + 0.10, 0.98)
+#                     refined[pos] = boosted
+#                 else:
+#                     refined[pos] = suffix_conf * 0.85
+#             return sorted(refined.items(), key=lambda x: -x[1])
+
+#         def resolve_word(i, wd):
+#             position = wd['position']
+#             wd['part_of_ngram'] = position in consumed_positions
+#             if wd['is_stopword']:
+#                 return True
+
+#             left_pos = 'start' if i == 0 else get_nearest_known_pos(i, direction=-1)
+#             right_pos = 'end' if i == len(word_data) - 1 else get_nearest_known_pos(i, direction=1)
+
+#             if left_pos is None and right_pos is None:
+#                 return False
+
+#             predicted_pos = None
+#             if left_pos and right_pos:
+#                 predicted_pos = GRAMMAR_RULES.get((left_pos, right_pos))
+#             if not predicted_pos and left_pos:
+#                 predicted_pos = GRAMMAR_RULES.get((left_pos, None))
+#             if not predicted_pos and right_pos:
+#                 predicted_pos = GRAMMAR_RULES.get((None, right_pos))
+#             if not predicted_pos:
+#                 predicted_pos = [('noun', 0.75)]
+
+#             has_be_before = any(word_data[j]['is_stopword'] and word_data[j]['pos'] == 'be' for j in range(0, i))
+#             next_ends_ed = False
+#             if i + 1 < len(word_data):
+#                 next_word_clean = word_data[i + 1]['word'].rstrip('?!.,;:')
+#                 next_ends_ed = next_word_clean.endswith('ed')
+#             if has_be_before and next_ends_ed and not wd['is_stopword']:
+#                 is_known_adverb = any(m['pos'] in ('adverb',) for m in wd.get('all_matches', []))
+#                 if not is_known_adverb:
+#                     predicted_pos = [('noun', 0.95), ('proper_noun', 0.85), ('adjective', 0.4), ('adverb', 0.3)]
+
+#             if isinstance(predicted_pos, list):
+#                 pos_list = predicted_pos
+#                 primary_pos = predicted_pos[0][0] if predicted_pos else 'noun'
+#             else:
+#                 pos_list = [(predicted_pos, 0.90)]
+#                 primary_pos = predicted_pos
+
+#             working_word = wd.get('corrected', wd['word']).lower()
+#             pos_list = apply_suffix_refinement(working_word, pos_list)
+#             primary_pos = pos_list[0][0] if pos_list else primary_pos
+
+#             wd['predicted_pos_list'] = pos_list
+#             wd['predicted_pos'] = primary_pos
+
+#             if self.verbose:
+#                 context = f"[{left_pos or '???'}] _{wd['word']}_ [{right_pos or '???'}]"
+#                 ngram_note = " (in n-gram)" if wd['part_of_ngram'] else ""
+#                 print(f"  [{position}] '{wd['word']}' → Predicted: {pos_list}{ngram_note}")
+#                 print(f"       Context: {context}")
+
+#             if wd['status'] == 'unknown':
+#                 return True
+#             matches = wd['all_matches']
+#             if not matches:
+#                 return True
+
+#             compatible_matches = []
+#             for m in matches:
+#                 match_pos = normalize_pos_string(m['pos'])
+#                 if is_pos_compatible(match_pos, primary_pos):
+#                     compatible_matches.append(m)
+
+#             if compatible_matches:
+#                 compatible_matches.sort(key=lambda x: x['rank'], reverse=True)
+#                 best = compatible_matches[0]
+#             else:
+#                 best = matches[0]
+
+#             wd['selected_match'] = best
+#             wd['pos'] = normalize_pos_string(best['pos'])
+#             wd['status'] = 'resolved'
+
+#             if self.verbose:
+#                 ngram_note2 = " (in n-gram)" if position in consumed_positions else ""
+#                 print(f"       Selected: {best['category']} (pos={normalize_pos_string(best['pos'])}, rank={best['rank']}){ngram_note2}")
+#                 if len(matches) > 1:
+#                     rejected = [f"{m['category']}({normalize_pos_string(m['pos'])})" for m in matches if m != best]
+#                     if rejected:
+#                         print(f"       Rejected: {rejected}")
+#             return True
+
+#         # Multi-pass loop
+#         max_passes = len(word_data)
+#         for pass_num in range(max_passes):
+#             progress = False
+#             if self.verbose and pass_num > 0:
+#                 print(f"\n  ── Pass {pass_num + 1} ──")
+#             for i, wd in enumerate(word_data):
+#                 if i in resolved:
+#                     continue
+#                 success = resolve_word(i, wd)
+#                 if success:
+#                     resolved.add(i)
+#                     progress = True
+#             if not progress or len(resolved) == len(word_data):
+#                 break
+
+#         for i, wd in enumerate(word_data):
+#             if i not in resolved:
+#                 if self.verbose:
+#                     print(f"  [{wd['position']}] '{wd['word']}' → No context found, defaulting to noun")
+#                 wd['predicted_pos'] = 'noun'
+#                 wd['predicted_pos_list'] = [('noun', 0.75)]
+
+#     # =========================================================================
+#     # STEP 4: Batch Correct Unknowns (Redis — only Redis step)
+#     # =========================================================================
+
+#     def _step4_correct_unknowns(self, word_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+#         """Step 4: Batch Correct Unknowns (Redis fuzzy — only Redis step)."""
+#         unknowns = []
+#         pos_mismatches = []
+#         for wd in word_data:
+#             if wd['status'] == 'unknown':
+#                 unknowns.append(wd)
+#             elif (wd['status'] == 'resolved' and not wd['is_stopword']
+#                   and wd.get('predicted_pos') and wd.get('pos')
+#                   and wd['predicted_pos'] != wd['pos']):
+#                 predicted_list = wd.get('predicted_pos_list', [])
+#                 top_confidence = predicted_list[0][1] if predicted_list else 0
+#                 word_rank = wd.get('selected_match', {}).get('rank', 0) or 0
+#                 if top_confidence >= 0.90 and word_rank < 200:
+#                     pos_mismatches.append(wd)
+
+#         if not unknowns and not pos_mismatches:
+#             if self.verbose:
+#                 print("\n" + "-" * 70)
+#                 print("🔧 STEP 4: Batch Correct Unknowns (Redis)")
+#                 print("-" * 70)
+#                 print("  (no unknown words)")
+#             return []
+
+#         if self.verbose:
+#             print("\n" + "-" * 70)
+#             print("🔧 STEP 4: Batch Correct Unknowns (Redis — Pipeline Batch)")
+#             print("-" * 70)
+#             print(f"  Unknowns:       {len(unknowns)}")
+#             print(f"  POS mismatches: {len(pos_mismatches)}")
+
+#         all_words_to_correct = [
+#             {'wd': wd, 'word': wd['word'], 'predicted_pos': wd.get('predicted_pos') or 'noun', 'correction_type': 'unknown'}
+#             for wd in unknowns
+#         ] + [
+#             {'wd': wd, 'word': wd['word'], 'predicted_pos': wd.get('predicted_pos') or 'noun',
+#              'correction_type': 'pos_mismatch', 'word_rank': wd.get('selected_match', {}).get('rank', 0) or 0}
+#             for wd in pos_mismatches
+#         ]
+
+#         words_to_fetch = [item['word'] for item in all_words_to_correct]
+#         if self.verbose:
+#             print(f"  Sending to Redis pipeline: {words_to_fetch}")
+#         batch_suggestions = get_fuzzy_suggestions_batch(words_to_fetch, limit=10, max_distance=2)
+#         corrections = []
+
+#         for item in all_words_to_correct:
+#             wd = item['wd']
+#             word = item['word']
+#             position = wd['position']
+#             predicted_pos = item['predicted_pos']
+#             correction_type = item['correction_type']
+#             suggestions = batch_suggestions.get(word.lower().strip(), [])
+#             for s in suggestions:
+#                 s['compatible'] = is_pos_compatible(s['pos'], predicted_pos)
+#             wd['redis_suggestions'] = suggestions
+#             if not suggestions:
+#                 if self.verbose:
+#                     print(f"  [{position}] '{word}' → No suggestions found")
+#                 continue
+#             compatible = [s for s in suggestions if s['compatible']]
+#             if correction_type == 'pos_mismatch':
+#                 word_rank = item.get('word_rank', 0)
+#                 compatible = [s for s in compatible if s['term'] != word and s['distance'] <= 1 and s['rank'] > word_rank * 3]
+#             if compatible:
+#                 compatible.sort(key=lambda x: (x['distance'], self._pos_match_score(x['pos'], predicted_pos), -x['rank']))
+#                 best = compatible[0]
+#             else:
+#                 best = suggestions[0]
+
+#             if correction_type == 'pos_mismatch':
+#                 if self.verbose:
+#                     print(f"  [{position}] '{word}' → REPLACED with '{best['term']}' (pos_mismatch, distance={best['distance']})")
+#                 wd['status'] = 'pos_corrected'
+#                 wd['corrected'] = best['term']
+#                 wd['corrected_display'] = best['display']
+#                 wd['pos'] = best['pos']
+#                 wd['distance'] = best['distance']
+#                 wd['selected_match'] = {
+#                     'term': best['term'], 'display': best['display'], 'category': best['category'],
+#                     'description': best['description'], 'pos': best['pos'],
+#                     'entity_type': best['entity_type'], 'rank': best['rank'],
+#                 }
+#                 corrections.append({'position': position, 'original': word, 'corrected': best['term'],
+#                     'distance': best['distance'], 'pos': best['pos'], 'category': best['category'], 'correction_type': 'pos_mismatch'})
+#             else:
+#                 if self.verbose:
+#                     print(f"  [{position}] '{word}' → KEPT for search (not in RAM hash). Suggestion: '{best['term']}' (distance={best['distance']})")
+#                 wd['status'] = 'unknown_suggest'
+#                 wd['suggestion'] = best['term']
+#                 wd['suggestion_display'] = best['display']
+#                 wd['suggestion_distance'] = best['distance']
+#                 corrections.append({'position': position, 'original': word, 'corrected': best['term'],
+#                     'distance': best['distance'], 'pos': best['pos'], 'category': best['category'], 'correction_type': 'suggestion'})
+#         return corrections
+
+#     def _pos_match_score(self, pos_value: Any, predicted_pos: str) -> int:
+#         if isinstance(pos_value, list):
+#             pos_list = pos_value
+#         elif isinstance(pos_value, str) and pos_value.startswith('['):
+#             import ast
+#             try:
+#                 pos_list = ast.literal_eval(pos_value)
+#             except:
+#                 pos_list = [pos_value]
+#         else:
+#             pos_list = [pos_value]
+#         for p in pos_list:
+#             if p == predicted_pos:
+#                 return 0
+#         return 1
+
+#     # =========================================================================
+#     # STEP 5: Re-check N-grams After Correction
+#     # =========================================================================
+
+#     def _step5_recheck_ngrams(self, corrected_words, word_data, already_consumed):
+#         """Step 5: Re-check N-grams After Correction (RAM cache)."""
+#         has_corrections = any(wd['status'] in ('corrected', 'pos_corrected') for wd in word_data)
+#         if not has_corrections:
+#             if self.verbose:
+#                 print("\n" + "-" * 70)
+#                 print("🔄 STEP 5: Re-check N-grams After Correction")
+#                 print("-" * 70)
+#                 print("  (no corrections, skipping)")
+#             return [], set()
+
+#         if self.verbose:
+#             print("\n" + "-" * 70)
+#             print("🔄 STEP 5: Re-check N-grams After Correction (RAM)")
+#             print("-" * 70)
+
+#         new_ngrams = []
+#         new_consumed = set()
+#         words = corrected_words
+
+#         def _get_max_unigram_rank(indices):
+#             max_rank = 0
+#             for idx in indices:
+#                 if idx < len(word_data) and word_data[idx]['all_matches']:
+#                     best_rank = max(m['rank'] for m in word_data[idx]['all_matches'])
+#                     if best_rank > max_rank:
+#                         max_rank = best_rank
+#             return max_rank
+
+#         def _has_location_context(indices):
+#             return any(idx < len(word_data) and word_data[idx].get('location_context') for idx in indices)
+
+#         def _is_location_category(category):
+#             return category.lower() in LOCATION_CATEGORIES
+
+#         if len(words) >= 3:
+#             for i in range(len(words) - 2):
+#                 if any(p in already_consumed or p in new_consumed for p in [i, i+1, i+2]):
+#                     continue
+#                 if not any(wd['status'] in ('corrected', 'pos_corrected') for wd in word_data[i:i+3]):
+#                     continue
+#                 tri = words[i:i+3]
+#                 result = self.cache.get_ngram(tri)
+#                 if result:
+#                     ngram_rank = result['rank']
+#                     max_uni = _get_max_unigram_rank([i, i+1, i+2])
+#                     effective = ngram_rank
+#                     has_loc = _has_location_context([i, i+1, i+2])
+#                     if has_loc and _is_location_category(result.get('category', '')):
+#                         effective = int(ngram_rank * NGRAM_LOCATION_BOOST)
+#                     if effective > max_uni:
+#                         new_ngrams.append({
+#                             'type': 'trigram', 'positions': [i+1, i+2, i+3], 'words': tri,
+#                             'phrase': result['term'], 'display': result['display'],
+#                             'category': result['category'], 'description': result['description'],
+#                             'pos': normalize_pos_string(result['pos']), 'rank': ngram_rank,
+#                             'from_correction': True,
+#                             'location_boosted': has_loc and _is_location_category(result.get('category', '')),
+#                         })
+#                         new_consumed.update([i, i+1, i+2])
+#                         if self.verbose:
+#                             print(f"  ✅ NEW TRIGRAM: '{' '.join(tri)}' (after correction, rank={ngram_rank})")
+
+#         if len(words) >= 2:
+#             for i in range(len(words) - 1):
+#                 if any(p in already_consumed or p in new_consumed for p in [i, i+1]):
+#                     continue
+#                 if not any(wd['status'] in ('corrected', 'pos_corrected') for wd in word_data[i:i+2]):
+#                     continue
+#                 bi = words[i:i+2]
+#                 result = self.cache.get_ngram(bi)
+#                 if result:
+#                     ngram_rank = result['rank']
+#                     max_uni = _get_max_unigram_rank([i, i+1])
+#                     effective = ngram_rank
+#                     has_loc = _has_location_context([i, i+1])
+#                     if has_loc and _is_location_category(result.get('category', '')):
+#                         effective = int(ngram_rank * NGRAM_LOCATION_BOOST)
+#                     if effective > max_uni:
+#                         new_ngrams.append({
+#                             'type': 'bigram', 'positions': [i+1, i+2], 'words': bi,
+#                             'phrase': result['term'], 'display': result['display'],
+#                             'category': result['category'], 'description': result['description'],
+#                             'pos': normalize_pos_string(result['pos']), 'rank': ngram_rank,
+#                             'from_correction': True,
+#                             'location_boosted': has_loc and _is_location_category(result.get('category', '')),
+#                         })
+#                         new_consumed.update([i, i+1])
+#                         if self.verbose:
+#                             print(f"  ✅ NEW BIGRAM: '{' '.join(bi)}' (after correction, rank={ngram_rank})")
+
+#         if not new_ngrams and self.verbose:
+#             print("  (no new n-grams found)")
+#         return new_ngrams, new_consumed
+
+#     # =========================================================================
+#     # STEP 6: Build Complete Profile
+#     # ISSUE 2 FIX: POS gate for modifier words
+#     # ISSUE 3 FIX (Part B): Adjacent location merge
+#     # =========================================================================
+
+#     def _step6_build_profile(self, query, word_data, ngrams, consumed_positions, corrections, start_time):
+#         """Step 6: Build Complete Profile (entities, locations, search terms, boosts)."""
+#         if self.verbose:
+#             print("\n" + "-" * 70)
+#             print("📊 STEP 6: Build Complete Profile")
+#             print("-" * 70)
+
+#         query_array = []
+#         corrected_array = []
+#         for wd in word_data:
+#             query_array.append({'position': wd['position'], 'word': wd['word'], 'status': wd['status']})
+#             if wd['status'] in ('corrected', 'pos_corrected') and wd.get('corrected'):
+#                 corrected_array.append({'position': wd['position'], 'word': wd['corrected']})
+#             elif wd['status'] == 'unknown_suggest' and wd.get('suggestion'):
+#                 corrected_array.append({'position': wd['position'], 'word': wd['suggestion']})
+#             else:
+#                 corrected_array.append({'position': wd['position'], 'word': wd['word']})
+
+#         working_words = self._get_working_words(word_data)
+#         corrected_query = ' '.join(working_words)
+
+#         display_words = []
+#         for wd in word_data:
+#             if wd['status'] in ('corrected', 'pos_corrected') and wd.get('corrected'):
+#                 display_words.append(wd['corrected'])
+#             elif wd['status'] == 'unknown_suggest' and wd.get('suggestion'):
+#                 display_words.append(wd['suggestion'])
+#             else:
+#                 display_words.append(wd['word'])
+#         corrected_display_query = ' '.join(display_words)
+
+#         for wd in word_data:
+#             wd['part_of_ngram'] = wd['position'] in consumed_positions
+
+#         persons = []
+#         organizations = []
+#         keywords = []
+#         media = []
+#         cities = []
+#         states = []
+#         location_terms = []
+#         intent_scores = {'person': 0, 'organization': 0, 'location': 0, 'keyword': 0, 'media': 0}
+
+#         # ISSUE 2 FIX: POS values that indicate modifier function
+#         MODIFIER_POS = frozenset({'adjective', 'adverb', 'verb', 'determiner'})
+
+#         # Classify from n-grams first
+#         for ng in ngrams:
+#             cat_lower = ng.get('category', '').lower()
+#             rank = ng.get('rank', 0)
+#             entry = {'phrase': ng['phrase'], 'display': ng['display'], 'rank': rank, 'category': ng['category'], 'type': ng['type']}
+#             if cat_lower in PERSON_CATEGORIES:
+#                 persons.append(entry); intent_scores['person'] += rank
+#             elif cat_lower in ORGANIZATION_CATEGORIES:
+#                 organizations.append(entry); intent_scores['organization'] += rank
+#             elif cat_lower in LOCATION_CATEGORIES:
+#                 intent_scores['location'] += rank
+#                 if cat_lower in CITY_CATEGORIES:
+#                     cities.append({'name': ng['display'], 'rank': rank, 'category': ng['category']})
+#                 elif cat_lower in STATE_CATEGORIES:
+#                     states.append({'name': ng['display'], 'rank': rank, 'category': ng['category'], 'variants': self._get_state_variants(ng['display'])})
+#                 else:
+#                     location_terms.extend(ng.get('words', []))
+#             elif cat_lower in MEDIA_CATEGORIES:
+#                 media.append(entry); intent_scores['media'] += rank
+#             elif cat_lower in KEYWORD_CATEGORIES:
+#                 keywords.append(entry); intent_scores['keyword'] += rank
+#             else:
+#                 keywords.append(entry); intent_scores['keyword'] += rank
+
+#         # Classify from individual terms (not consumed by n-grams)
+#         for wd in word_data:
+#             if wd['is_stopword']:
+#                 continue
+#             if wd['position'] in consumed_positions:
+#                 continue
+#             sm = wd.get('selected_match')
+#             if not sm:
+#                 continue
+#             cat_lower = sm.get('category', '').lower()
+#             rank = sm.get('rank', 0)
+#             entry = {'phrase': sm.get('term', wd['word']), 'display': sm.get('display', wd['word']), 'rank': rank, 'category': sm.get('category', ''), 'type': 'unigram'}
+
+#             # ISSUE 2 FIX: POS gate — if grammar says modifier but match is noun entity, demote
+#             predicted_pos = normalize_pos_string(wd.get('predicted_pos'))
+#             match_pos = normalize_pos_string(sm.get('pos'))
+#             if (predicted_pos in MODIFIER_POS and match_pos in ('noun', 'proper_noun')
+#                     and not is_pos_compatible(match_pos, predicted_pos)):
+#                 keywords.append(entry)
+#                 intent_scores['keyword'] += rank
+#                 if self.verbose:
+#                     print(f"  POS GATE: '{wd['word']}' predicted={predicted_pos}, match={match_pos}/{cat_lower} → demoted to keyword")
+#                 continue
+
+#             if cat_lower in PERSON_CATEGORIES:
+#                 persons.append(entry); intent_scores['person'] += rank
+#             elif cat_lower in ORGANIZATION_CATEGORIES:
+#                 organizations.append(entry); intent_scores['organization'] += rank
+#             elif cat_lower in LOCATION_CATEGORIES:
+#                 intent_scores['location'] += rank
+#                 if cat_lower in CITY_CATEGORIES:
+#                     cities.append({'name': sm['display'], 'rank': rank, 'category': sm['category']})
+#                 elif cat_lower in STATE_CATEGORIES:
+#                     states.append({'name': sm['display'], 'rank': rank, 'category': sm['category'], 'variants': self._get_state_variants(sm['display'])})
+#                 else:
+#                     location_terms.append(wd['word'])
+#             elif cat_lower in MEDIA_CATEGORIES:
+#                 media.append(entry); intent_scores['media'] += rank
+#             elif cat_lower in KEYWORD_CATEGORIES:
+#                 keywords.append(entry); intent_scores['keyword'] += rank
+#             else:
+#                 if rank > 0:
+#                     keywords.append(entry); intent_scores['keyword'] += rank
+
+#         # ISSUE 3 FIX (Part B): Adjacent location merge pass
+#         self._merge_adjacent_locations(word_data, consumed_positions, cities, states, location_terms, keywords, intent_scores)
+
+#         primary_intent = 'general'
+#         max_score = 0
+#         for intent_type, score in intent_scores.items():
+#             if score > max_score:
+#                 max_score = score
+#                 primary_intent = intent_type
+
+#         search_terms = []
+#         for wd in word_data:
+#             if wd['is_stopword'] or wd['position'] in consumed_positions:
+#                 continue
+#             effective_pos = normalize_pos_string(wd.get('pos') or wd.get('predicted_pos') or 'unknown')
+#             if effective_pos in SEARCHABLE_POS:
+#                 search_terms.append(wd.get('corrected', wd['word']))
+#         for ng in ngrams:
+#             search_terms.append(ng['phrase'])
+
+#         field_boosts = {'document_title': 10, 'entity_names': 2, 'primary_keywords': 15, 'key_facts': 3, 'semantic_keywords': 7}
+#         if persons:
+#             field_boosts['entity_names'] += 8; field_boosts['document_title'] += 5
+#         if organizations:
+#             field_boosts['entity_names'] += 5; field_boosts['primary_keywords'] += 3
+#         if keywords:
+#             field_boosts['primary_keywords'] += 2; field_boosts['semantic_keywords'] += 3; field_boosts['key_facts'] += 2
+#         if media:
+#             field_boosts['document_title'] += 8; field_boosts['primary_keywords'] += 5
+#         if any(wd['status'] in ('unknown', 'unknown_suggest') for wd in word_data):
+#             for key in field_boosts:
+#                 field_boosts[key] += 2
+
+#         terms = []
+#         for wd in word_data:
+#             pos_value = normalize_pos_string(wd.get('pos') or wd.get('predicted_pos') or 'unknown')
+#             predicted_pos = wd.get('predicted_pos')
+#             if predicted_pos:
+#                 predicted_pos = normalize_pos_string(predicted_pos)
+#             term = {
+#                 'position': wd['position'], 'word': wd['word'], 'status': wd['status'],
+#                 'is_stopword': wd['is_stopword'], 'part_of_ngram': wd.get('part_of_ngram', False),
+#                 'pos': pos_value, 'predicted_pos': predicted_pos, 'context_flags': wd.get('context_flags', []),
+#             }
+#             if wd.get('selected_match'):
+#                 sm = wd['selected_match']
+#                 term.update({'category': sm.get('category', ''), 'description': sm.get('description', ''),
+#                     'display': sm.get('display', wd['word']), 'rank': sm.get('rank', 0), 'entity_type': sm.get('entity_type', 'unigram')})
+#             elif wd.get('all_matches'):
+#                 bm = wd['all_matches'][0]
+#                 term.update({'category': bm.get('category', ''), 'description': bm.get('description', ''),
+#                     'display': bm.get('display', wd['word']), 'rank': bm.get('rank', 0), 'entity_type': bm.get('entity_type', 'unigram')})
+#             else:
+#                 term.update({'category': '', 'description': '', 'display': wd['word'], 'rank': 0, 'entity_type': 'unigram'})
+#             if wd['status'] in ('corrected', 'pos_corrected'):
+#                 term['corrected'] = wd.get('corrected')
+#                 term['corrected_display'] = wd.get('corrected_display')
+#                 term['distance'] = wd.get('distance')
+#             if wd['status'] == 'unknown_suggest':
+#                 term['suggestion'] = wd.get('suggestion')
+#                 term['suggestion_display'] = wd.get('suggestion_display')
+#                 term['suggestion_distance'] = wd.get('suggestion_distance')
+#             if wd.get('abbreviation'):
+#                 term['abbreviation'] = {'original': wd['abbreviation']['original_abbreviation'], 'expanded_to': wd['abbreviation']['expanded_to']}
+#             term['match_count'] = len(wd.get('all_matches', []))
+#             terms.append(term)
+
+#         elapsed = (time.perf_counter() - start_time) * 1000
+#         stats = {
+#             'total_words': len(word_data),
+#             'valid_words': sum(1 for wd in word_data if wd['status'] == 'resolved'),
+#             'corrected_words': sum(1 for wd in word_data if wd['status'] in ('corrected', 'pos_corrected')),
+#             'unknown_words': sum(1 for wd in word_data if wd['status'] in ('unknown', 'unknown_suggest')),
+#             'stopwords': sum(1 for wd in word_data if wd['is_stopword']),
+#             'ngram_count': len(ngrams),
+#         }
+
+#         profile = {
+#             'query_array': query_array, 'corrected_array': corrected_array,
+#             'query': query, 'corrected_query': corrected_query,
+#             'corrected_display_query': corrected_display_query, 'processing_time_ms': round(elapsed, 2),
+#             'search_terms': search_terms, 'persons': persons, 'organizations': organizations,
+#             'keywords': keywords, 'media': media, 'cities': cities, 'states': states,
+#             'location_terms': location_terms, 'primary_intent': primary_intent,
+#             'intent_scores': intent_scores, 'field_boosts': field_boosts,
+#             'corrections': corrections, 'stats': stats, 'terms': terms, 'ngrams': ngrams,
+#         }
+
+#         if self.verbose:
+#             print("\n" + "=" * 70)
+#             print("📊 COMPLETE PROFILE")
+#             print("=" * 70)
+#             print(f"  Query:           '{query}'")
+#             print(f"  Corrected:       '{corrected_query}'")
+#             print(f"  Display:         '{corrected_display_query}'")
+#             print(f"  Search terms:    {search_terms}")
+#             print(f"  Primary intent:  {primary_intent}")
+#             print(f"  Intent scores:   {intent_scores}")
+#             print(f"  Persons:         {[p['display'] for p in persons]}")
+#             print(f"  Organizations:   {[o['display'] for o in organizations]}")
+#             print(f"  Keywords:        {[k['display'] for k in keywords]}")
+#             print(f"  Media:           {[m['display'] for m in media]}")
+#             print(f"  Cities:          {[c['name'] for c in cities]}")
+#             print(f"  States:          {[s['name'] for s in states]}")
+#             print(f"  Location terms:  {location_terms}")
+#             print(f"  Field boosts:    {field_boosts}")
+#             print(f"  Time:            {elapsed:.2f}ms")
+#             print(f"  Stats:           {stats}")
+#             print(f"  Source:          {'RAM cache' if RAM_CACHE_AVAILABLE else 'Redis fallback'}")
+#         return profile
+
+#     # =========================================================================
+#     # ISSUE 3 FIX (Part B): Adjacent location merge
+#     # =========================================================================
+
+#     def _merge_adjacent_locations(self, word_data, consumed_positions, cities, states, location_terms, keywords, intent_scores):
+#         """Detect consecutive location-category words and merge into compound locations."""
+#         if self.verbose:
+#             print("\n  Adjacent location merge pass:")
+
+#         location_indices = []
+#         for i, wd in enumerate(word_data):
+#             if wd['is_stopword'] or wd['position'] in consumed_positions:
+#                 continue
+#             sm = wd.get('selected_match')
+#             if not sm:
+#                 continue
+#             if sm.get('category', '').lower() in LOCATION_CATEGORIES:
+#                 location_indices.append(i)
+
+#         if len(location_indices) < 2:
+#             if self.verbose:
+#                 print("    (no adjacent locations to merge)")
+#             return
+
+#         merged_any = False
+#         skip_until = -1
+#         for loc_pos in range(len(location_indices) - 1):
+#             i = location_indices[loc_pos]
+#             if i < skip_until:
+#                 continue
+#             run = [i]
+#             for next_loc_pos in range(loc_pos + 1, len(location_indices)):
+#                 j = location_indices[next_loc_pos]
+#                 if j == run[-1] + 1:
+#                     run.append(j)
+#                 else:
+#                     break
+#             if len(run) < 2:
+#                 continue
+
+#             merged_words = [word_data[idx]['word'] for idx in run]
+#             merged_phrase = ' '.join(merged_words)
+#             merged_display = ' '.join(w.title() for w in merged_words)
+
+#             state_variants = self._get_state_variants(merged_phrase)
+#             is_known_state = len(state_variants) > 1 or (len(state_variants) == 1 and state_variants[0].lower() != merged_phrase.lower())
+
+#             max_rank = max(word_data[idx].get('selected_match', {}).get('rank', 0) for idx in run)
+
+#             individual_displays = {word_data[idx]['word'] for idx in run}
+#             individual_displays_titled = {word_data[idx]['word'].title() for idx in run}
+#             all_names = individual_displays | individual_displays_titled
+
+#             cities[:] = [c for c in cities if c['name'] not in all_names]
+#             keywords[:] = [k for k in keywords if k.get('display', '').lower() not in individual_displays]
+#             location_terms[:] = [t for t in location_terms if t not in individual_displays]
+
+#             if is_known_state:
+#                 states.append({'name': merged_display, 'rank': max_rank, 'category': 'US State', 'variants': state_variants})
+#                 if self.verbose:
+#                     print(f"    ✅ MERGED → STATE: '{merged_display}' (variants={state_variants})")
+#             else:
+#                 cities.append({'name': merged_display, 'rank': max_rank, 'category': 'City'})
+#                 if self.verbose:
+#                     print(f"    ✅ MERGED → CITY: '{merged_display}'")
+
+#             intent_scores['location'] += max_rank
+#             merged_any = True
+#             skip_until = run[-1] + 1
+
+#         if not merged_any and self.verbose:
+#             print("    (no adjacent locations to merge)")
+
+#     # =========================================================================
+#     # Helper Methods
+#     # =========================================================================
+
+#     def _get_working_words(self, word_data):
+#         """Build the word list used for the actual search."""
+#         words = []
+#         for wd in word_data:
+#             if wd['status'] in ('corrected', 'pos_corrected') and wd.get('corrected'):
+#                 words.append(wd['corrected'])
+#             else:
+#                 words.append(wd['word'])
+#         return words
+
+#     def _get_state_variants(self, state_name: str) -> List[str]:
+#         """Get name variants for a state (full name + common abbreviation)."""
+#         STATE_ABBREVS = {
+#             'alabama': ['Alabama', 'AL'], 'alaska': ['Alaska', 'AK'],
+#             'arizona': ['Arizona', 'AZ'], 'arkansas': ['Arkansas', 'AR'],
+#             'california': ['California', 'CA'], 'colorado': ['Colorado', 'CO'],
+#             'connecticut': ['Connecticut', 'CT'], 'delaware': ['Delaware', 'DE'],
+#             'florida': ['Florida', 'FL'], 'georgia': ['Georgia', 'GA'],
+#             'hawaii': ['Hawaii', 'HI'], 'idaho': ['Idaho', 'ID'],
+#             'illinois': ['Illinois', 'IL'], 'indiana': ['Indiana', 'IN'],
+#             'iowa': ['Iowa', 'IA'], 'kansas': ['Kansas', 'KS'],
+#             'kentucky': ['Kentucky', 'KY'], 'louisiana': ['Louisiana', 'LA'],
+#             'maine': ['Maine', 'ME'], 'maryland': ['Maryland', 'MD'],
+#             'massachusetts': ['Massachusetts', 'MA'], 'michigan': ['Michigan', 'MI'],
+#             'minnesota': ['Minnesota', 'MN'], 'mississippi': ['Mississippi', 'MS'],
+#             'missouri': ['Missouri', 'MO'], 'montana': ['Montana', 'MT'],
+#             'nebraska': ['Nebraska', 'NE'], 'nevada': ['Nevada', 'NV'],
+#             'new hampshire': ['New Hampshire', 'NH'], 'new jersey': ['New Jersey', 'NJ'],
+#             'new mexico': ['New Mexico', 'NM'], 'new york': ['New York', 'NY'],
+#             'north carolina': ['North Carolina', 'NC'], 'north dakota': ['North Dakota', 'ND'],
+#             'ohio': ['Ohio', 'OH'], 'oklahoma': ['Oklahoma', 'OK'],
+#             'oregon': ['Oregon', 'OR'], 'pennsylvania': ['Pennsylvania', 'PA'],
+#             'rhode island': ['Rhode Island', 'RI'], 'south carolina': ['South Carolina', 'SC'],
+#             'south dakota': ['South Dakota', 'SD'], 'tennessee': ['Tennessee', 'TN'],
+#             'texas': ['Texas', 'TX'], 'utah': ['Utah', 'UT'],
+#             'vermont': ['Vermont', 'VT'], 'virginia': ['Virginia', 'VA'],
+#             'washington': ['Washington', 'WA'], 'west virginia': ['West Virginia', 'WV'],
+#             'wisconsin': ['Wisconsin', 'WI'], 'wyoming': ['Wyoming', 'WY'],
+#             'district of columbia': ['District of Columbia', 'DC', 'Washington DC'],
+#         }
+#         return STATE_ABBREVS.get(state_name.lower(), [state_name])
+
+#     def _empty_result(self, query: str) -> Dict[str, Any]:
+#         """Return empty profile structure."""
+#         return {
+#             'query_array': [], 'corrected_array': [],
+#             'query': query or '', 'corrected_query': '', 'corrected_display_query': '',
+#             'processing_time_ms': 0, 'search_terms': [],
+#             'persons': [], 'organizations': [], 'keywords': [], 'media': [],
+#             'cities': [], 'states': [], 'location_terms': [],
+#             'primary_intent': 'general',
+#             'intent_scores': {'person': 0, 'organization': 0, 'location': 0, 'keyword': 0, 'media': 0},
+#             'field_boosts': {'document_title': 10, 'entity_names': 2, 'primary_keywords': 15, 'key_facts': 3, 'semantic_keywords': 7},
+#             'corrections': [], 'stats': {'total_words': 0, 'valid_words': 0, 'corrected_words': 0, 'unknown_words': 0, 'stopwords': 0, 'ngram_count': 0},
+#             'terms': [], 'ngrams': [],
+#         }
+
+#     def _process_single_word(self, word: str, start_time: float) -> Dict[str, Any]:
+#         """Handle single word queries."""
+#         if self.verbose:
+#             print("\n" + "-" * 70)
+#             print("📖 Single Word Query")
+#             print("-" * 70)
+
+#         word_lower = word.lower().strip()
+
+#         # --- Check abbreviation trigger ---
+#         if word_lower in ABBREVIATION_TRIGGERS and word_lower not in ABBREVIATION_SKIP_IF_STOPWORD:
+#             expanded_term = ABBREVIATION_TRIGGERS[word_lower]
+#             expanded_matches = self.cache.get_term_matches(expanded_term)
+#             if not expanded_matches:
+#                 expanded_matches = self.cache.get_term_matches(expanded_term.replace(' ', '_'))
+
+#             # ISSUE 5 FIX: Also get direct matches and merge
+#             direct_matches = self.cache.get_term_matches(word_lower)
+#             all_matches = self._merge_match_sets(expanded_matches or [], direct_matches)
+
+#             if all_matches:
+#                 best = all_matches[0]
+#                 elapsed = (time.perf_counter() - start_time) * 1000
+#                 if self.verbose:
+#                     print(f"  '{word_lower}' → ABBREVIATION → '{expanded_term}' ({len(all_matches)} matches, incl. direct)")
+
+#                 cat_lower = best.get('category', '').lower()
+#                 profile = self._empty_result(word)
+#                 profile['query'] = word
+#                 profile['corrected_query'] = expanded_term
+#                 profile['corrected_display_query'] = expanded_term
+#                 profile['processing_time_ms'] = round(elapsed, 2)
+#                 profile['query_array'] = [{'position': 0, 'word': word_lower, 'status': 'resolved'}]
+#                 profile['corrected_array'] = [{'position': 0, 'word': expanded_term}]
+#                 profile['search_terms'] = [expanded_term]
+#                 profile['stats'] = {'total_words': 1, 'valid_words': 1, 'corrected_words': 0, 'unknown_words': 0, 'stopwords': 0, 'ngram_count': 0}
+#                 profile['terms'] = [{
+#                     'position': 0, 'word': word_lower, 'status': 'resolved', 'is_stopword': False,
+#                     'part_of_ngram': False, 'pos': best['pos'], 'category': best['category'],
+#                     'description': best['description'], 'display': best['display'], 'rank': best['rank'],
+#                     'entity_type': best['entity_type'], 'match_count': len(all_matches),
+#                     'abbreviation': {'original': word_lower, 'expanded_to': expanded_term},
+#                 }]
+#                 if cat_lower in CITY_CATEGORIES:
+#                     profile['cities'] = [{'name': best['display'], 'rank': best['rank'], 'category': best['category']}]
+#                     profile['intent_scores']['location'] = best['rank']; profile['primary_intent'] = 'location'
+#                 elif cat_lower in STATE_CATEGORIES:
+#                     profile['states'] = [{'name': best['display'], 'rank': best['rank'], 'category': best['category'], 'variants': self._get_state_variants(best['display'])}]
+#                     profile['intent_scores']['location'] = best['rank']; profile['primary_intent'] = 'location'
+#                 elif cat_lower in LOCATION_CATEGORIES:
+#                     profile['location_terms'] = [expanded_term]
+#                     profile['intent_scores']['location'] = best['rank']; profile['primary_intent'] = 'location'
+#                 elif cat_lower in PERSON_CATEGORIES:
+#                     profile['persons'] = [{'phrase': best['term'], 'display': best['display'], 'rank': best['rank'], 'category': best['category'], 'type': 'unigram'}]
+#                     profile['intent_scores']['person'] = best['rank']; profile['primary_intent'] = 'person'
+#                 elif cat_lower in ORGANIZATION_CATEGORIES:
+#                     profile['organizations'] = [{'phrase': best['term'], 'display': best['display'], 'rank': best['rank'], 'category': best['category'], 'type': 'unigram'}]
+#                     profile['intent_scores']['organization'] = best['rank']; profile['primary_intent'] = 'organization'
+#                 else:
+#                     profile['keywords'] = [{'phrase': best['term'], 'display': best['display'], 'rank': best['rank'], 'category': best['category'], 'type': 'unigram'}]
+#                     profile['intent_scores']['keyword'] = best['rank']; profile['primary_intent'] = 'keyword'
+#                 return profile
+
+#         # --- Check stopword ---
+#         if word_lower in STOPWORDS:
+#             elapsed = (time.perf_counter() - start_time) * 1000
+#             profile = self._empty_result(word)
+#             profile.update({'query': word, 'corrected_query': word_lower, 'corrected_display_query': word_lower, 'processing_time_ms': round(elapsed, 2)})
+#             profile['query_array'] = [{'position': 0, 'word': word_lower, 'status': 'stopword'}]
+#             profile['corrected_array'] = [{'position': 0, 'word': word_lower}]
+#             profile['stats'] = {'total_words': 1, 'valid_words': 1, 'corrected_words': 0, 'unknown_words': 0, 'stopwords': 1, 'ngram_count': 0}
+#             profile['terms'] = [{'position': 0, 'word': word_lower, 'status': 'stopword', 'is_stopword': True, 'part_of_ngram': False, 'pos': STOPWORDS[word_lower], 'category': 'stopword', 'description': '', 'display': word_lower, 'rank': 0, 'match_count': 0}]
+#             return profile
+
+#         # --- RAM hash lookup ---
+#         matches = self.cache.get_term_matches(word_lower)
+#         if matches:
+#             best = matches[0]
+#             elapsed = (time.perf_counter() - start_time) * 1000
+#             if self.verbose:
+#                 print(f"  '{word_lower}' → Found ({len(matches)} matches)")
+#                 print(f"  Selected: {best['category']} (rank={best['rank']})")
+#             profile = self._empty_result(word)
+#             profile.update({'query': word, 'corrected_query': word_lower, 'corrected_display_query': word_lower, 'processing_time_ms': round(elapsed, 2)})
+#             profile['query_array'] = [{'position': 0, 'word': word_lower, 'status': 'resolved'}]
+#             profile['corrected_array'] = [{'position': 0, 'word': word_lower}]
+#             profile['search_terms'] = [word_lower]
+#             profile['stats'] = {'total_words': 1, 'valid_words': 1, 'corrected_words': 0, 'unknown_words': 0, 'stopwords': 0, 'ngram_count': 0}
+#             profile['terms'] = [{'position': 0, 'word': word_lower, 'status': 'resolved', 'is_stopword': False, 'part_of_ngram': False, 'pos': best['pos'], 'category': best['category'], 'description': best['description'], 'display': best['display'], 'rank': best['rank'], 'entity_type': best['entity_type'], 'match_count': len(matches)}]
+#             cat_lower = best.get('category', '').lower()
+#             if cat_lower in CITY_CATEGORIES:
+#                 profile['cities'] = [{'name': best['display'], 'rank': best['rank'], 'category': best['category']}]
+#                 profile['intent_scores']['location'] = best['rank']; profile['primary_intent'] = 'location'
+#             elif cat_lower in STATE_CATEGORIES:
+#                 profile['states'] = [{'name': best['display'], 'rank': best['rank'], 'category': best['category'], 'variants': self._get_state_variants(best['display'])}]
+#                 profile['intent_scores']['location'] = best['rank']; profile['primary_intent'] = 'location'
+#             elif cat_lower in LOCATION_CATEGORIES:
+#                 profile['location_terms'] = [word_lower]
+#                 profile['intent_scores']['location'] = best['rank']; profile['primary_intent'] = 'location'
+#             elif cat_lower in PERSON_CATEGORIES:
+#                 profile['persons'] = [{'phrase': best['term'], 'display': best['display'], 'rank': best['rank'], 'category': best['category'], 'type': 'unigram'}]
+#                 profile['intent_scores']['person'] = best['rank']; profile['primary_intent'] = 'person'
+#             elif cat_lower in ORGANIZATION_CATEGORIES:
+#                 profile['organizations'] = [{'phrase': best['term'], 'display': best['display'], 'rank': best['rank'], 'category': best['category'], 'type': 'unigram'}]
+#                 profile['intent_scores']['organization'] = best['rank']; profile['primary_intent'] = 'organization'
+#             elif cat_lower in MEDIA_CATEGORIES:
+#                 profile['media'] = [{'phrase': best['term'], 'display': best['display'], 'rank': best['rank'], 'category': best['category'], 'type': 'unigram'}]
+#                 profile['intent_scores']['media'] = best['rank']; profile['primary_intent'] = 'media'
+#             else:
+#                 profile['keywords'] = [{'phrase': best['term'], 'display': best['display'], 'rank': best['rank'], 'category': best['category'], 'type': 'unigram'}]
+#                 profile['intent_scores']['keyword'] = best['rank']; profile['primary_intent'] = 'keyword'
+#             return profile
+
+#         # --- Not in RAM hash — try Redis fuzzy ---
+#         suggestions = get_fuzzy_suggestions(word_lower, limit=5, max_distance=2)
+#         elapsed = (time.perf_counter() - start_time) * 1000
+#         if suggestions:
+#             best = suggestions[0]
+#             if self.verbose:
+#                 print(f"  '{word_lower}' → Not in RAM hash. Suggestion: '{best['term']}' (distance={best['distance']}). Original kept for search.")
+#             profile = self._empty_result(word)
+#             profile.update({'query': word, 'corrected_query': word_lower, 'corrected_display_query': best['term'], 'processing_time_ms': round(elapsed, 2)})
+#             profile['query_array'] = [{'position': 0, 'word': word_lower, 'status': 'unknown_suggest'}]
+#             profile['corrected_array'] = [{'position': 0, 'word': best['term']}]
+#             profile['search_terms'] = [word_lower]
+#             profile['corrections'] = [{'position': 0, 'original': word_lower, 'corrected': best['term'], 'distance': best['distance'], 'pos': best['pos'], 'category': best['category'], 'correction_type': 'suggestion'}]
+#             profile['stats'] = {'total_words': 1, 'valid_words': 0, 'corrected_words': 0, 'unknown_words': 1, 'stopwords': 0, 'ngram_count': 0}
+#             profile['terms'] = [{'position': 0, 'word': word_lower, 'status': 'unknown_suggest', 'is_stopword': False, 'part_of_ngram': False, 'pos': 'unknown', 'predicted_pos': 'noun', 'category': '', 'description': '', 'display': word_lower, 'rank': 0, 'match_count': 0, 'suggestion': best['term'], 'suggestion_display': best['display'], 'suggestion_distance': best['distance']}]
+#             return profile
+
+#         # --- Truly unknown ---
+#         if self.verbose:
+#             print(f"  '{word_lower}' → Unknown (no suggestions). Original passed through.")
+#         profile = self._empty_result(word)
+#         profile.update({'query': word, 'corrected_query': word_lower, 'corrected_display_query': word_lower, 'processing_time_ms': round(elapsed, 2)})
+#         profile['query_array'] = [{'position': 0, 'word': word_lower, 'status': 'unknown'}]
+#         profile['corrected_array'] = [{'position': 0, 'word': word_lower}]
+#         profile['search_terms'] = [word_lower]
+#         profile['stats'] = {'total_words': 1, 'valid_words': 0, 'corrected_words': 0, 'unknown_words': 1, 'stopwords': 0, 'ngram_count': 0}
+#         profile['terms'] = [{'position': 0, 'word': word_lower, 'status': 'unknown', 'is_stopword': False, 'part_of_ngram': False, 'pos': 'unknown', 'predicted_pos': 'noun', 'category': '', 'description': '', 'display': word_lower, 'rank': 0, 'match_count': 0}]
+#         return profile
+
+
+# # =============================================================================
+# # CONVENIENCE FUNCTIONS
+# # =============================================================================
+
+# def process_query(query: str, verbose: bool = False) -> Dict[str, Any]:
+#     """Main entry point — process a query through word discovery v3."""
+#     wd = WordDiscovery(verbose=verbose)
+#     return wd.process(query)
+
+
+# def print_output(output: Dict[str, Any]) -> None:
+#     """Print the output in a readable JSON format."""
+#     print("\n" + "=" * 70)
+#     print("📄 COMPLETE PROFILE (JSON)")
+#     print("=" * 70)
+#     print(json.dumps(output, indent=2))
+
+
+# def main():
+#     """Run test queries."""
+#     import sys
+#     test_queries = [
+#         "black restaurants in north carolina",
+#         "north face jackets",
+#         "georgia peach cobbler",
+#         "restaurants in georgia",
+#         "where is africa located",
+#         "african food near me",
+#         "resturants in atl",
+#         "best hbcus in nc",
+#     ]
+#     if len(sys.argv) > 1:
+#         query = ' '.join(sys.argv[1:])
+#         test_queries = [query]
+
+#     print("\n" + "#" * 70)
+#     print("# WORD DISCOVERY v3 — TEST")
+#     print(f"# RAM Cache: {'✅ loaded' if RAM_CACHE_AVAILABLE and vocab_cache and vocab_cache.loaded else '❌ not available'}")
+#     print("#" * 70)
+
+#     for query in test_queries:
+#         output = process_query(query, verbose=True)
+#         print_output(output)
+#         print("\n" + "=" * 70 + "\n")
+
+
+# if __name__ == "__main__":
+#     main()
+
 """
 word_discovery_v3.py
 ====================
@@ -8924,6 +11098,22 @@ class WordDiscovery:
         def _is_location_category(category):
             return category.lower() in LOCATION_CATEGORIES
 
+        def _all_words_have_location_match(indices):
+            """Check if every word at given indices has at least one location-category match."""
+            for idx in indices:
+                if idx >= len(word_data):
+                    return False
+                wd = word_data[idx]
+                if not wd['all_matches']:
+                    return False
+                has_loc = any(
+                    m.get('category', '').lower() in LOCATION_CATEGORIES
+                    for m in wd['all_matches']
+                )
+                if not has_loc:
+                    return False
+            return True
+
         def _try_ngram(word_slice, indices):
             for idx in indices:
                 if idx in consumed:
@@ -8939,7 +11129,17 @@ class WordDiscovery:
             has_loc_ctx = _has_location_context(indices)
             if has_loc_ctx and _is_location_category(result.get('category', '')):
                 effective_ngram_rank = int(ngram_rank * NGRAM_LOCATION_BOOST)
-            if effective_ngram_rank <= max_unigram_rank:
+
+            # Location compound override: if the n-gram is a location AND every
+            # component word also has a location-category match, auto-consume
+            # regardless of rank. "north" (State/Province) + "carolina" (City)
+            # with bigram "north carolina" (State) = compound location name.
+            is_location_compound = (
+                _is_location_category(result.get('category', ''))
+                and _all_words_have_location_match(indices)
+            )
+
+            if not is_location_compound and effective_ngram_rank <= max_unigram_rank:
                 if self.verbose:
                     print(f"  ❌ {result['ngram_type'].upper()}: '{' '.join(word_slice)}' "
                           f"(ngram_rank={ngram_rank}, effective={effective_ngram_rank}, "
@@ -8952,13 +11152,15 @@ class WordDiscovery:
                 'category': result['category'], 'description': result['description'],
                 'pos': normalize_pos_string(result['pos']), 'rank': ngram_rank,
                 'location_boosted': has_loc_ctx and _is_location_category(result.get('category', '')),
+                'location_compound': is_location_compound,
             }
             ngrams.append(ngram_entry)
             consumed.update(indices)
             if self.verbose:
                 boost_note = f" [LOC_BOOST: {ngram_rank}→{effective_ngram_rank}]" if ngram_entry['location_boosted'] else ""
+                compound_note = " [LOC_COMPOUND: auto-consumed]" if is_location_compound else ""
                 print(f"  ✅ {result['ngram_type'].upper()}: '{' '.join(word_slice)}' "
-                      f"(rank={ngram_rank}, vs unigram={max_unigram_rank}){boost_note}")
+                      f"(rank={ngram_rank}, vs unigram={max_unigram_rank}){boost_note}{compound_note}")
                 print(f"       Category: {result['category']}")
             return True
 
@@ -9641,6 +11843,7 @@ class WordDiscovery:
             all_names = individual_displays | individual_displays_titled
 
             cities[:] = [c for c in cities if c['name'] not in all_names]
+            states[:] = [s for s in states if s['name'] not in all_names]
             keywords[:] = [k for k in keywords if k.get('display', '').lower() not in individual_displays]
             location_terms[:] = [t for t in location_terms if t not in individual_displays]
 
