@@ -13430,23 +13430,21 @@ class WordDiscovery:
         })
 
     SERVICES = frozenset({
-            # Standard services
-            'salon', 'barber', 'spa', 'gym', 'dentist', 'doctor',
-            'lawyer', 'plumber', 'mechanic', 'tutor', 'daycare',
-            'cleaning', 'catering', 'photography', 'moving', 'repair',
-            # Black community services
-            'braids', 'braiding', 'locs', 'dreads', 'dreadlocks',
-            'natural hair', 'relaxer', 'weave', 'extensions',
-            'barbershop', 'nail tech', 'nails', 'esthetician',
-            'notary', 'tax preparer', 'taxes', 'bookkeeper',
-            'bail bonds', 'funeral home', 'mortuary', 'cremation',
-            'life insurance', 'reentry', 'expungement', 'realty',
-            'realtor', 'property management', 'financial advisor',
-            'credit repair', 'mental health', 'therapy', 'counseling',
-            'childcare', 'transportation', 'trucking', 'construction',
-            'landscaping', 'pressure washing', 'detailing',
-            'auto detailing', 'towing', 'security', 'staffing',
-        })
+        # Standard services
+        'salon', 'barber', 'spa', 'gym', 'dentist', 'doctor',
+        'lawyer', 'plumber', 'mechanic', 'tutor', 'daycare',
+        'cleaning', 'catering', 'photography', 'moving', 'repair',
+        # Black community services — actions/skills
+        'braiding', 'barbershop', 'nail tech', 'esthetician',
+        'notary', 'tax preparer', 'taxes', 'bookkeeper',
+        'bail bonds', 'funeral home', 'mortuary', 'cremation',
+        'life insurance', 'reentry', 'expungement', 'realty',
+        'realtor', 'property management', 'financial advisor',
+        'credit repair', 'mental health', 'therapy', 'counseling',
+        'childcare', 'transportation', 'trucking', 'construction',
+        'landscaping', 'pressure washing', 'detailing',
+        'auto detailing', 'towing', 'security', 'staffing',
+    })
 
     APPAREL_PRODUCTS = frozenset({
             # Standard apparel
@@ -13465,7 +13463,7 @@ class WordDiscovery:
         })
 
     BEAUTY = frozenset({
-            # Natural hair
+            # Hair products/styles — the thing being sought
             'natural hair', '4c', '4b', '4a', '3c', 'protective styles',
             'twist out', 'wash and go', 'big chop', 'loc', 'locs',
             'sisterlocks', 'afro', 'fade', 'taper', 'lineup', 'shape up',
@@ -13473,18 +13471,19 @@ class WordDiscovery:
             'box braids', 'knotless', 'senegalese twist', 'marley twist',
             'passion twist', 'butterfly locs', 'faux locs', 'crochet',
             'weave', 'wig', 'lace front', 'closure', 'frontal',
+            'dreads', 'dreadlocks', 'extensions',
             'relaxer', 'texturizer', 'press and curl', 'blowout',
-            # Skincare
+            # Skincare products
             'shea butter', 'cocoa butter', 'skincare', 'skin care',
             'hyperpigmentation', 'melanin', 'dark spots', 'even tone',
             'moisturizer', 'serum', 'sunscreen', 'spf', 'toner',
             'exfoliant', 'retinol', 'vitamin c', 'niacinamide',
-            # Makeup
+            # Makeup products
             'foundation', 'concealer', 'contour', 'highlight',
             'highlighter', 'bronzer', 'blush', 'eyeshadow', 'mascara',
             'eyeliner', 'lipstick', 'lip gloss', 'lip liner', 'setting spray',
             'primer', 'beauty blender', 'makeup',
-            # Nails
+            # Nail products/styles
             'nails', 'manicure', 'pedicure', 'acrylic', 'gel nails',
             'nail art', 'press on nails',
         })
@@ -14751,10 +14750,8 @@ class WordDiscovery:
             'salon', 'barber', 'spa', 'gym', 'dentist', 'doctor',
             'lawyer', 'plumber', 'mechanic', 'tutor', 'daycare',
             'cleaning', 'catering', 'photography', 'moving', 'repair',
-            # Black community services
-            'braids', 'braiding', 'locs', 'dreads', 'dreadlocks',
-            'natural hair', 'relaxer', 'weave', 'extensions',
-            'barbershop', 'nail tech', 'nails', 'esthetician',
+            # Black community services — actions/skills
+            'braiding', 'barbershop', 'nail tech', 'esthetician',
             'notary', 'tax preparer', 'taxes', 'bookkeeper',
             'bail bonds', 'funeral home', 'mortuary', 'cremation',
             'life insurance', 'reentry', 'expungement', 'realty',
@@ -14782,7 +14779,7 @@ class WordDiscovery:
         })
 
         BEAUTY = frozenset({
-            # Natural hair
+            # Hair products/styles — the thing being sought
             'natural hair', '4c', '4b', '4a', '3c', 'protective styles',
             'twist out', 'wash and go', 'big chop', 'loc', 'locs',
             'sisterlocks', 'afro', 'fade', 'taper', 'lineup', 'shape up',
@@ -14790,18 +14787,19 @@ class WordDiscovery:
             'box braids', 'knotless', 'senegalese twist', 'marley twist',
             'passion twist', 'butterfly locs', 'faux locs', 'crochet',
             'weave', 'wig', 'lace front', 'closure', 'frontal',
+            'dreads', 'dreadlocks', 'extensions',
             'relaxer', 'texturizer', 'press and curl', 'blowout',
-            # Skincare
+            # Skincare products
             'shea butter', 'cocoa butter', 'skincare', 'skin care',
             'hyperpigmentation', 'melanin', 'dark spots', 'even tone',
             'moisturizer', 'serum', 'sunscreen', 'spf', 'toner',
             'exfoliant', 'retinol', 'vitamin c', 'niacinamide',
-            # Makeup
+            # Makeup products
             'foundation', 'concealer', 'contour', 'highlight',
             'highlighter', 'bronzer', 'blush', 'eyeshadow', 'mascara',
             'eyeliner', 'lipstick', 'lip gloss', 'lip liner', 'setting spray',
             'primer', 'beauty blender', 'makeup',
-            # Nails
+            # Nail products/styles
             'nails', 'manicure', 'pedicure', 'acrylic', 'gel nails',
             'nail art', 'press on nails',
         })
