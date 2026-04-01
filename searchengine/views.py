@@ -3692,9 +3692,6 @@ def contact(request):
 
 
 
-
-
-
 # ============================================================================
 # DEBUG VIEWS — debug_views.py
 # ============================================================================
@@ -3755,6 +3752,12 @@ try:
         _extract_query_signals,
         _validate_question_hit,
         _normalize_signal,
+        semantic_rerank_candidates,
+        fetch_candidate_metadata,
+        fetch_full_documents,
+        _should_trigger_ai_overview,
+        _build_ai_overview,
+        BLEND_RATIOS,
         client as typesense_client,
         COLLECTION_NAME,
     )
@@ -3774,31 +3777,66 @@ except ImportError:
 
 
 # ============================================================================
-# DEBUG SEARCH VIEW — Full Pipeline Trace
+# TIMING HELPER
+# ============================================================================
+
+def _t(label, fn, timings, *args, **kwargs):
+    """
+    Call fn(*args, **kwargs), record elapsed ms in timings[label],
+    and return the result. Use this for every function call you want
+    to measure individually.
+    """
+    t_start = time.perf_counter()
+    result  = fn(*args, **kwargs)
+    timings[label] = round((time.perf_counter() - t_start) * 1000, 3)
+    return result
+
+
+# ============================================================================
+# DEBUG SEARCH VIEW — Full Pipeline Trace with Granular Timings
 # ============================================================================
 
 @csrf_exempt
 @require_http_methods(["GET", "POST"])
 def debug_search_view(request):
     """
-    Debug endpoint for testing the full Typesense bridge pipeline.
+    Debug endpoint for testing the full pipeline with granular per-function
+    timings and full document ranking breakdown.
 
-    GET  /debug/search/?query=When+was+Prentice+Herman+Polk+born
+    GET  /debug/search/?query=black+weave
     POST /debug/search/  { "query": "...", "alt_mode": "y", ... }
 
-    Returns detailed JSON showing every stage including:
-    - Word discovery v3 output with full pre-classified profile
-    - Intent signals
-    - v3 profile read (entities, locations, field boosts)
-    - Stage 1A document pool
-    - Stage 1B questions pool with vector distances
-    - Overlap between both pools
-    - Full pipeline results with AI overview
+    Timing breakdown covers every individual function call:
+        wd_process            — word_discovery_fulltest.WordDiscovery.process()
+        get_embedding         — embedding worker call
+        detect_intent         — intent_detect.detect_intent()
+        read_v3_profile       — _read_v3_profile()
+        extract_query_signals — _extract_query_signals()
+        fetch_doc_uuids       — fetch_candidate_uuids() Stage 1A
+        fetch_question_uuids  — questions vector search Stage 1B
+        validate_hits_total   — _validate_question_hit() loop total
+        validate_hits_avg     — _validate_question_hit() per-hit average
+        semantic_rerank       — semantic_rerank_candidates()
+        stage3_prune          — distance threshold filter
+        fetch_metadata        — fetch_candidate_metadata()
+        blend_scores          — blended score computation loop
+        ai_overview_check     — _should_trigger_ai_overview()
+        ai_overview_build     — _build_ai_overview()
+        fetch_full_docs       — fetch_full_documents()
+        total                 — wall clock for entire view
+
+    Document ranking breakdown shows for each result:
+        - final blended_score and how it was computed
+        - text_score, sem_score, auth_score components
+        - blend ratios used (changes by query_mode + signals)
+        - vector_distance, semantic_rank, authority_score
+        - which intent signals influenced this result's ranking
+        - matched keywords, entities, field boosts applied
     """
     if not BRIDGE_AVAILABLE:
         return JsonResponse({"error": "typesense_discovery_bridge not available"}, status=500)
 
-    t0 = time.time()
+    t_wall = time.perf_counter()
 
     # ── Parse params ──────────────────────────────────────────────────
     if request.method == "POST":
@@ -3824,68 +3862,66 @@ def debug_search_view(request):
         return JsonResponse({
             "error": "Missing 'query' parameter",
             "usage": {
-                "GET":  "/debug/search/?query=When+was+Prentice+Herman+Polk+born",
-                "POST": '{"query": "When was Prentice Herman Polk born?", "alt_mode": "y"}'
+                "GET":  "/debug/search/?query=black+weave",
+                "POST": '{"query": "black weave", "alt_mode": "y"}'
             }
         }, status=400)
 
-    debug  = {}
-    errors = []
+    # ── Per-function timing dict — every call goes in here ───────────
+    fn_timings = {}
+    errors     = []
+    debug      = {}
 
-    # ── Step 1: Word discovery v3 + embedding ─────────────────────────
+    # =========================================================================
+    # STAGE 1 — Word Discovery (timed alone, not bundled with embedding)
+    # =========================================================================
     discovery = {
-        "query":           query,
-        "corrected_query": query,
-        "search_terms":    [],
-        "persons":         [],
-        "organizations":   [],
-        "keywords":        [],
-        "media":           [],
-        "cities":          [],
-        "states":          [],
-        "location_terms":  [],
-        "primary_intent":  "general",
-        "intent_scores":   {},
-        "field_boosts":    {},
-        "corrections":     [],
-        "terms":           [],
-        "ngrams":          [],
-        "stats":           {},
+        "query": query, "corrected_query": query,
+        "search_terms": [], "persons": [], "organizations": [],
+        "keywords": [], "media": [], "cities": [], "states": [],
+        "location_terms": [], "primary_intent": "general",
+        "intent_scores": {}, "field_boosts": {}, "corrections": [],
+        "terms": [], "ngrams": [], "stats": {},
     }
     query_embedding = None
 
     try:
-        t1 = time.time()
+        # Split run_parallel_prep into its two components so we can time each
+        # separately. run_parallel_prep runs WD + embedding concurrently —
+        # we call it here but record its internal breakdown via the returned
+        # timing info if available, otherwise fall back to total.
+        t_prep = time.perf_counter()
         discovery, query_embedding = run_parallel_prep(query, skip_embedding=False)
-        debug["step1_parallel_prep_ms"] = round((time.time() - t1) * 1000, 2)
+        fn_timings["parallel_prep_total"] = round((time.perf_counter() - t_prep) * 1000, 3)
 
-        debug["step1_word_discovery"] = {
-            # ── v3 pre-classified profile fields ─────────────────────
+        # If run_parallel_prep exposes internal timings, surface them
+        if isinstance(discovery, dict) and "_prep_timings" in discovery:
+            pt = discovery.pop("_prep_timings", {})
+            fn_timings["wd_process"]    = pt.get("wd_ms")
+            fn_timings["get_embedding"] = pt.get("embed_ms")
+        else:
+            # Can't split further without modifying run_parallel_prep —
+            # flag this so you know the bundled time is the only granularity
+            fn_timings["wd_process"]    = "(bundled in parallel_prep — split run_parallel_prep to measure separately)"
+            fn_timings["get_embedding"] = "(bundled in parallel_prep — split run_parallel_prep to measure separately)"
+
+        debug["stage1_word_discovery"] = {
             "original_query":          discovery.get("query", query),
             "corrected_query":         discovery.get("corrected_query", query),
             "corrected_display_query": discovery.get("corrected_display_query", query),
             "corrections":             discovery.get("corrections", []),
-
-            # ── v3 classified entities ────────────────────────────────
-            "search_terms":   discovery.get("search_terms", []),
-            "persons":        discovery.get("persons", []),
-            "organizations":  discovery.get("organizations", []),
-            "keywords":       discovery.get("keywords", []),
-            "media":          discovery.get("media", []),
-
-            # ── v3 location output ────────────────────────────────────
-            "cities":         discovery.get("cities", []),
-            "states":         discovery.get("states", []),
-            "location_terms": discovery.get("location_terms", []),
-
-            # ── v3 intent + scoring ───────────────────────────────────
-            "primary_intent": discovery.get("primary_intent", "general"),
-            "intent_scores":  discovery.get("intent_scores", {}),
-
-            # ── v3 field boosts (pre-computed) ────────────────────────
-            "field_boosts":   discovery.get("field_boosts", {}),
-
-            # ── per-word detail ───────────────────────────────────────
+            "search_terms":            discovery.get("search_terms", []),
+            "persons":                 discovery.get("persons", []),
+            "organizations":           discovery.get("organizations", []),
+            "keywords":                discovery.get("keywords", []),
+            "media":                   discovery.get("media", []),
+            "cities":                  discovery.get("cities", []),
+            "states":                  discovery.get("states", []),
+            "location_terms":          discovery.get("location_terms", []),
+            "primary_intent":          discovery.get("primary_intent", "general"),
+            "intent_scores":           discovery.get("intent_scores", {}),
+            "field_boosts":            discovery.get("field_boosts", {}),
+            "stats":                   discovery.get("stats", {}),
             "terms": [
                 {
                     "position":            t.get("position"),
@@ -3899,6 +3935,7 @@ def debug_search_view(request):
                     "entity_type":         t.get("entity_type"),
                     "is_stopword":         t.get("is_stopword"),
                     "part_of_ngram":       t.get("part_of_ngram"),
+                    "context_flags":       t.get("context_flags", []),  # v3 frozenset flags
                     "match_count":         t.get("match_count"),
                     "suggestion":          t.get("suggestion"),
                     "suggestion_display":  t.get("suggestion_display"),
@@ -3921,10 +3958,9 @@ def debug_search_view(request):
                 }
                 for n in discovery.get("ngrams", [])
             ],
-            "stats": discovery.get("stats", {}),
         }
 
-        debug["step1_embedding"] = {
+        debug["stage1_embedding"] = {
             "generated": query_embedding is not None,
             "dims":      len(query_embedding) if query_embedding else 0,
             "sample":    query_embedding[:5] if query_embedding else [],
@@ -3933,128 +3969,187 @@ def debug_search_view(request):
     except Exception as e:
         errors.append(f"parallel_prep: {str(e)}")
 
-    # ── Step 2: Intent detection ──────────────────────────────────────
+    # =========================================================================
+    # STAGE 2 — Intent Detection
+    # =========================================================================
     signals = {}
     try:
         if INTENT_AVAILABLE:
+            t_intent  = time.perf_counter()
             discovery = detect_intent(discovery)
-            signals   = discovery.get("signals", {})
+            fn_timings["detect_intent"] = round((time.perf_counter() - t_intent) * 1000, 3)
 
-            debug["step2_intent_signals"] = {
+            signals = discovery.get("signals", {})
+
+            debug["stage2_intent_signals"] = {
+                # ── Core mode ──────────────────────────────────────────
                 "query_mode":             signals.get("query_mode"),
-                "question_word":          signals.get("question_word"),
-                "has_question_word":      signals.get("has_question_word"),
+                "signal_count":           signals.get("signal_count"),
                 "wants_single_result":    signals.get("wants_single_result"),
                 "wants_multiple_results": signals.get("wants_multiple_results"),
+
+                # ── Question ───────────────────────────────────────────
+                "has_question_word":      signals.get("has_question_word"),
+                "question_word":          signals.get("question_word"),
+                "is_definition_query":    signals.get("is_definition_query"),
+                "is_comparison_query":    signals.get("is_comparison_query"),
+
+                # ── Location / local ───────────────────────────────────
                 "is_local_search":        signals.get("is_local_search"),
                 "local_search_strength":  signals.get("local_search_strength"),
                 "has_location":           signals.get("has_location"),
                 "has_location_entity":    signals.get("has_location_entity"),
+                "has_proximity":          signals.get("has_proximity"),
+                "has_me_reference":       signals.get("has_me_reference"),
+                "location_terms":         signals.get("location_terms", []),
+
+                # ── Entities ───────────────────────────────────────────
                 "has_person":             signals.get("has_person"),
                 "has_organization":       signals.get("has_organization"),
                 "has_media":              signals.get("has_media"),
-                "has_black_owned":        signals.get("has_black_owned"),
+
+                # ── Service / product ──────────────────────────────────
                 "has_service_word":       signals.get("has_service_word"),
+                "service_words":          signals.get("service_words", []),
                 "has_product_word":       signals.get("has_product_word"),
-                "has_role_word":          signals.get("has_role_word"),
-                "has_superlative":        signals.get("has_superlative"),
+                "product_words":          signals.get("product_words", []),
+
+                # ── v3 context_flags-derived signals ───────────────────
+                "has_food_word":          signals.get("has_food_word"),
+                "has_beauty_word":        signals.get("has_beauty_word"),
+                "has_entertainment_word": signals.get("has_entertainment_word"),
+                "has_culture_word":       signals.get("has_culture_word"),
+                "has_color_modifier":     signals.get("has_color_modifier"),
+                "has_size_modifier":      signals.get("has_size_modifier"),
+                "has_acronym":            signals.get("has_acronym"),
+
+                # ── Temporal / superlative ─────────────────────────────
                 "has_temporal":           signals.get("has_temporal"),
                 "temporal_direction":     signals.get("temporal_direction"),
+                "temporal_word":          signals.get("temporal_word"),
+                "has_superlative":        signals.get("has_superlative"),
+                "superlative_word":       signals.get("superlative_word"),
+
+                # ── Price / rating ─────────────────────────────────────
                 "has_price_signal":       signals.get("has_price_signal"),
                 "price_direction":        signals.get("price_direction"),
-                "has_negation":           signals.get("has_negation"),
-                "has_unknown_terms":      signals.get("has_unknown_terms"),
-                "is_comparison_query":    signals.get("is_comparison_query"),
-                "is_definition_query":    signals.get("is_definition_query"),
+                "has_rating_signal":      signals.get("has_rating_signal"),
+
+                # ── Action / negation ──────────────────────────────────
                 "action_type":            signals.get("action_type"),
-                "service_words":          signals.get("service_words", []),
-                "product_words":          signals.get("product_words", []),
-                "domains_detected":       signals.get("domains_detected", []),
+                "has_negation":           signals.get("has_negation"),
+                "negated_terms":          signals.get("negated_terms", []),
+
+                # ── Ownership / unknown ────────────────────────────────
+                "has_black_owned":        signals.get("has_black_owned"),
+                "has_unknown_terms":      signals.get("has_unknown_terms"),
+                "unknown_term_count":     signals.get("unknown_term_count"),
+
+                # ── Domains ────────────────────────────────────────────
                 "primary_domain":         signals.get("primary_domain"),
-                "signal_count":           signals.get("signal_count"),
+                "domains_detected":       signals.get("domains_detected", []),
+
+                # ── Detected entities ──────────────────────────────────
                 "detected_entities":      signals.get("detected_entities", [])[:10],
             }
-    except Exception as e:
-        errors.append(f"intent_detect: {str(e)}")
 
-    # ── Step 3: Read v3 profile — O(1) field reads, no re-analysis ────
+    except Exception as e:
+        errors.append(f"detect_intent: {str(e)}")
+
+    # =========================================================================
+    # STAGE 3 — Read v3 Profile
+    # =========================================================================
     profile = {}
     try:
-        t3      = time.time()
-        profile = _read_v3_profile(discovery, signals=signals)
-        debug["step3_read_profile_ms"] = round((time.time() - t3) * 1000, 2)
-        debug["step3_source"]          = "word_discovery_v3_profile"
+        t_profile = time.perf_counter()
+        profile   = _read_v3_profile(discovery, signals=signals)
+        fn_timings["read_v3_profile"] = round((time.perf_counter() - t_profile) * 1000, 3)
 
-        debug["step3_query_profile"] = {
+        debug["stage3_profile"] = {
             "primary_intent":   profile.get("primary_intent"),
             "search_terms":     profile.get("search_terms", []),
+            "field_boosts":     profile.get("field_boosts", {}),
+            "intent_scores":    profile.get("intent_scores", {}),
             "location_terms":   profile.get("location_terms", []),
-            "cities": [
-                c.get("name") if isinstance(c, dict) else c
-                for c in profile.get("cities", [])
-            ],
-            "states": [
-                s.get("name") if isinstance(s, dict) else s
-                for s in profile.get("states", [])
-            ],
-            "persons": [
-                p.get("phrase") or p.get("word")
-                for p in profile.get("persons", [])
-            ],
-            "organizations": [
-                o.get("phrase") or o.get("word")
-                for o in profile.get("organizations", [])
-            ],
-            "keywords": [
-                k.get("phrase") or k.get("word")
-                for k in profile.get("keywords", [])
-            ],
-            "media": [
-                m.get("phrase") or m.get("word")
-                for m in profile.get("media", [])
-            ],
-            "has_person":           profile.get("has_person"),
-            "has_organization":     profile.get("has_organization"),
-            "has_location":         profile.get("has_location"),
-            "has_keyword":          profile.get("has_keyword"),
-            "has_media":            profile.get("has_media"),
-            "field_boosts":         profile.get("field_boosts", {}),
-            "intent_scores":        profile.get("intent_scores", {}),
-            "preferred_data_types": profile.get("preferred_data_types", []),
+            "cities":  [c.get("name") if isinstance(c, dict) else c for c in profile.get("cities", [])],
+            "states":  [s.get("name") if isinstance(s, dict) else s for s in profile.get("states", [])],
+            "persons": [p.get("phrase") or p.get("word") for p in profile.get("persons", [])],
+            "organizations": [o.get("phrase") or o.get("word") for o in profile.get("organizations", [])],
+            "keywords": [k.get("phrase") or k.get("word") for k in profile.get("keywords", [])],
+            "media":    [m.get("phrase") or m.get("word") for m in profile.get("media", [])],
+            "has_person":       profile.get("has_person"),
+            "has_organization": profile.get("has_organization"),
+            "has_location":     profile.get("has_location"),
+            "has_keyword":      profile.get("has_keyword"),
+            "has_media":        profile.get("has_media"),
         }
 
     except Exception as e:
         errors.append(f"read_v3_profile: {str(e)}")
 
+    # =========================================================================
+    # STAGE 4 — Extract Query Signals (used by question pool validation)
+    # =========================================================================
+    query_tokens   = set()
+    query_phrases  = []
+    primary_subject = None
+    try:
+        t_qs = time.perf_counter()
+        query_tokens, query_phrases, primary_subject = _extract_query_signals(
+            profile, discovery=discovery
+        )
+        fn_timings["extract_query_signals"] = round((time.perf_counter() - t_qs) * 1000, 3)
+
+        debug["stage4_query_signals"] = {
+            "query_tokens":    sorted(query_tokens) if query_tokens else [],
+            "query_phrases":   query_phrases,
+            "primary_subject": sorted(primary_subject) if primary_subject else None,
+        }
+    except Exception as e:
+        errors.append(f"extract_query_signals: {str(e)}")
+
     corrected_query = discovery.get("corrected_query", query)
 
-    # ── Step 4A: Stage 1A — document collection ───────────────────────
+    # =========================================================================
+    # STAGE 5A — Document Pool (fetch_candidate_uuids)
+    # =========================================================================
     doc_uuids = []
     try:
-        t4a       = time.time()
+        t_docs    = time.perf_counter()
         doc_uuids = fetch_candidate_uuids(
             corrected_query, profile, signals=signals, max_results=100
         )
-        debug["step4a_stage1_document_ms"] = round((time.time() - t4a) * 1000, 2)
-        debug["step4a_stage1_document"]    = {
+        fn_timings["fetch_candidate_uuids"] = round((time.perf_counter() - t_docs) * 1000, 3)
+
+        debug["stage5a_document_pool"] = {
+            "query_used":   corrected_query,
             "count":        len(doc_uuids),
             "uuids_sample": doc_uuids[:10],
         }
     except Exception as e:
-        errors.append(f"stage1a: {str(e)}")
-        debug["step4a_error"] = str(e)
+        errors.append(f"fetch_candidate_uuids: {str(e)}")
+        debug["stage5a_error"] = str(e)
 
-    # ── Step 4B: Stage 1B — questions collection ──────────────────────
-    q_debug = {}
+    # =========================================================================
+    # STAGE 5B — Question Pool (vector search + per-hit validation)
+    # =========================================================================
     q_uuids = []
     try:
-        t4b     = time.time()
+        t_q    = time.perf_counter()
         q_debug = _fetch_questions_debug(
-            profile, query_embedding, signals=signals, discovery=discovery, max_results=50
+            profile, query_embedding,
+            signals=signals,
+            discovery=discovery,
+            query_tokens=query_tokens,
+            query_phrases=query_phrases,
+            primary_subject=primary_subject,
+            fn_timings=fn_timings,   # passed in so it can record validate_hits timing
+            max_results=50,
         )
+        fn_timings["fetch_question_pool_total"] = round((time.perf_counter() - t_q) * 1000, 3)
         q_uuids = q_debug.get("uuids", [])
-        debug["step4b_stage1_questions_ms"] = round((time.time() - t4b) * 1000, 2)
-        debug["step4b_stage1_questions"]    = {
+
+        debug["stage5b_question_pool"] = {
             "filter_used":          q_debug.get("filter_used"),
             "filter_parts":         q_debug.get("filter_parts", []),
             "location_filter":      q_debug.get("location_filter", "none"),
@@ -4066,16 +4161,22 @@ def debug_search_view(request):
             "accepted":             q_debug.get("accepted", 0),
             "rejected":             q_debug.get("rejected", 0),
             "unique_doc_uuids":     q_debug.get("unique_doc_uuids", 0),
+            "typesense_search_ms":  q_debug.get("typesense_search_ms"),
+            "validate_hits_total_ms": fn_timings.get("validate_hits_total_ms"),
+            "validate_hits_avg_ms":   fn_timings.get("validate_hits_avg_ms"),
+            "validate_hits_count":    fn_timings.get("validate_hits_count"),
+            "fallback_search_ms":   q_debug.get("fallback_search_ms"),
             "matched_questions":    q_debug.get("matched_questions", []),
             "rejected_questions":   q_debug.get("rejected_questions", [])[:10],
-            "validation_signals":   q_debug.get("validation_signals", {}),
             "error":                q_debug.get("error"),
         }
     except Exception as e:
-        errors.append(f"stage1b: {str(e)}")
-        debug["step4b_error"] = str(e)
+        errors.append(f"stage5b_questions: {str(e)}")
+        debug["stage5b_error"] = str(e)
 
-    # ── Step 4C: Overlap analysis ─────────────────────────────────────
+    # =========================================================================
+    # STAGE 5C — Pool Overlap Analysis
+    # =========================================================================
     try:
         doc_set  = set(doc_uuids)
         q_set    = set(q_uuids)
@@ -4083,113 +4184,370 @@ def debug_search_view(request):
         doc_only = doc_set - q_set
         q_only   = q_set - doc_set
 
-        debug["step4c_overlap"] = {
-            "document_pool":        len(doc_uuids),
-            "questions_pool":       len(q_uuids),
+        debug["stage5c_pool_overlap"] = {
+            "document_pool_count":  len(doc_uuids),
+            "questions_pool_count": len(q_uuids),
             "overlap_count":        len(overlap),
             "overlap_uuids":        list(overlap)[:10],
             "document_only_count":  len(doc_only),
             "questions_only_count": len(q_only),
             "total_merged":         len(doc_set | q_set),
-            "merge_order":          "overlap first → document-only → questions-only",
-            "interpretation": (
-                "HIGH CONFIDENCE — same docs found by both paths"
-                if len(overlap) >= 3 else
-                "MODERATE — some overlap between paths"
-                if overlap else
-                "NO OVERLAP — paths found different documents"
+            "confidence": (
+                "HIGH — same docs found by both paths"   if len(overlap) >= 3 else
+                "MODERATE — some overlap between paths"  if overlap else
+                "LOW — paths found completely different documents"
             ),
         }
     except Exception as e:
-        errors.append(f"overlap: {str(e)}")
+        errors.append(f"pool_overlap: {str(e)}")
 
-    # ── Step 5: Full pipeline ─────────────────────────────────────────
-    full_result = {}
+    # =========================================================================
+    # STAGE 6 — Semantic Rerank + Score Blend
+    # Runs the same logic as execute_full_search so we can expose
+    # per-document score components in the ranking breakdown.
+    # =========================================================================
+    all_results  = []
+    vector_data  = {}
+    blend_used   = {}
+    blend_notes  = []
+
+    combined_uuids = list(dict.fromkeys(list(overlap) + list(doc_only) + list(q_only))) \
+        if 'overlap' in dir() else doc_uuids
+
+    semantic_enabled = query_embedding is not None
+    query_mode       = signals.get("query_mode", "explore")
+
+    if semantic_enabled and combined_uuids:
+        try:
+            t_rerank = time.perf_counter()
+            reranked = semantic_rerank_candidates(combined_uuids, query_embedding, max_to_rerank=500)
+            fn_timings["semantic_rerank"] = round((time.perf_counter() - t_rerank) * 1000, 3)
+
+            vector_data = {
+                item["id"]: {
+                    "vector_distance": item.get("vector_distance", 1.0),
+                    "semantic_rank":   item.get("semantic_rank", 999999),
+                }
+                for item in reranked
+            }
+
+            # Stage 3 prune — same thresholds as execute_full_search
+            DISTANCE_THRESHOLDS = {
+                "answer":  0.60, "explore": 0.70, "compare": 0.65,
+                "browse":  0.85, "local":   0.85, "shop":    0.80,
+            }
+            threshold      = DISTANCE_THRESHOLDS.get(query_mode, 0.75)
+            before_prune   = len(combined_uuids)
+            survivor_uuids = [
+                uuid for uuid in combined_uuids
+                if vector_data.get(uuid, {}).get("vector_distance", 1.0) <= threshold
+            ]
+            fn_timings["stage3_prune"] = f"{before_prune} → {len(survivor_uuids)} (threshold={threshold})"
+
+            debug["stage6_rerank"] = {
+                "semantic_enabled":    True,
+                "candidates_in":       before_prune,
+                "survivors_after_prune": len(survivor_uuids),
+                "distance_threshold":  threshold,
+                "query_mode":          query_mode,
+            }
+
+        except Exception as e:
+            errors.append(f"semantic_rerank: {str(e)}")
+            survivor_uuids = combined_uuids
+    else:
+        survivor_uuids = combined_uuids
+        fn_timings["semantic_rerank"] = "skipped (no embedding)"
+        fn_timings["stage3_prune"]    = "skipped"
+        debug["stage6_rerank"] = {"semantic_enabled": False}
+
+    # ── Fetch metadata for survivors ──────────────────────────────────
     try:
-        t5          = time.time()
-        full_result = execute_full_search(
-            query=query,
-            session_id=session_id,
-            filters={},
-            page=page,
-            per_page=per_page,
-            alt_mode=alt_mode,
-            search_source=search_source,
-        )
-        debug["step5_full_pipeline_ms"]  = round((time.time() - t5) * 1000, 2)
-        debug["step5_search_strategy"]   = full_result.get("search_strategy")
-        debug["step5_semantic_enabled"]  = full_result.get("semantic_enabled")
+        t_meta      = time.perf_counter()
+        all_results = fetch_candidate_metadata(survivor_uuids)
+        fn_timings["fetch_candidate_metadata"] = round((time.perf_counter() - t_meta) * 1000, 3)
     except Exception as e:
-        errors.append(f"execute_full_search: {str(e)}")
-        debug["step5_error"] = str(e)
+        errors.append(f"fetch_candidate_metadata: {str(e)}")
 
-    # ── Build results summary ─────────────────────────────────────────
-    results_summary = []
-    for i, r in enumerate(full_result.get("results", [])):
-        result_entry = {
-            "rank":            i + 1,
-            "title":           r.get("title"),
-            "url":             r.get("url"),
-            "data_type":       r.get("data_type"),
-            "category":        r.get("category"),
-            "schema":          r.get("schema"),
-            "authority_score": r.get("authority_score"),
-            "semantic_score":  r.get("semantic_score"),
-            "date":            r.get("date"),
-            "source":          r.get("source"),
-            "location": {
-                "city":    r.get("location", {}).get("city"),
-                "state":   r.get("location", {}).get("state"),
-                "country": r.get("location", {}).get("country"),
+    # ── Blend scores — mirror execute_full_search logic exactly ───────
+    if vector_data and all_results:
+        try:
+            t_blend        = time.perf_counter()
+            total_cands    = len(all_results)
+            max_sem_rank   = len(vector_data)
+            blend_used     = BLEND_RATIOS.get(query_mode, BLEND_RATIOS["explore"]).copy()
+
+            # Same signal-driven adjustments as execute_full_search
+            if query_mode == "answer" and signals.get("wants_single_result"):
+                blend_used  = {"text_match": 0.70, "semantic": 0.30, "authority": 0.00}
+                blend_notes.append("answer+wants_single → text_match=0.70, semantic=0.30, authority=0.00")
+
+            if signals.get("has_unknown_terms", False):
+                shift = min(0.15, blend_used["text_match"])
+                blend_used["text_match"] -= shift
+                blend_used["semantic"]   += shift
+                blend_notes.append(f"has_unknown_terms → text_match -{shift:.2f}, semantic +{shift:.2f}")
+
+            if signals.get("has_superlative", False):
+                shift = min(0.10, blend_used["semantic"])
+                blend_used["semantic"]  -= shift
+                blend_used["authority"] += shift
+                blend_notes.append(f"has_superlative → semantic -{shift:.2f}, authority +{shift:.2f}")
+
+            for idx, item in enumerate(all_results):
+                item_id   = item.get("id")
+                vd        = vector_data.get(item_id, {"vector_distance": 1.0, "semantic_rank": 999999})
+                authority = item.get("authority_score", 0)
+
+                item["vector_distance"] = vd["vector_distance"]
+                item["semantic_rank"]   = vd["semantic_rank"]
+
+                text_score = 1.0 - (idx / max(total_cands, 1))
+                sem_score  = (
+                    1.0 - (item["semantic_rank"] / max(max_sem_rank, 1))
+                    if item["semantic_rank"] < 999999 else 0.0
+                )
+                auth_score = min(authority / 100.0, 1.0)
+
+                item["blended_score"]    = round(
+                    blend_used["text_match"] * text_score +
+                    blend_used["semantic"]   * sem_score  +
+                    blend_used["authority"]  * auth_score, 6
+                )
+                # Store components so the ranking breakdown can show them
+                item["_score_components"] = {
+                    "text_score":  round(text_score, 4),
+                    "sem_score":   round(sem_score, 4),
+                    "auth_score":  round(auth_score, 4),
+                    "text_weight": blend_used["text_match"],
+                    "sem_weight":  blend_used["semantic"],
+                    "auth_weight": blend_used["authority"],
+                }
+
+            all_results.sort(key=lambda x: -x.get("blended_score", 0))
+            for i, item in enumerate(all_results):
+                item["rank"] = i
+
+            fn_timings["blend_scores"] = round((time.perf_counter() - t_blend) * 1000, 3)
+
+            debug["stage6_blend"] = {
+                "query_mode":    query_mode,
+                "blend_used":    blend_used,
+                "blend_notes":   blend_notes,
+                "total_scored":  len(all_results),
+            }
+
+        except Exception as e:
+            errors.append(f"blend_scores: {str(e)}")
+
+    # =========================================================================
+    # STAGE 7 — AI Overview
+    # =========================================================================
+    ai_overview = None
+    try:
+        if all_results:
+            preview_ids   = [item["id"] for item in all_results[:per_page]]
+            preview_docs  = fetch_full_documents(preview_ids, query)
+
+            t_ai_check = time.perf_counter()
+            should_ai  = _should_trigger_ai_overview(signals, preview_docs, query)
+            fn_timings["ai_overview_check"] = round((time.perf_counter() - t_ai_check) * 1000, 3)
+
+            if should_ai:
+                t_ai_build  = time.perf_counter()
+                ai_overview = _build_ai_overview(signals, preview_docs, query)
+                fn_timings["ai_overview_build"] = round((time.perf_counter() - t_ai_build) * 1000, 3)
+            else:
+                fn_timings["ai_overview_build"] = "skipped (trigger=false)"
+
+            debug["stage7_ai_overview"] = {
+                "triggered":  should_ai,
+                "generated":  ai_overview is not None,
+                "preview_ms": fn_timings.get("ai_overview_build"),
+            }
+    except Exception as e:
+        errors.append(f"ai_overview: {str(e)}")
+
+    # =========================================================================
+    # STAGE 8 — Fetch Full Documents for Page
+    # =========================================================================
+    results = []
+    try:
+        page_items = all_results[(page - 1) * per_page: page * per_page]
+        page_ids   = [item["id"] for item in page_items]
+
+        t_fetch  = time.perf_counter()
+        results  = fetch_full_documents(page_ids, query)
+        fn_timings["fetch_full_documents"] = round((time.perf_counter() - t_fetch) * 1000, 3)
+
+        if results and page == 1 and ai_overview:
+            results[0]["humanized_summary"] = ai_overview
+    except Exception as e:
+        errors.append(f"fetch_full_documents: {str(e)}")
+
+    # =========================================================================
+    # DOCUMENT RANKING BREAKDOWN
+    # Build per-result explanation: scores, weights, signals that influenced
+    # ranking, matched keywords/entities, field boosts applied.
+    # =========================================================================
+    active_signals = [
+        k for k, v in signals.items()
+        if isinstance(v, bool) and v is True
+    ]
+    field_boosts = profile.get("field_boosts", {})
+
+    ranking_breakdown = []
+    for i, doc in enumerate(results):
+        doc_id   = doc.get("id") or doc.get("uuid")
+        meta     = next((m for m in all_results if m.get("id") == doc_id), {})
+        comps    = meta.get("_score_components", {})
+
+        # Which profile keywords appear in this doc's searchable fields
+        profile_kws = [
+            k.get("phrase") or k.get("word", "")
+            for k in profile.get("keywords", [])
+        ]
+        doc_text = " ".join([
+            str(doc.get("title", "")),
+            str(doc.get("description", "")),
+            " ".join(doc.get("key_facts", [])),
+            " ".join(doc.get("primary_keywords", []) if isinstance(doc.get("primary_keywords"), list) else []),
+        ]).lower()
+
+        matched_kws = [kw for kw in profile_kws if kw and kw.lower() in doc_text]
+
+        profile_entities = (
+            [p.get("phrase") or p.get("word", "") for p in profile.get("persons", [])] +
+            [o.get("phrase") or o.get("word", "") for o in profile.get("organizations", [])]
+        )
+        matched_entities = [e for e in profile_entities if e and e.lower() in doc_text]
+
+        ranking_breakdown.append({
+            "rank":        i + 1,
+            "id":          doc_id,
+            "title":       doc.get("title"),
+            "url":         doc.get("url"),
+            "data_type":   doc.get("data_type"),
+            "category":    doc.get("category"),
+            "schema":      doc.get("schema"),
+
+            # ── Scores ──────────────────────────────────────────────
+            "scores": {
+                "blended_score":    meta.get("blended_score"),
+                "authority_score":  doc.get("authority_score") or meta.get("authority_score"),
+                "vector_distance":  meta.get("vector_distance"),
+                "semantic_rank":    meta.get("semantic_rank"),
             },
-            "key_facts_count": len(r.get("key_facts", [])),
-            "key_facts":       r.get("key_facts", [])[:5],
-            "has_image":       bool(r.get("image")),
-        }
 
-        if r.get("humanized_summary"):
-            result_entry["ai_overview"] = r["humanized_summary"]
+            # ── Score components (how blended_score was built) ───────
+            "score_components": {
+                "text_score":   comps.get("text_score"),
+                "sem_score":    comps.get("sem_score"),
+                "auth_score":   comps.get("auth_score"),
+                "text_weight":  comps.get("text_weight"),
+                "sem_weight":   comps.get("sem_weight"),
+                "auth_weight":  comps.get("auth_weight"),
+                "formula": (
+                    f"({comps.get('text_weight', '?')} × {comps.get('text_score', '?')}) + "
+                    f"({comps.get('sem_weight', '?')} × {comps.get('sem_score', '?')}) + "
+                    f"({comps.get('auth_weight', '?')} × {comps.get('auth_score', '?')})"
+                    if comps else "unavailable (keyword path or no embedding)"
+                ),
+            },
 
-        results_summary.append(result_entry)
+            # ── Why it ranked here ───────────────────────────────────
+            "ranking_context": {
+                "query_mode":         query_mode,
+                "blend_adjustments":  blend_notes,
+                "active_signals":     active_signals,
+                "field_boosts":       field_boosts,
+                "matched_keywords":   matched_kws,
+                "matched_entities":   matched_entities,
+                "location_match": {
+                    "city":  doc.get("location", {}).get("city"),
+                    "state": doc.get("location", {}).get("state"),
+                } if doc.get("location") else None,
+            },
 
-    # ── Final response ────────────────────────────────────────────────
+            # ── Document detail ──────────────────────────────────────
+            "key_facts":       doc.get("key_facts", [])[:5],
+            "key_facts_count": len(doc.get("key_facts", [])),
+            "has_image":       bool(doc.get("image")),
+            "date":            doc.get("date"),
+            "source":          doc.get("source"),
+            "ai_overview":     doc.get("humanized_summary"),
+        })
+
+    # =========================================================================
+    # TIMING SUMMARY — sorted slowest to fastest so bottleneck is obvious
+    # =========================================================================
+    numeric_timings = {
+        k: v for k, v in fn_timings.items()
+        if isinstance(v, (int, float))
+    }
+    note_timings = {
+        k: v for k, v in fn_timings.items()
+        if not isinstance(v, (int, float))
+    }
+
+    timing_summary = {
+        "sorted_slowest_first": sorted(
+            [{"fn": k, "ms": v} for k, v in numeric_timings.items()],
+            key=lambda x: -x["ms"]
+        ),
+        "notes": note_timings,
+        "total_wall_ms": round((time.perf_counter() - t_wall) * 1000, 3),
+    }
+
+    # =========================================================================
+    # FINAL RESPONSE
+    # =========================================================================
     return JsonResponse({
+        # ── What was asked ────────────────────────────────────────────
         "meta": {
             "query":            query,
-            "corrected_query":  full_result.get("corrected_query", corrected_query),
-            "query_mode":       full_result.get("query_mode"),
-            "intent":           full_result.get("intent"),
-            "search_strategy":  full_result.get("search_strategy"),
-            "semantic_enabled": full_result.get("semantic_enabled"),
-            "alt_mode":         alt_mode,
+            "corrected_query":  corrected_query,
+            "query_mode":       query_mode,
+            "semantic_enabled": semantic_enabled,
             "search_source":    search_source,
-            "total_ms":         round((time.time() - t0) * 1000, 2),
+            "alt_mode":         alt_mode,
         },
+
+        # ── THE MAIN EVENT — per-function timing breakdown ────────────
+        "timings": timing_summary,
+
+        # ── Pipeline stage debug ──────────────────────────────────────
+        "pipeline": {
+            "stage1_word_discovery": debug.get("stage1_word_discovery"),
+            "stage1_embedding":      debug.get("stage1_embedding"),
+            "stage2_intent":         debug.get("stage2_intent_signals"),
+            "stage3_profile":        debug.get("stage3_profile"),
+            "stage4_query_signals":  debug.get("stage4_query_signals"),
+            "stage5a_doc_pool":      debug.get("stage5a_document_pool"),
+            "stage5b_question_pool": debug.get("stage5b_question_pool"),
+            "stage5c_pool_overlap":  debug.get("stage5c_pool_overlap"),
+            "stage6_rerank":         debug.get("stage6_rerank"),
+            "stage6_blend":          debug.get("stage6_blend"),
+            "stage7_ai_overview":    debug.get("stage7_ai_overview"),
+        },
+
+        # ── Document ranking with full score breakdown ─────────────────
+        "ranking_breakdown": ranking_breakdown,
+
+        # ── Counts ────────────────────────────────────────────────────
         "counts": {
-            "total":             full_result.get("total", 0),
-            "facet_total":       full_result.get("facet_total", 0),
-            "total_images":      full_result.get("total_image_count", 0),
-            "results_this_page": len(full_result.get("results", [])),
+            "candidates_total":  len(all_results),
+            "page_results":      len(results),
+            "page":              page,
+            "per_page":          per_page,
         },
-        "facets": {
-            "data_types": full_result.get("data_type_facets", []),
-            "categories": full_result.get("category_facets", []),
-            "schemas":    full_result.get("schema_facets", []),
-        },
-        "results":         results_summary,
-        "pipeline_debug":  debug,
-        "timings":         full_result.get("timings", {}),
-        "filters_applied": full_result.get("filters_applied", {}),
-        "valid_terms":     full_result.get("valid_terms", []),
-        "unknown_terms":   full_result.get("unknown_terms", []),
-        "word_discovery":  full_result.get("word_discovery", {}),
-        "signals":         full_result.get("signals", {}),
-        "errors":          errors if errors else None,
+
+        "errors": errors if errors else None,
     }, json_dumps_params={"indent": 2})
 
 
 # ============================================================================
-# QUESTIONS DEBUG HELPER — Stage 1B with validation trace
+# QUESTIONS DEBUG HELPER — Stage 1B with timing instrumentation
 # ============================================================================
 
 def _fetch_questions_debug(
@@ -4197,28 +4555,38 @@ def _fetch_questions_debug(
     query_embedding: list,
     signals: dict = None,
     discovery: dict = None,
+    query_tokens: set = None,
+    query_phrases: list = None,
+    primary_subject = None,
+    fn_timings: dict = None,
     max_results: int = 50,
 ) -> dict:
     """
-    Stage 1B with full debug output including validation trace.
-
-    Reads entities, keywords, and locations directly from the v3 profile —
-    no re-classification. Returns matched questions with vector distance,
-    question text, answer, question_type, document_uuid, and
-    validation accept/reject detail.
+    Stage 1B with full timing instrumentation.
+    Records:
+        - typesense_search_ms       — the actual Typesense vector search call
+        - validate_hits_total_ms    — total time for all _validate_question_hit calls
+        - validate_hits_avg_ms      — average per hit
+        - validate_hits_count       — number of hits validated
+        - fallback_search_ms        — time for fallback search if triggered
+    All timing values written into fn_timings dict passed from caller.
     """
+    if fn_timings is None:
+        fn_timings = {}
+
+    signals        = signals or {}
+    query_tokens   = query_tokens or set()
+    query_phrases  = query_phrases or []
+
     if not BRIDGE_AVAILABLE:
         return {"error": "bridge not available", "uuids": [], "matched_questions": []}
-
-    signals = signals or {}
 
     if not query_embedding:
         return {"error": "no embedding", "uuids": [], "matched_questions": [], "filter_used": ""}
 
-    # ── Build facet filter from v3 profile (direct reads) ────────────
+    # ── Build filter from v3 profile ──────────────────────────────────
     filter_parts = []
 
-    # Keywords: read from v3 profile['keywords']
     primary_kws = [
         k.get("phrase") or k.get("word", "")
         for k in profile.get("keywords", [])
@@ -4228,7 +4596,6 @@ def _fetch_questions_debug(
         kw_values = ",".join([f"`{kw}`" for kw in primary_kws])
         filter_parts.append(f"primary_keywords:[{kw_values}]")
 
-    # Entities: persons + organizations from v3 profile
     entity_names = []
     for p in profile.get("persons", []):
         name = p.get("phrase") or p.get("word", "")
@@ -4245,7 +4612,6 @@ def _fetch_questions_debug(
         ent_values = ",".join([f"`{e}`" for e in entity_names])
         filter_parts.append(f"entities:[{ent_values}]")
 
-    # Question type from signals
     question_word = signals.get("question_word") or ""
     question_type_map = {
         "when": "TEMPORAL", "where": "LOCATION", "who": "PERSON",
@@ -4255,7 +4621,7 @@ def _fetch_questions_debug(
     if question_type:
         filter_parts.append(f"question_type:={question_type}")
 
-    # ── Location filter from v3 cities/states ─────────────────────────
+    # ── Location filter ───────────────────────────────────────────────
     location_filter_parts = []
     query_mode            = signals.get("query_mode", "explore")
     is_location_subject   = (
@@ -4273,7 +4639,6 @@ def _fetch_questions_debug(
                 city_filters[0] if len(city_filters) == 1
                 else "(" + " || ".join(city_filters) + ")"
             )
-
         states = profile.get("states", [])
         if states:
             state_conditions = [
@@ -4296,18 +4661,8 @@ def _fetch_questions_debug(
     else:
         filter_str = facet_filter
 
-    # ── Extract validation signals ────────────────────────────────────
-    query_tokens, query_phrases, primary_subject = set(), [], None
-    try:
-        query_tokens, query_phrases, primary_subject = _extract_query_signals(
-            profile, discovery=discovery
-        )
-    except Exception:
-        pass
-
     # ── Vector search ─────────────────────────────────────────────────
     embedding_str = ",".join(str(x) for x in query_embedding)
-
     search_params = {
         "q":              "*",
         "vector_query":   f"embedding:([{embedding_str}], k:{max_results * 2})",
@@ -4322,40 +4677,52 @@ def _fetch_questions_debug(
         search_params["filter_by"] = filter_str
 
     try:
-        search_requests = {"searches": [{"collection": "questions", **search_params}]}
-        response        = typesense_client.multi_search.perform(search_requests, {})
-        result          = response["results"][0]
-        hits            = result.get("hits", [])
+        t_ts     = time.perf_counter()
+        response = typesense_client.multi_search.perform(
+            {"searches": [{"collection": "questions", **search_params}]}, {}
+        )
+        fn_timings["typesense_question_search_ms"] = round((time.perf_counter() - t_ts) * 1000, 3)
 
-        # Fallback logic
-        used_fallback = None
+        result = response["results"][0]
+        hits   = result.get("hits", [])
+
+        # ── Fallback ──────────────────────────────────────────────────
+        used_fallback     = None
+        fallback_ms       = None
         if len(hits) < 5 and filter_str and location_filter:
+            t_fb          = time.perf_counter()
             fallback_filter = facet_filter if facet_filter else ""
-            sp_fb           = dict(search_params)
+            sp_fb         = dict(search_params)
             if fallback_filter:
                 sp_fb["filter_by"] = fallback_filter
             else:
                 sp_fb.pop("filter_by", None)
 
-            r_fb          = typesense_client.multi_search.perform({"searches": [{"collection": "questions", **sp_fb}]}, {})
+            r_fb          = typesense_client.multi_search.perform(
+                {"searches": [{"collection": "questions", **sp_fb}]}, {}
+            )
             fallback_hits = r_fb["results"][0].get("hits", [])
 
             if len(fallback_hits) >= 5:
-                hits          = fallback_hits
-                used_fallback = "facet_only"
+                hits, used_fallback = fallback_hits, "facet_only"
             else:
                 sp_nf = {k: v for k, v in search_params.items() if k != "filter_by"}
-                r_nf  = typesense_client.multi_search.perform({"searches": [{"collection": "questions", **sp_nf}]}, {})
-                hits          = r_nf["results"][0].get("hits", [])
-                used_fallback = "no_filter"
+                r_nf  = typesense_client.multi_search.perform(
+                    {"searches": [{"collection": "questions", **sp_nf}]}, {}
+                )
+                hits, used_fallback = r_nf["results"][0].get("hits", []), "no_filter"
 
-        # ── Process hits with validation ──────────────────────────────
+            fallback_ms = round((time.perf_counter() - t_fb) * 1000, 3)
+            fn_timings["question_fallback_search_ms"] = fallback_ms
+
+        # ── Validate hits — time total + per-hit average ───────────────
         matched_questions  = []
         rejected_questions = []
         uuids              = []
         seen               = set()
         accepted_count     = 0
         rejected_count     = 0
+        validate_times     = []
 
         for hit in hits:
             doc             = hit.get("document", {})
@@ -4383,10 +4750,10 @@ def _fetch_questions_debug(
                 "authority_rank_score": doc.get("authority_rank_score", 0),
             }
 
-            # Validate against v3 query signals
             is_valid = True
-            try:
-                if query_tokens:
+            if query_tokens:
+                try:
+                    t_v      = time.perf_counter()
                     is_valid = _validate_question_hit(
                         hit_doc         = doc,
                         query_tokens    = query_tokens,
@@ -4394,8 +4761,9 @@ def _fetch_questions_debug(
                         primary_subject = primary_subject,
                         min_matches     = 1,
                     )
-            except Exception:
-                is_valid = True
+                    validate_times.append(time.perf_counter() - t_v)
+                except Exception:
+                    is_valid = True
 
             question_entry["validated"] = is_valid
 
@@ -4413,19 +4781,26 @@ def _fetch_questions_debug(
             if len(uuids) >= max_results:
                 break
 
+        # Write validate timing into fn_timings
+        if validate_times:
+            fn_timings["validate_hits_total_ms"] = round(sum(validate_times) * 1000, 3)
+            fn_timings["validate_hits_avg_ms"]   = round((sum(validate_times) / len(validate_times)) * 1000, 4)
+            fn_timings["validate_hits_count"]    = len(validate_times)
+        else:
+            fn_timings["validate_hits_total_ms"] = 0
+            fn_timings["validate_hits_avg_ms"]   = 0
+            fn_timings["validate_hits_count"]    = 0
+
         return {
             "filter_used":          filter_str or "none (full scan)",
             "filter_parts":         filter_parts,
             "location_filter":      location_filter or "none",
             "used_fallback":        used_fallback,
+            "fallback_search_ms":   fallback_ms,
             "primary_kws_used":     primary_kws,
             "entity_names_used":    entity_names,
             "question_type_filter": question_type or "none",
-            "validation_signals": {
-                "query_tokens":    sorted(query_tokens) if query_tokens else [],
-                "query_phrases":   query_phrases,
-                "primary_subject": sorted(primary_subject) if primary_subject else None,
-            },
+            "typesense_search_ms":  fn_timings.get("typesense_question_search_ms"),
             "total_hits":           len(hits),
             "accepted":             accepted_count,
             "rejected":             rejected_count,
@@ -4437,41 +4812,31 @@ def _fetch_questions_debug(
 
     except Exception as e:
         return {
-            "error":              str(e),
-            "filter_used":        filter_str,
-            "location_filter":    location_filter or "none",
-            "uuids":              [],
-            "matched_questions":  [],
+            "error":             str(e),
+            "filter_used":       filter_str,
+            "location_filter":   location_filter or "none",
+            "uuids":             [],
+            "matched_questions": [],
             "rejected_questions": [],
         }
 
 
 # ============================================================================
-# DEBUG WORD DISCOVERY VIEW — Step-by-Step Trace
+# DEBUG WORD DISCOVERY VIEW — Step-by-Step Trace (unchanged except context_flags)
 # ============================================================================
 
 @require_GET
 def debug_word_discovery_view(request):
     """
     Debug endpoint that traces every step of word discovery v3.
-
-    GET /debug/word-discovery/?q=restuarants+in+atlanta
-
-    Returns step-by-step breakdown:
-    - Step 1: RAM hash lookup per word
-    - Step 2: N-gram detection with rank comparisons
-    - Step 3: POS prediction with grammar rules
-    - Step 3.5: Suffix refinement
-    - Step 4: Best match selection
-    - Step 5: Unknown word correction (Redis fuzzy)
-    - Step 6-7: Full v3 output including pre-classified profile
+    GET /debug/word-discovery/?q=black+weave
     """
     query = request.GET.get("q", "").strip()
 
     if not query:
         return JsonResponse({
             "error": "Missing ?q= parameter",
-            "usage": "/debug/word-discovery/?q=restuarants+in+atlanta",
+            "usage": "/debug/word-discovery/?q=black+weave",
         }, status=400)
 
     if not WD_AVAILABLE:
@@ -4486,50 +4851,45 @@ def debug_word_discovery_view(request):
 
     t0 = time.perf_counter()
 
-    # ── Tokenize ──────────────────────────────────────────────────────
     words = [w.strip('?!.,;:"\'"()[]{}') for w in query.lower().split()]
     words = [w for w in words if w]
     trace["tokens"] = words
 
     cache = vocab_cache_wrapper
 
-    # ================================================================
-    # STEP 1: RAM Cache Lookup
-    # ================================================================
+    # ── Step 1: RAM Cache Lookup ──────────────────────────────────────
     step1 = []
-
     for i, word in enumerate(words):
         word_lower = word.lower().strip()
         entry      = {"position": i + 1, "word": word_lower}
 
         if word_lower in STOPWORDS:
-            entry["result"]  = "STOPWORD"
-            entry["pos"]     = STOPWORDS[word_lower]
-            entry["matches"] = []
+            entry.update({"result": "STOPWORD", "pos": STOPWORDS[word_lower], "matches": []})
             step1.append(entry)
             continue
 
         matches = cache.get_term_matches(word_lower)
-
         if matches:
-            entry["result"]      = "FOUND"
-            entry["match_count"] = len(matches)
-            entry["matches"]     = [
-                {
-                    "term":        m.get("term", ""),
-                    "display":     m.get("display", ""),
-                    "category":    m.get("category", ""),
-                    "pos":         m.get("pos", ""),
-                    "rank":        m.get("rank", 0),
-                    "entity_type": m.get("entity_type", ""),
-                }
-                for m in matches
-            ]
-            entry["best_by_rank"] = {
-                "term":     matches[0].get("term", ""),
-                "category": matches[0].get("category", ""),
-                "rank":     matches[0].get("rank", 0),
-            }
+            entry.update({
+                "result":      "FOUND",
+                "match_count": len(matches),
+                "matches": [
+                    {
+                        "term":        m.get("term", ""),
+                        "display":     m.get("display", ""),
+                        "category":    m.get("category", ""),
+                        "pos":         m.get("pos", ""),
+                        "rank":        m.get("rank", 0),
+                        "entity_type": m.get("entity_type", ""),
+                    }
+                    for m in matches
+                ],
+                "best_by_rank": {
+                    "term":     matches[0].get("term", ""),
+                    "category": matches[0].get("category", ""),
+                    "rank":     matches[0].get("rank", 0),
+                },
+            })
         else:
             entry["result"]      = "NOT_IN_RAM"
             entry["match_count"] = 0
@@ -4542,9 +4902,7 @@ def debug_word_discovery_view(request):
 
     trace["steps"]["step1_ram_lookup"] = step1
 
-    # ================================================================
-    # STEP 2: N-gram Detection
-    # ================================================================
+    # ── Step 2: N-gram Detection ──────────────────────────────────────
     step2    = {"checks": [], "ngrams_found": [], "consumed_positions": []}
     consumed = set()
 
@@ -4569,7 +4927,6 @@ def debug_word_discovery_view(request):
             if result:
                 ngram_rank     = result.get("rank", 0)
                 ngram_category = result.get("category", "")
-
                 individual_ranks = [
                     {
                         "word":      words[j],
@@ -4578,7 +4935,6 @@ def debug_word_discovery_view(request):
                     for j in range(i, i + n)
                 ]
                 max_individual = max(ir["best_rank"] for ir in individual_ranks)
-
                 check_entry.update({
                     "ngram_rank":          ngram_rank,
                     "ngram_category":      ngram_category,
@@ -4587,11 +4943,8 @@ def debug_word_discovery_view(request):
                     "max_individual_rank": max_individual,
                     "rank_comparison":     f"ngram({ngram_rank}) vs max_individual({max_individual})",
                     "consumed":            True,
-                    "reason":              "v3: ngram consumed (rank comparison applied)",
                 })
-
                 consumed.update(range(i, i + n))
-
                 step2["ngrams_found"].append({
                     "type":      ngram_type,
                     "words":     chunk,
@@ -4608,22 +4961,17 @@ def debug_word_discovery_view(request):
     step2["consumed_positions"] = sorted(p + 1 for p in consumed)
     trace["steps"]["step2_ngrams"] = step2
 
-    # ================================================================
-    # STEP 3: POS Prediction
-    # ================================================================
+    # ── Step 3: POS Prediction ────────────────────────────────────────
     step3 = []
-
     for i, word_info in enumerate(step1):
         word      = word_info["word"]
         pos_entry = {"position": i + 1, "word": word}
 
         if word_info["result"] == "STOPWORD":
-            pos_entry["predicted_pos"] = word_info["pos"]
-            pos_entry["source"]        = "stopword"
+            pos_entry.update({"predicted_pos": word_info["pos"], "source": "stopword"})
             step3.append(pos_entry)
             continue
 
-        # Left neighbor POS
         left_pos = "start" if i == 0 else None
         if left_pos is None:
             for j in range(i - 1, -1, -1):
@@ -4635,7 +4983,6 @@ def debug_word_discovery_view(request):
                     left_pos = normalize_pos_string(prev["matches"][0].get("pos", ""))
                     break
 
-        # Right neighbor POS
         right_pos = "end" if i == len(step1) - 1 else None
         if right_pos is None:
             for j in range(i + 1, len(step1)):
@@ -4653,7 +5000,6 @@ def debug_word_discovery_view(request):
 
         predicted = None
         rule_used = None
-
         if left_pos and right_pos:
             predicted = GRAMMAR_RULES.get((left_pos, right_pos))
             if predicted:
@@ -4668,21 +5014,17 @@ def debug_word_discovery_view(request):
                 rule_used = f"(None, {right_pos})"
         if not predicted:
             predicted = [("noun", 0.75)]
-            rule_used = "default (no rule matched)"
+            rule_used = "default"
 
         pos_entry["predicted_pos_list"] = predicted
         pos_entry["predicted_pos"]      = predicted[0][0] if predicted else "noun"
         pos_entry["rule_used"]          = rule_used
-
         step3.append(pos_entry)
 
     trace["steps"]["step3_pos_prediction"] = step3
 
-    # ================================================================
-    # STEP 3.5: Suffix Refinement
-    # ================================================================
+    # ── Step 3.5: Suffix Refinement ───────────────────────────────────
     step3_5 = []
-
     try:
         _wd_instance      = WordDiscovery(verbose=False)
         SUFFIX_POS_RULES  = _wd_instance.SUFFIX_POS_RULES
@@ -4699,50 +5041,37 @@ def debug_word_discovery_view(request):
         word = word_info["word"]
         if word_info["result"] == "STOPWORD":
             continue
-
         suffix_entry = {"position": i + 1, "word": word}
-
         if len(word) < MIN_LEN:
             suffix_entry["result"] = "too_short"
-            step3_5.append(suffix_entry)
-            continue
-
-        if word in SUFFIX_EXCEPTIONS:
+        elif word in SUFFIX_EXCEPTIONS:
             suffix_entry["result"] = "exception"
-            step3_5.append(suffix_entry)
-            continue
-
-        matched_suffix = next(
-            (s for s in sorted_suffixes if word.endswith(s) and len(word) > len(s) + 1),
-            None
-        )
-
-        if matched_suffix:
-            suffix_entry["matched_suffix"]     = matched_suffix
-            suffix_entry["suffix_predictions"] = SUFFIX_POS_RULES[matched_suffix]
-            suffix_entry["result"]             = "refined"
         else:
-            suffix_entry["result"] = "no_suffix_match"
-
+            matched_suffix = next(
+                (s for s in sorted_suffixes if word.endswith(s) and len(word) > len(s) + 1),
+                None
+            )
+            if matched_suffix:
+                suffix_entry.update({
+                    "matched_suffix":     matched_suffix,
+                    "suffix_predictions": SUFFIX_POS_RULES[matched_suffix],
+                    "result":             "refined",
+                })
+            else:
+                suffix_entry["result"] = "no_suffix_match"
         step3_5.append(suffix_entry)
 
     trace["steps"]["step3_5_suffix"] = step3_5
 
-    # ================================================================
-    # STEP 4: Best Match Selection
-    # ================================================================
+    # ── Step 4: Best Match Selection ─────────────────────────────────
     step4 = []
-
     for i, word_info in enumerate(step1):
         word = word_info["word"]
         if word_info["result"] == "STOPWORD":
             continue
-
         match_entry = {"position": i + 1, "word": word}
-
         if word_info["result"] == "NOT_IN_RAM":
-            match_entry["result"]   = "UNKNOWN — deferred to Step 5"
-            match_entry["selected"] = None
+            match_entry.update({"result": "UNKNOWN — deferred to Step 5", "selected": None})
             step4.append(match_entry)
             continue
 
@@ -4759,36 +5088,26 @@ def debug_word_discovery_view(request):
             else:
                 incompatible.append(m)
 
-        match_entry["compatible_count"]   = len(compatible)
-        match_entry["incompatible_count"] = len(incompatible)
-        match_entry["incompatible"]       = [
-            f"{m['category']}({normalize_pos_string(m['pos'])})" for m in incompatible
-        ]
+        match_entry.update({
+            "compatible_count":   len(compatible),
+            "incompatible_count": len(incompatible),
+            "incompatible":       [f"{m['category']}({normalize_pos_string(m['pos'])})" for m in incompatible],
+        })
 
         if compatible:
             compatible.sort(key=lambda x: x["rank"], reverse=True)
-            match_entry["selected"] = compatible[0]
-            match_entry["result"]   = "SELECTED (POS compatible)"
+            match_entry.update({"selected": compatible[0], "result": "SELECTED (POS compatible)"})
         elif matches:
-            match_entry["selected"] = matches[0]
-            match_entry["result"]   = "FALLBACK (no POS match, using highest rank)"
+            match_entry.update({"selected": matches[0], "result": "FALLBACK (no POS match, using highest rank)"})
         else:
-            match_entry["selected"] = None
-            match_entry["result"]   = "NO MATCHES"
+            match_entry.update({"selected": None, "result": "NO MATCHES"})
 
         step4.append(match_entry)
 
     trace["steps"]["step4_match_selection"] = step4
 
-    # ================================================================
-    # STEP 5: Unknown Word Correction (Redis Fuzzy)
-    # ================================================================
-    step5 = {
-        "unknowns":            [],
-        "words_sent_to_redis": [],
-        "corrections":         [],
-        "outcome":             None,
-    }
+    # ── Step 5: Unknown Word Correction ──────────────────────────────
+    step5 = {"unknowns": [], "words_sent_to_redis": [], "corrections": [], "outcome": None}
 
     unknown_words = [
         {
@@ -4799,24 +5118,21 @@ def debug_word_discovery_view(request):
         for i, word_info in enumerate(step1)
         if word_info["result"] == "NOT_IN_RAM"
     ]
-
     step5["unknowns"] = unknown_words
 
     if unknown_words:
         words_to_fetch               = [u["word"] for u in unknown_words]
         step5["words_sent_to_redis"] = words_to_fetch
-
         try:
             t_redis       = time.perf_counter()
             batch_results = get_fuzzy_suggestions_batch(words_to_fetch, limit=10, max_distance=2)
-            step5["redis_time_ms"] = round((time.perf_counter() - t_redis) * 1000, 2)
+            step5["redis_time_ms"] = round((time.perf_counter() - t_redis) * 1000, 3)
 
             for u in unknown_words:
                 word          = u["word"]
                 predicted_pos = u["predicted_pos"]
                 suggestions   = batch_results.get(word.lower().strip(), [])
-
-                word_result = {
+                word_result   = {
                     "word":              word,
                     "position":          u["position"],
                     "predicted_pos":     predicted_pos,
@@ -4829,53 +5145,37 @@ def debug_word_discovery_view(request):
                             "rank":           s.get("rank", 0),
                             "distance":       s.get("distance", 99),
                             "pos_compatible": is_pos_compatible(
-                                normalize_pos_string(s.get("pos", "unknown")),
-                                predicted_pos,
+                                normalize_pos_string(s.get("pos", "unknown")), predicted_pos,
                             ),
                         }
                         for s in suggestions[:10]
                     ],
                 }
-
                 compatible_suggestions = [
                     s for s in suggestions
-                    if is_pos_compatible(
-                        normalize_pos_string(s.get("pos", "unknown")),
-                        predicted_pos,
-                    )
+                    if is_pos_compatible(normalize_pos_string(s.get("pos", "unknown")), predicted_pos)
                 ]
-
                 if compatible_suggestions:
                     best = compatible_suggestions[0]
-                    word_result["best_compatible"] = {
-                        "term":     best["term"],
-                        "display":  best.get("display", best["term"]),
-                        "distance": best.get("distance", 99),
-                        "rank":     best.get("rank", 0),
-                        "pos":      normalize_pos_string(best.get("pos", "")),
-                        "category": best.get("category", ""),
-                    }
-                    word_result["outcome"] = (
-                        f"SUGGESTION: '{best['term']}' "
-                        f"(distance={best.get('distance', '?')}, "
-                        f"rank={best.get('rank', 0)}, "
-                        f"pos={normalize_pos_string(best.get('pos', ''))})"
-                    )
+                    word_result.update({
+                        "best_compatible": {
+                            "term":     best["term"],
+                            "display":  best.get("display", best["term"]),
+                            "distance": best.get("distance", 99),
+                            "rank":     best.get("rank", 0),
+                            "pos":      normalize_pos_string(best.get("pos", "")),
+                            "category": best.get("category", ""),
+                        },
+                        "outcome": f"SUGGESTION: '{best['term']}' (distance={best.get('distance','?')}, rank={best.get('rank',0)})",
+                    })
                 elif suggestions:
                     best = suggestions[0]
-                    word_result["best_any"] = {
-                        "term":     best["term"],
-                        "distance": best.get("distance", 99),
-                        "rank":     best.get("rank", 0),
-                        "pos":      normalize_pos_string(best.get("pos", "")),
-                    }
-                    word_result["outcome"] = (
-                        f"SUGGESTION (no POS match): '{best['term']}' "
-                        f"(distance={best.get('distance', '?')})"
-                    )
+                    word_result.update({
+                        "best_any": {"term": best["term"], "distance": best.get("distance", 99), "rank": best.get("rank", 0)},
+                        "outcome":  f"SUGGESTION (no POS match): '{best['term']}' (distance={best.get('distance','?')})",
+                    })
                 else:
                     word_result["outcome"] = "NO SUGGESTIONS — word stays as-is"
-
                 step5["corrections"].append(word_result)
 
         except Exception as e:
@@ -4885,19 +5185,17 @@ def debug_word_discovery_view(request):
 
     trace["steps"]["step5_corrections"] = step5
 
-    # ================================================================
-    # STEP 6-7: Full v3 pipeline output + pre-classified profile
-    # ================================================================
+    # ── Step 6-7: Full v3 pipeline output ────────────────────────────
     full_output = {}
     try:
         wd          = WordDiscovery(verbose=False)
         t_full      = time.perf_counter()
         full_output = wd.process(query)
-        full_time   = (time.perf_counter() - t_full) * 1000
+        full_ms     = round((time.perf_counter() - t_full) * 1000, 3)
 
         trace["steps"]["step7_final_output"] = {
             "corrected_query":    full_output.get("corrected_query", ""),
-            "processing_time_ms": round(full_time, 2),
+            "processing_time_ms": full_ms,
             "stats":              full_output.get("stats", {}),
             "corrections":        full_output.get("corrections", []),
             "terms": [
@@ -4913,6 +5211,7 @@ def debug_word_discovery_view(request):
                     "entity_type":         t.get("entity_type", ""),
                     "is_stopword":         t.get("is_stopword", False),
                     "part_of_ngram":       t.get("part_of_ngram", False),
+                    "context_flags":       t.get("context_flags", []),  # v3 frozenset flags
                     "match_count":         t.get("match_count", 0),
                     "suggestion":          t.get("suggestion"),
                     "suggestion_display":  t.get("suggestion_display"),
@@ -4926,7 +5225,6 @@ def debug_word_discovery_view(request):
             "ngrams": full_output.get("ngrams", []),
         }
 
-        # ── v3 pre-classified profile — always shown ──────────────────
         trace["steps"]["step7_v3_profile"] = {
             "search_terms":            full_output.get("search_terms", []),
             "persons":                 full_output.get("persons", []),
@@ -4970,6 +5268,14 @@ def debug_word_discovery_view(request):
                 "has_price_signal":       sigs.get("has_price_signal"),
                 "has_black_owned":        sigs.get("has_black_owned"),
                 "has_unknown_terms":      sigs.get("has_unknown_terms"),
+                # v3 context_flags-derived signals
+                "has_food_word":          sigs.get("has_food_word"),
+                "has_beauty_word":        sigs.get("has_beauty_word"),
+                "has_entertainment_word": sigs.get("has_entertainment_word"),
+                "has_culture_word":       sigs.get("has_culture_word"),
+                "has_color_modifier":     sigs.get("has_color_modifier"),
+                "has_size_modifier":      sigs.get("has_size_modifier"),
+                "has_acronym":            sigs.get("has_acronym"),
                 "domains_detected":       sigs.get("domains_detected", []),
                 "primary_domain":         sigs.get("primary_domain"),
                 "signal_count":           sigs.get("signal_count"),
@@ -4978,7 +5284,7 @@ def debug_word_discovery_view(request):
         except Exception as e:
             trace["steps"]["intent_detection"] = {"error": str(e)}
 
-    trace["total_debug_time_ms"] = round((time.perf_counter() - t0) * 1000, 2)
+    trace["total_debug_time_ms"] = round((time.perf_counter() - t0) * 1000, 3)
 
     return JsonResponse(trace, json_dumps_params={"indent": 2})
 
@@ -4988,20 +5294,14 @@ def debug_word_discovery_view(request):
 # ============================================================================
 
 def _find_nearby_in_ram(cache, word: str) -> list:
-    """
-    Generate common typo variants and check RAM cache.
-    Helps debug output show what IS in the cache near a misspelling.
-    """
+    """Generate typo variants and check RAM cache — helps debug misspellings."""
     variants = set()
-
     for i in range(len(word) - 1):
         swapped       = list(word)
         swapped[i], swapped[i + 1] = swapped[i + 1], swapped[i]
         variants.add("".join(swapped))
-
     for i in range(len(word)):
         variants.add(word[:i] + word[i + 1:])
-
     variants.discard(word)
 
     nearby = []
@@ -5017,6 +5317,5 @@ def _find_nearby_in_ram(cache, word: str) -> list:
                     "rank":     variant_matches[0].get("rank", 0),
                 },
             })
-
     nearby.sort(key=lambda x: x["distance"])
     return nearby
