@@ -12363,6 +12363,8 @@
 # if __name__ == "__main__":
 #     main()
 
+
+
 """
 word_discovery_v3.py
 ====================
@@ -13181,6 +13183,7 @@ SEARCHABLE_POS = frozenset({
 })
 
 
+
 # =============================================================================
 # HELPER FUNCTIONS
 # =============================================================================
@@ -13362,59 +13365,194 @@ class WordDiscovery:
     """
 
     COLORS = frozenset({
-        'black', 'white', 'red', 'blue', 'green', 'gold', 'silver',
-        'brown', 'pink', 'purple', 'yellow', 'orange', 'grey', 'gray',
-        'beige', 'cream', 'maroon', 'navy', 'teal', 'coral',
-    })
+            # Standard colors
+            'black', 'white', 'red', 'blue', 'green', 'gold', 'silver',
+            'brown', 'pink', 'purple', 'yellow', 'orange', 'grey', 'gray',
+            'beige', 'cream', 'maroon', 'navy', 'teal', 'coral',
+            # Cultural/skin tone descriptors
+            'chocolate', 'caramel', 'mocha', 'ebony', 'ivory', 'bronze',
+            'copper', 'mahogany', 'sienna', 'amber', 'cocoa', 'espresso',
+            'cinnamon', 'melanin', 'melanated',
+        })
 
     SUPERLATIVES = frozenset({
-        'best', 'worst', 'top', 'biggest', 'largest', 'smallest',
-        'oldest', 'newest', 'cheapest', 'fastest', 'highest',
-        'lowest', 'richest', 'poorest', 'strongest', 'weakest',
-        'most', 'least', 'greatest', 'finest',
-        'better', 'cheaper', 'faster', 'newer', 'bigger', 'smaller',
-    })
+            # Standard superlatives
+            'best', 'worst', 'top', 'biggest', 'largest', 'smallest',
+            'oldest', 'newest', 'cheapest', 'fastest', 'highest',
+            'lowest', 'richest', 'poorest', 'strongest', 'weakest',
+            'most', 'least', 'greatest', 'finest',
+            'better', 'cheaper', 'faster', 'newer', 'bigger', 'smaller',
+            # Cultural superlatives
+            'dopest', 'freshest', 'hottest', 'coldest', 'realest',
+            'hardest', 'illest', 'goated',
+        })
 
     SIZES = frozenset({
-        'small', 'medium', 'large', 'big', 'little', 'tiny', 'huge',
-        'oversized', 'petite', 'slim', 'wide', 'narrow', 'tall',
-        'short', 'long', 'mini', 'plus',
-    })
+            'small', 'medium', 'large', 'big', 'little', 'tiny', 'huge',
+            'oversized', 'petite', 'slim', 'wide', 'narrow', 'tall',
+            'short', 'long', 'mini', 'plus',
+        })
 
     COMMON_ADJECTIVES = frozenset({
-        'new', 'old', 'good', 'bad', 'hot', 'cold', 'fresh', 'free',
-        'clean', 'dark', 'light', 'bright', 'deep', 'flat', 'thin',
-        'wild', 'raw', 'real', 'true', 'nice', 'fine', 'fair',
-        'open', 'closed', 'natural', 'organic', 'vegan', 'vintage',
-        'modern', 'classic', 'luxury', 'premium', 'affordable',
-        'handmade', 'custom', 'local', 'popular', 'famous',
-        'traditional', 'authentic', 'homemade',
-    })
+            'new', 'old', 'good', 'bad', 'hot', 'cold', 'fresh', 'free',
+            'clean', 'dark', 'light', 'bright', 'deep', 'flat', 'thin',
+            'wild', 'raw', 'real', 'true', 'nice', 'fine', 'fair',
+            'open', 'closed', 'natural', 'organic', 'vegan', 'vintage',
+            'modern', 'classic', 'luxury', 'premium', 'affordable',
+            'handmade', 'custom', 'local', 'popular', 'famous',
+            'traditional', 'authentic', 'homemade', 'afrocentric',
+            'black-owned', 'minority-owned', 'woke', 'conscious',
+            'empowering', 'culturally', 'diverse', 'inclusive',
+        })
 
     FOOD_DINING = frozenset({
-        'food', 'breakfast', 'lunch', 'dinner', 'brunch', 'dessert',
-        'pizza', 'tacos', 'sushi', 'burger', 'coffee', 'tea',
-        'drinks', 'cocktails', 'wings', 'seafood', 'barbecue', 'bbq',
-        'vegetarian', 'halal', 'kosher', 'restaurants', 'restaurant',
-        'cafe', 'bakery', 'catering', 'eatery', 'diner',
-    })
+            # Standard dining
+            'food', 'breakfast', 'lunch', 'dinner', 'brunch', 'dessert',
+            'pizza', 'tacos', 'sushi', 'burger', 'coffee', 'tea',
+            'drinks', 'cocktails', 'wings', 'seafood', 'barbecue', 'bbq',
+            'vegetarian', 'halal', 'kosher', 'restaurant', 'restaurants',
+            'cafe', 'bakery', 'catering', 'eatery', 'diner', 'buffet',
+            'takeout', 'delivery', 'carryout',
+            # Soul food and Black culinary traditions
+            'soul food', 'chitlins', 'chitterlings', 'cornbread',
+            'collard greens', 'collards', 'grits', 'oxtail', 'oxtails',
+            'jerk', 'gumbo', 'jambalaya', 'catfish', 'mac and cheese',
+            'sweet potato', 'sweet potatoes', 'biscuits', 'fried chicken',
+            'waffles', 'po boy', 'poboy', 'red beans', 'hoppin john',
+            'plantains', 'jollof', 'egusi', 'fufu', 'peri peri',
+            'jollof rice', 'suya', 'curry goat', 'roti', 'patty',
+            'crab legs', 'shrimp and grits', 'blackeyed peas',
+            'black eyed peas', 'candied yams', 'yams', 'peach cobbler',
+            'banana pudding', 'bread pudding', 'pig feet', 'neckbones',
+            'neck bones', 'smothered', 'dirty rice', 'boudin',
+            'cracklins', 'crackling', 'pork chops', 'turkey legs',
+            'hot sauce', 'pepper sauce',
+        })
 
     SERVICES = frozenset({
-        'salon', 'barber', 'spa', 'gym', 'dentist', 'doctor',
-        'lawyer', 'plumber', 'mechanic', 'tutor', 'daycare',
-        'cleaning', 'catering', 'photography', 'moving', 'repair',
-    })
+            # Standard services
+            'salon', 'barber', 'spa', 'gym', 'dentist', 'doctor',
+            'lawyer', 'plumber', 'mechanic', 'tutor', 'daycare',
+            'cleaning', 'catering', 'photography', 'moving', 'repair',
+            # Black community services
+            'braids', 'braiding', 'locs', 'dreads', 'dreadlocks',
+            'natural hair', 'relaxer', 'weave', 'extensions',
+            'barbershop', 'nail tech', 'nails', 'esthetician',
+            'notary', 'tax preparer', 'taxes', 'bookkeeper',
+            'bail bonds', 'funeral home', 'mortuary', 'cremation',
+            'life insurance', 'reentry', 'expungement', 'realty',
+            'realtor', 'property management', 'financial advisor',
+            'credit repair', 'mental health', 'therapy', 'counseling',
+            'childcare', 'transportation', 'trucking', 'construction',
+            'landscaping', 'pressure washing', 'detailing',
+            'auto detailing', 'towing', 'security', 'staffing',
+        })
 
     APPAREL_PRODUCTS = frozenset({
-        'shoes', 'boots', 'sneakers', 'jacket', 'jackets', 'coat',
-        'dress', 'shirt', 'pants', 'jeans', 'hat', 'bag', 'bags',
-        'purse', 'jewelry', 'watches', 'glasses', 'sunglasses',
-        'hoodie', 'sweater',
-    })
+            # Standard apparel
+            'shoes', 'boots', 'sneakers', 'jacket', 'jackets', 'coat',
+            'dress', 'shirt', 'pants', 'jeans', 'hat', 'bag', 'bags',
+            'purse', 'jewelry', 'watches', 'glasses', 'sunglasses',
+            'hoodie', 'sweater',
+            # Culturally relevant apparel
+            'dashiki', 'kufi', 'ankara', 'kente', 'durag', 'durags',
+            'fitted', 'timberlands', 'forces', 'jordans', 'sweatsuits',
+            'streetwear', 'headwrap', 'gele', 'agbada', 'boubou',
+            'caftan', 'jumpsuit', 'romper', 'bodysuit', 'leggings',
+            'joggers', 'shorts', 'skirt', 'blazer', 'suit', 'tuxedo',
+            'accessories', 'earrings', 'necklace', 'bracelet', 'ring',
+            'anklet', 'waist beads',
+        })
 
-    # O(1) union sets — built once at class level
+    BEAUTY = frozenset({
+            # Natural hair
+            'natural hair', '4c', '4b', '4a', '3c', 'protective styles',
+            'twist out', 'wash and go', 'big chop', 'loc', 'locs',
+            'sisterlocks', 'afro', 'fade', 'taper', 'lineup', 'shape up',
+            'edge control', 'edges', 'baby hairs', 'cornrows', 'braids',
+            'box braids', 'knotless', 'senegalese twist', 'marley twist',
+            'passion twist', 'butterfly locs', 'faux locs', 'crochet',
+            'weave', 'wig', 'lace front', 'closure', 'frontal',
+            'relaxer', 'texturizer', 'press and curl', 'blowout',
+            # Skincare
+            'shea butter', 'cocoa butter', 'skincare', 'skin care',
+            'hyperpigmentation', 'melanin', 'dark spots', 'even tone',
+            'moisturizer', 'serum', 'sunscreen', 'spf', 'toner',
+            'exfoliant', 'retinol', 'vitamin c', 'niacinamide',
+            # Makeup
+            'foundation', 'concealer', 'contour', 'highlight',
+            'highlighter', 'bronzer', 'blush', 'eyeshadow', 'mascara',
+            'eyeliner', 'lipstick', 'lip gloss', 'lip liner', 'setting spray',
+            'primer', 'beauty blender', 'makeup',
+            # Nails
+            'nails', 'manicure', 'pedicure', 'acrylic', 'gel nails',
+            'nail art', 'press on nails',
+        })
+
+    CULTURE_COMMUNITY = frozenset({
+            # Black institutions
+            'hbcu', 'hbcus', 'historically black', 'black college',
+            'black university', 'naacp', 'uncf', 'sclc', 'sncc',
+            'urban league', 'black church', 'ame', 'cogic',
+            # Greek life
+            'nphc', 'bglo', 'divine nine', 'pan hellenic', 'panhellenic',
+            'sorority', 'fraternity', 'greek', 'homecoming', 'stepshow',
+            'step show', 'yard', 'probate', 'line', 'pledge',
+            'alpha', 'omega', 'kappa', 'sigma', 'delta', 'zeta',
+            'aka', 'dst', 'sgrho', 'ophis',
+            # Cultural events
+            'juneteenth', 'kwanzaa', 'black history', 'black history month',
+            'civil rights', 'reparations', 'liberation', 'empowerment',
+            'black excellence', 'black joy', 'black love', 'black culture',
+            'afrobeats', 'diaspora', 'afrocentric', 'afrofuturism',
+            # Community terms
+            'black owned', 'black-owned', 'minority owned', 'minority-owned',
+            'wbe', 'mbe', 'dbe', 'community', 'neighborhood', 'hood',
+            'block', 'trap', 'struggle', 'grind', 'hustle',
+        })
+
+    MUSIC_ENTERTAINMENT = frozenset({
+            # Genres
+            'hiphop', 'hip hop', 'rap', 'rnb', 'r&b', 'soul', 'gospel',
+            'reggae', 'dancehall', 'afrobeats', 'afropop', 'trap',
+            'gogo', 'go-go', 'bounce', 'chopped and screwed', 'drill',
+            'neo soul', 'funk', 'blues', 'jazz', 'motown',
+            # Industry terms
+            'mixtape', 'album', 'ep', 'single', 'collab', 'feature',
+            'verse', 'hook', 'beat', 'producer', 'dj', 'mc',
+            'emcee', 'rapper', 'artist', 'label', 'indie',
+            # Entertainment
+            'comedy', 'stand up', 'comedian', 'podcast', 'youtube',
+            'streaming', 'vlog', 'content creator', 'influencer',
+            'actor', 'actress', 'director', 'filmmaker', 'screenwriter',
+            # Venues and events
+            'club', 'lounge', 'venue', 'concert', 'festival', 'show',
+            'performance', 'open mic', 'cypher', 'battle',
+        })
+
+    KNOWN_ACRONYMS = frozenset({
+            # HBCU and education
+            'hbcu', 'hbcus', 'uncf', 'nphc', 'bglo',
+            # Civil rights and advocacy
+            'naacp', 'sclc', 'sncc', 'ados', 'blm',
+            # Business and finance
+            'mbe', 'wbe', 'dbe', 'sba', 'cdfi', 'llc', 'dba', 'ein',
+            'cdc', 'eidl', 'ppp',
+            # City slang and geography
+            'atl', 'nyc', 'dmv', 'pgc', 'bx', 'htx', 'nola', 'chi',
+            'kcmo', 'bmore', 'dc', 'la', 'sf', 'clt', 'cle',
+            # Music
+            'dj', 'mc', 'rnb',
+            # General
+            'og', 'goat', 'af', 'tbh', 'irl', 'fam', 'bro', 'sis',
+        })
+
+    # ── Union sets — built once, used in step 1 pre-gate ─────────────────
     KNOWN_ADJECTIVES = COLORS | SUPERLATIVES | SIZES | COMMON_ADJECTIVES
-    KNOWN_NOUNS      = FOOD_DINING | SERVICES | APPAREL_PRODUCTS
+    KNOWN_NOUNS      = FOOD_DINING | SERVICES | APPAREL_PRODUCTS | BEAUTY | CULTURE_COMMUNITY | MUSIC_ENTERTAINMENT | KNOWN_ACRONYMS
+
+
+  
 
     def __init__(self, verbose: bool = False):
         self.verbose = verbose
@@ -13578,163 +13716,404 @@ class WordDiscovery:
     #     return merged
 
     def _step1_tokenize_and_lookup(self, words: List[str]) -> List[Dict[str, Any]]:
-        """Step 1: Tokenize + RAM Hash Lookup + Inline Triggers."""
-        if self.verbose:
-            print("\n" + "-" * 70)
-            print("📖 STEP 1: Tokenize + RAM Hash Lookup + Inline Triggers")
-            print("-" * 70)
+            """Step 1: Tokenize + RAM Hash Lookup + Inline Triggers.
+            
+            Pre-gate checks known sets FIRST before RAM lookup.
+            Words with known unambiguous POS are labeled immediately.
+            RAM lookup only runs for genuinely unknown words.
+            """
+            if self.verbose:
+                print("\n" + "-" * 70)
+                print("📖 STEP 1: Tokenize + RAM Hash Lookup + Inline Triggers")
+                print("-" * 70)
 
-        word_data = []
-        location_signal_pending = False
-
-        for i, word in enumerate(words):
-            position  = i
-            word_lower = word.lower().strip()
-
-            # ── Stopword check ────────────────────────────────────────
-            if word_lower in STOPWORDS:
-                is_location_signal = word_lower in LOCATION_SIGNAL_WORDS
-                context_flags = ['location_signal'] if is_location_signal else []
-                word_data.append({
-                    'position': position, 'word': word_lower, 'status': 'stopword',
-                    'is_stopword': True, 'pos': STOPWORDS[word_lower],
-                    'predicted_pos': STOPWORDS[word_lower],
-                    'predicted_pos_list': [(STOPWORDS[word_lower], 1.0)],
-                    'all_matches': [],
-                    'selected_match': {
-                        'term': word_lower, 'display': word_lower, 'category': 'stopword',
-                        'description': '', 'pos': STOPWORDS[word_lower],
-                        'entity_type': 'stopword', 'rank': 0,
-                    },
-                    'context_flags': context_flags, 'location_context': False,
-                })
-                if is_location_signal:
-                    location_signal_pending = True
-                if self.verbose:
-                    sig = " [LOCATION_SIGNAL]" if is_location_signal else ""
-                    print(f"  [{position}] '{word_lower}' → STOPWORD ({STOPWORDS[word_lower]}){sig}")
-                continue
-
-            # ── Known set pre-gate ────────────────────────────────────
-            # Runs before RAM lookup. Words with known unambiguous POS
-            # are labeled immediately. No RAM lookup, no POS prediction,
-            # no rank competition from high-rank city/entity matches.
-            has_location_ctx = location_signal_pending
-
-            if word_lower in self.KNOWN_ADJECTIVES:
-                word_data.append({
-                    'position':           position,
-                    'word':               word_lower,
-                    'status':             'known',
-                    'is_stopword':        False,
-                    'pos':                'adjective',
-                    'predicted_pos':      'adjective',
-                    'predicted_pos_list': [('adjective', 1.0)],
-                    'all_matches':        [],
-                    'selected_match': {
-                        'term':        word_lower,
-                        'display':     word_lower,
-                        'category':    (
-                            'color'       if word_lower in self.COLORS       else
-                            'superlative' if word_lower in self.SUPERLATIVES  else
-                            'size'        if word_lower in self.SIZES         else
-                            'modifier'
-                        ),
-                        'pos':         'adjective',
-                        'entity_type': 'unigram',
-                        'rank':        0,
-                    },
-                    'context_flags':    ['known_adjective'],
-                    'location_context': has_location_ctx,
-                })
-                if self.verbose:
-                    print(f"  [{position}] '{word_lower}' → KNOWN ADJECTIVE (pre-gate, skip RAM)")
-                location_signal_pending = False
-                continue
-
-            if word_lower in self.KNOWN_NOUNS:
-                locked_pos      = 'noun'
-                locked_category = 'Keyword'
-            else:
-                locked_pos      = None
-                locked_category = None
-
-            # ── Abbreviation check ────────────────────────────────────
-            expanded = None
-            if word_lower in ABBREVIATION_TRIGGERS and word_lower not in ABBREVIATION_SKIP_IF_STOPWORD:
-                expanded_term    = ABBREVIATION_TRIGGERS[word_lower]
-                expanded_matches = self.cache.get_term_matches(expanded_term)
-                if not expanded_matches:
-                    expanded_matches = self.cache.get_term_matches(expanded_term.replace(' ', '_'))
-                if expanded_matches:
-                    expanded = {
-                        'original_abbreviation': word_lower,
-                        'expanded_to':           expanded_term,
-                        'matches':               expanded_matches,
-                    }
-
-            # ── RAM hash lookup ───────────────────────────────────────
+            word_data = []
             location_signal_pending = False
 
-            if expanded:
-                direct_matches   = self.cache.get_term_matches(word_lower)
-                merged_matches   = self._merge_match_sets(expanded['matches'], direct_matches)
-                expanded['matches'] = merged_matches
-                matches          = merged_matches
-                context_flags    = ['abbreviation_expanded']
-                if has_location_ctx:
-                    context_flags.append('location_context')
-                word_data.append({
-                    'position': position, 'word': word_lower, 'status': 'resolved',
-                    'is_stopword': False,
-                    'pos':            locked_pos,
-                    'predicted_pos':  locked_pos,
-                    'predicted_pos_list': [(locked_pos, 1.0)] if locked_pos else [],
-                    'all_matches': matches, 'selected_match': None,
-                    'context_flags': context_flags, 'location_context': has_location_ctx,
-                    'abbreviation': expanded,
-                })
-                if self.verbose:
-                    print(f"  [{position}] '{word_lower}' → ABBREVIATION → '{expanded['expanded_to']}' "
-                          f"({len(matches)} matches, incl. direct)")
-            else:
-                matches = self.cache.get_term_matches(word_lower)
-                context_flags = []
-                if has_location_ctx:
-                    context_flags.append('location_context')
-                if matches:
+            for i, word in enumerate(words):
+                position   = i
+                word_lower = word.lower().strip()
+
+                # ── Stopword check ────────────────────────────────────────
+                if word_lower in STOPWORDS:
+                    is_location_signal = word_lower in LOCATION_SIGNAL_WORDS
+                    context_flags = ['location_signal'] if is_location_signal else []
+                    word_data.append({
+                        'position': position, 'word': word_lower, 'status': 'stopword',
+                        'is_stopword': True, 'pos': STOPWORDS[word_lower],
+                        'predicted_pos': STOPWORDS[word_lower],
+                        'predicted_pos_list': [(STOPWORDS[word_lower], 1.0)],
+                        'all_matches': [],
+                        'selected_match': {
+                            'term': word_lower, 'display': word_lower, 'category': 'stopword',
+                            'description': '', 'pos': STOPWORDS[word_lower],
+                            'entity_type': 'stopword', 'rank': 0,
+                        },
+                        'context_flags': context_flags, 'location_context': False,
+                    })
+                    if is_location_signal:
+                        location_signal_pending = True
+                    if self.verbose:
+                        sig = " [LOCATION_SIGNAL]" if is_location_signal else ""
+                        print(f"  [{position}] '{word_lower}' → STOPWORD ({STOPWORDS[word_lower]}){sig}")
+                    continue
+
+                # ── Known set pre-gate ────────────────────────────────────
+                # Every word in these sets has a known, unambiguous POS.
+                # RAM lookup is skipped entirely — no rank competition,
+                # no POS prediction errors, no Redis fuzzy needed.
+                has_location_ctx        = location_signal_pending
+                location_signal_pending = False
+
+                # ── COLORS ────────────────────────────────────────────────
+                if word_lower in self.COLORS:
+                    word_data.append({
+                        'position':           position,
+                        'word':               word_lower,
+                        'status':             'known',
+                        'is_stopword':        False,
+                        'pos':                'adjective',
+                        'predicted_pos':      'adjective',
+                        'predicted_pos_list': [('adjective', 1.0)],
+                        'all_matches':        [],
+                        'selected_match': {
+                            'term':        word_lower,
+                            'display':     word_lower,
+                            'category':    'color',
+                            'pos':         'adjective',
+                            'entity_type': 'unigram',
+                            'rank':        0,
+                        },
+                        'context_flags':    ['known_color'],
+                        'location_context': has_location_ctx,
+                    })
+                    if self.verbose:
+                        print(f"  [{position}] '{word_lower}' → KNOWN COLOR (adjective, skip RAM)")
+                    continue
+
+                # ── SUPERLATIVES ──────────────────────────────────────────
+                if word_lower in self.SUPERLATIVES:
+                    word_data.append({
+                        'position':           position,
+                        'word':               word_lower,
+                        'status':             'known',
+                        'is_stopword':        False,
+                        'pos':                'adjective',
+                        'predicted_pos':      'adjective',
+                        'predicted_pos_list': [('adjective', 1.0)],
+                        'all_matches':        [],
+                        'selected_match': {
+                            'term':        word_lower,
+                            'display':     word_lower,
+                            'category':    'superlative',
+                            'pos':         'adjective',
+                            'entity_type': 'unigram',
+                            'rank':        0,
+                        },
+                        'context_flags':    ['known_superlative'],
+                        'location_context': has_location_ctx,
+                    })
+                    if self.verbose:
+                        print(f"  [{position}] '{word_lower}' → KNOWN SUPERLATIVE (adjective, skip RAM)")
+                    continue
+
+                # ── SIZES ─────────────────────────────────────────────────
+                if word_lower in self.SIZES:
+                    word_data.append({
+                        'position':           position,
+                        'word':               word_lower,
+                        'status':             'known',
+                        'is_stopword':        False,
+                        'pos':                'adjective',
+                        'predicted_pos':      'adjective',
+                        'predicted_pos_list': [('adjective', 1.0)],
+                        'all_matches':        [],
+                        'selected_match': {
+                            'term':        word_lower,
+                            'display':     word_lower,
+                            'category':    'size',
+                            'pos':         'adjective',
+                            'entity_type': 'unigram',
+                            'rank':        0,
+                        },
+                        'context_flags':    ['known_size'],
+                        'location_context': has_location_ctx,
+                    })
+                    if self.verbose:
+                        print(f"  [{position}] '{word_lower}' → KNOWN SIZE (adjective, skip RAM)")
+                    continue
+
+                # ── COMMON ADJECTIVES ─────────────────────────────────────
+                if word_lower in self.COMMON_ADJECTIVES:
+                    word_data.append({
+                        'position':           position,
+                        'word':               word_lower,
+                        'status':             'known',
+                        'is_stopword':        False,
+                        'pos':                'adjective',
+                        'predicted_pos':      'adjective',
+                        'predicted_pos_list': [('adjective', 1.0)],
+                        'all_matches':        [],
+                        'selected_match': {
+                            'term':        word_lower,
+                            'display':     word_lower,
+                            'category':    'modifier',
+                            'pos':         'adjective',
+                            'entity_type': 'unigram',
+                            'rank':        0,
+                        },
+                        'context_flags':    ['known_modifier'],
+                        'location_context': has_location_ctx,
+                    })
+                    if self.verbose:
+                        print(f"  [{position}] '{word_lower}' → KNOWN MODIFIER (adjective, skip RAM)")
+                    continue
+
+                # ── FOOD & DINING ─────────────────────────────────────────
+                if word_lower in self.FOOD_DINING:
+                    word_data.append({
+                        'position':           position,
+                        'word':               word_lower,
+                        'status':             'known',
+                        'is_stopword':        False,
+                        'pos':                'noun',
+                        'predicted_pos':      'noun',
+                        'predicted_pos_list': [('noun', 1.0)],
+                        'all_matches':        [],
+                        'selected_match': {
+                            'term':        word_lower,
+                            'display':     word_lower,
+                            'category':    'Keyword',
+                            'pos':         'noun',
+                            'entity_type': 'unigram',
+                            'rank':        800,
+                        },
+                        'context_flags':    ['known_food'],
+                        'location_context': has_location_ctx,
+                    })
+                    if self.verbose:
+                        print(f"  [{position}] '{word_lower}' → KNOWN FOOD/DINING (noun, skip RAM)")
+                    continue
+
+                # ── SERVICES ─────────────────────────────────────────────
+                if word_lower in self.SERVICES:
+                    word_data.append({
+                        'position':           position,
+                        'word':               word_lower,
+                        'status':             'known',
+                        'is_stopword':        False,
+                        'pos':                'noun',
+                        'predicted_pos':      'noun',
+                        'predicted_pos_list': [('noun', 1.0)],
+                        'all_matches':        [],
+                        'selected_match': {
+                            'term':        word_lower,
+                            'display':     word_lower,
+                            'category':    'Keyword',
+                            'pos':         'noun',
+                            'entity_type': 'unigram',
+                            'rank':        800,
+                        },
+                        'context_flags':    ['known_service'],
+                        'location_context': has_location_ctx,
+                    })
+                    if self.verbose:
+                        print(f"  [{position}] '{word_lower}' → KNOWN SERVICE (noun, skip RAM)")
+                    continue
+
+                # ── APPAREL & PRODUCTS ────────────────────────────────────
+                if word_lower in self.APPAREL_PRODUCTS:
+                    word_data.append({
+                        'position':           position,
+                        'word':               word_lower,
+                        'status':             'known',
+                        'is_stopword':        False,
+                        'pos':                'noun',
+                        'predicted_pos':      'noun',
+                        'predicted_pos_list': [('noun', 1.0)],
+                        'all_matches':        [],
+                        'selected_match': {
+                            'term':        word_lower,
+                            'display':     word_lower,
+                            'category':    'Keyword',
+                            'pos':         'noun',
+                            'entity_type': 'unigram',
+                            'rank':        800,
+                        },
+                        'context_flags':    ['known_apparel'],
+                        'location_context': has_location_ctx,
+                    })
+                    if self.verbose:
+                        print(f"  [{position}] '{word_lower}' → KNOWN APPAREL (noun, skip RAM)")
+                    continue
+
+                # ── BEAUTY ────────────────────────────────────────────────
+                if word_lower in self.BEAUTY:
+                    word_data.append({
+                        'position':           position,
+                        'word':               word_lower,
+                        'status':             'known',
+                        'is_stopword':        False,
+                        'pos':                'noun',
+                        'predicted_pos':      'noun',
+                        'predicted_pos_list': [('noun', 1.0)],
+                        'all_matches':        [],
+                        'selected_match': {
+                            'term':        word_lower,
+                            'display':     word_lower,
+                            'category':    'Keyword',
+                            'pos':         'noun',
+                            'entity_type': 'unigram',
+                            'rank':        800,
+                        },
+                        'context_flags':    ['known_beauty'],
+                        'location_context': has_location_ctx,
+                    })
+                    if self.verbose:
+                        print(f"  [{position}] '{word_lower}' → KNOWN BEAUTY (noun, skip RAM)")
+                    continue
+
+                # ── CULTURE & COMMUNITY ───────────────────────────────────
+                if word_lower in self.CULTURE_COMMUNITY:
+                    word_data.append({
+                        'position':           position,
+                        'word':               word_lower,
+                        'status':             'known',
+                        'is_stopword':        False,
+                        'pos':                'noun',
+                        'predicted_pos':      'noun',
+                        'predicted_pos_list': [('noun', 1.0)],
+                        'all_matches':        [],
+                        'selected_match': {
+                            'term':        word_lower,
+                            'display':     word_lower,
+                            'category':    'Keyword',
+                            'pos':         'noun',
+                            'entity_type': 'unigram',
+                            'rank':        800,
+                        },
+                        'context_flags':    ['known_culture'],
+                        'location_context': has_location_ctx,
+                    })
+                    if self.verbose:
+                        print(f"  [{position}] '{word_lower}' → KNOWN CULTURE/COMMUNITY (noun, skip RAM)")
+                    continue
+
+                # ── MUSIC & ENTERTAINMENT ─────────────────────────────────
+                if word_lower in self.MUSIC_ENTERTAINMENT:
+                    word_data.append({
+                        'position':           position,
+                        'word':               word_lower,
+                        'status':             'known',
+                        'is_stopword':        False,
+                        'pos':                'noun',
+                        'predicted_pos':      'noun',
+                        'predicted_pos_list': [('noun', 1.0)],
+                        'all_matches':        [],
+                        'selected_match': {
+                            'term':        word_lower,
+                            'display':     word_lower,
+                            'category':    'Keyword',
+                            'pos':         'noun',
+                            'entity_type': 'unigram',
+                            'rank':        800,
+                        },
+                        'context_flags':    ['known_entertainment'],
+                        'location_context': has_location_ctx,
+                    })
+                    if self.verbose:
+                        print(f"  [{position}] '{word_lower}' → KNOWN MUSIC/ENTERTAINMENT (noun, skip RAM)")
+                    continue
+
+                # ── KNOWN ACRONYMS ────────────────────────────────────────
+                if word_lower in self.KNOWN_ACRONYMS:
+                    word_data.append({
+                        'position':           position,
+                        'word':               word_lower,
+                        'status':             'known',
+                        'is_stopword':        False,
+                        'pos':                'noun',
+                        'predicted_pos':      'noun',
+                        'predicted_pos_list': [('noun', 1.0)],
+                        'all_matches':        [],
+                        'selected_match': {
+                            'term':        word_lower,
+                            'display':     word_lower.upper(),
+                            'category':    'Keyword',
+                            'pos':         'noun',
+                            'entity_type': 'unigram',
+                            'rank':        900,
+                        },
+                        'context_flags':    ['known_acronym'],
+                        'location_context': has_location_ctx,
+                    })
+                    if self.verbose:
+                        print(f"  [{position}] '{word_lower}' → KNOWN ACRONYM (noun, skip RAM)")
+                    continue
+
+                # ── RAM lookup — only truly unknown words reach here ──────
+                expanded = None
+                if word_lower in ABBREVIATION_TRIGGERS and word_lower not in ABBREVIATION_SKIP_IF_STOPWORD:
+                    expanded_term    = ABBREVIATION_TRIGGERS[word_lower]
+                    expanded_matches = self.cache.get_term_matches(expanded_term)
+                    if not expanded_matches:
+                        expanded_matches = self.cache.get_term_matches(expanded_term.replace(' ', '_'))
+                    if expanded_matches:
+                        expanded = {
+                            'original_abbreviation': word_lower,
+                            'expanded_to':           expanded_term,
+                            'matches':               expanded_matches,
+                        }
+
+                if expanded:
+                    direct_matches      = self.cache.get_term_matches(word_lower)
+                    merged_matches      = self._merge_match_sets(expanded['matches'], direct_matches)
+                    expanded['matches'] = merged_matches
+                    matches             = merged_matches
+                    context_flags       = ['abbreviation_expanded']
+                    if has_location_ctx:
+                        context_flags.append('location_context')
                     word_data.append({
                         'position': position, 'word': word_lower, 'status': 'resolved',
-                        'is_stopword': False,
-                        'pos':            locked_pos,
-                        'predicted_pos':  locked_pos,
-                        'predicted_pos_list': [(locked_pos, 1.0)] if locked_pos else [],
-                        'all_matches': matches, 'selected_match': None,
+                        'is_stopword': False, 'pos': None, 'predicted_pos': None,
+                        'predicted_pos_list': [], 'all_matches': matches, 'selected_match': None,
                         'context_flags': context_flags, 'location_context': has_location_ctx,
+                        'abbreviation': expanded,
                     })
                     if self.verbose:
-                        loc = " [LOCATION_CONTEXT]" if has_location_ctx else ""
-                        kn  = " [KNOWN_NOUN]"       if locked_pos       else ""
-                        print(f"  [{position}] '{word_lower}' → RESOLVED ({len(matches)} matches){loc}{kn}")
-                        for m in matches[:3]:
-                            print(f"       - {m['category']}: pos={m['pos']}, rank={m['rank']}")
-                        if len(matches) > 3:
-                            print(f"       ... and {len(matches) - 3} more")
+                        print(f"  [{position}] '{word_lower}' → ABBREVIATION → '{expanded['expanded_to']}' "
+                            f"({len(matches)} matches, incl. direct)")
                 else:
-                    word_data.append({
-                        'position': position, 'word': word_lower, 'status': 'unknown',
-                        'is_stopword': False,
-                        'pos':            locked_pos,
-                        'predicted_pos':  locked_pos,
-                        'predicted_pos_list': [(locked_pos, 1.0)] if locked_pos else [],
-                        'all_matches': [], 'selected_match': None,
-                        'context_flags': context_flags, 'location_context': has_location_ctx,
-                    })
-                    if self.verbose:
-                        loc = " [LOCATION_CONTEXT]" if has_location_ctx else ""
-                        print(f"  [{position}] '{word_lower}' → UNKNOWN{loc}")
+                    matches       = self.cache.get_term_matches(word_lower)
+                    context_flags = []
+                    if has_location_ctx:
+                        context_flags.append('location_context')
+                    if matches:
+                        word_data.append({
+                            'position': position, 'word': word_lower, 'status': 'resolved',
+                            'is_stopword': False, 'pos': None, 'predicted_pos': None,
+                            'predicted_pos_list': [], 'all_matches': matches, 'selected_match': None,
+                            'context_flags': context_flags, 'location_context': has_location_ctx,
+                        })
+                        if self.verbose:
+                            loc = " [LOCATION_CONTEXT]" if has_location_ctx else ""
+                            print(f"  [{position}] '{word_lower}' → RESOLVED ({len(matches)} matches){loc}")
+                            for m in matches[:3]:
+                                print(f"       - {m['category']}: pos={m['pos']}, rank={m['rank']}")
+                            if len(matches) > 3:
+                                print(f"       ... and {len(matches) - 3} more")
+                    else:
+                        word_data.append({
+                            'position': position, 'word': word_lower, 'status': 'unknown',
+                            'is_stopword': False, 'pos': None, 'predicted_pos': None,
+                            'predicted_pos_list': [], 'all_matches': [], 'selected_match': None,
+                            'context_flags': context_flags, 'location_context': has_location_ctx,
+                        })
+                        if self.verbose:
+                            loc = " [LOCATION_CONTEXT]" if has_location_ctx else ""
+                            print(f"  [{position}] '{word_lower}' → UNKNOWN{loc}")
 
-        return word_data
+            return word_data
 
     def _merge_match_sets(self, primary: List[Dict[str, Any]], secondary: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Merge two match sets, deduplicating by term+category. Keeps higher rank."""
@@ -14302,18 +14681,27 @@ class WordDiscovery:
         # words that people use constantly in search queries.
         # =================================================================
 
+        COLORS = frozenset({
+            # Standard colors
+            'black', 'white', 'red', 'blue', 'green', 'gold', 'silver',
+            'brown', 'pink', 'purple', 'yellow', 'orange', 'grey', 'gray',
+            'beige', 'cream', 'maroon', 'navy', 'teal', 'coral',
+            # Cultural/skin tone descriptors
+            'chocolate', 'caramel', 'mocha', 'ebony', 'ivory', 'bronze',
+            'copper', 'mahogany', 'sienna', 'amber', 'cocoa', 'espresso',
+            'cinnamon', 'melanin', 'melanated',
+        })
+
         SUPERLATIVES = frozenset({
+            # Standard superlatives
             'best', 'worst', 'top', 'biggest', 'largest', 'smallest',
             'oldest', 'newest', 'cheapest', 'fastest', 'highest',
             'lowest', 'richest', 'poorest', 'strongest', 'weakest',
             'most', 'least', 'greatest', 'finest',
             'better', 'cheaper', 'faster', 'newer', 'bigger', 'smaller',
-        })
-
-        COLORS = frozenset({
-            'black', 'white', 'red', 'blue', 'green', 'gold', 'silver',
-            'brown', 'pink', 'purple', 'yellow', 'orange', 'grey', 'gray',
-            'beige', 'cream', 'maroon', 'navy', 'teal', 'coral',
+            # Cultural superlatives
+            'dopest', 'freshest', 'hottest', 'coldest', 'realest',
+            'hardest', 'illest', 'goated',
         })
 
         SIZES = frozenset({
@@ -14329,28 +14717,156 @@ class WordDiscovery:
             'open', 'closed', 'natural', 'organic', 'vegan', 'vintage',
             'modern', 'classic', 'luxury', 'premium', 'affordable',
             'handmade', 'custom', 'local', 'popular', 'famous',
-            'traditional', 'authentic', 'homemade',
+            'traditional', 'authentic', 'homemade', 'afrocentric',
+            'black-owned', 'minority-owned', 'woke', 'conscious',
+            'empowering', 'culturally', 'diverse', 'inclusive',
+        })
+
+        FOOD_DINING = frozenset({
+            # Standard dining
+            'food', 'breakfast', 'lunch', 'dinner', 'brunch', 'dessert',
+            'pizza', 'tacos', 'sushi', 'burger', 'coffee', 'tea',
+            'drinks', 'cocktails', 'wings', 'seafood', 'barbecue', 'bbq',
+            'vegetarian', 'halal', 'kosher', 'restaurant', 'restaurants',
+            'cafe', 'bakery', 'catering', 'eatery', 'diner', 'buffet',
+            'takeout', 'delivery', 'carryout',
+            # Soul food and Black culinary traditions
+            'soul food', 'chitlins', 'chitterlings', 'cornbread',
+            'collard greens', 'collards', 'grits', 'oxtail', 'oxtails',
+            'jerk', 'gumbo', 'jambalaya', 'catfish', 'mac and cheese',
+            'sweet potato', 'sweet potatoes', 'biscuits', 'fried chicken',
+            'waffles', 'po boy', 'poboy', 'red beans', 'hoppin john',
+            'plantains', 'jollof', 'egusi', 'fufu', 'peri peri',
+            'jollof rice', 'suya', 'curry goat', 'roti', 'patty',
+            'crab legs', 'shrimp and grits', 'blackeyed peas',
+            'black eyed peas', 'candied yams', 'yams', 'peach cobbler',
+            'banana pudding', 'bread pudding', 'pig feet', 'neckbones',
+            'neck bones', 'smothered', 'dirty rice', 'boudin',
+            'cracklins', 'crackling', 'pork chops', 'turkey legs',
+            'hot sauce', 'pepper sauce',
+        })
+
+        SERVICES = frozenset({
+            # Standard services
+            'salon', 'barber', 'spa', 'gym', 'dentist', 'doctor',
+            'lawyer', 'plumber', 'mechanic', 'tutor', 'daycare',
+            'cleaning', 'catering', 'photography', 'moving', 'repair',
+            # Black community services
+            'braids', 'braiding', 'locs', 'dreads', 'dreadlocks',
+            'natural hair', 'relaxer', 'weave', 'extensions',
+            'barbershop', 'nail tech', 'nails', 'esthetician',
+            'notary', 'tax preparer', 'taxes', 'bookkeeper',
+            'bail bonds', 'funeral home', 'mortuary', 'cremation',
+            'life insurance', 'reentry', 'expungement', 'realty',
+            'realtor', 'property management', 'financial advisor',
+            'credit repair', 'mental health', 'therapy', 'counseling',
+            'childcare', 'transportation', 'trucking', 'construction',
+            'landscaping', 'pressure washing', 'detailing',
+            'auto detailing', 'towing', 'security', 'staffing',
         })
 
         APPAREL_PRODUCTS = frozenset({
+            # Standard apparel
             'shoes', 'boots', 'sneakers', 'jacket', 'jackets', 'coat',
             'dress', 'shirt', 'pants', 'jeans', 'hat', 'bag', 'bags',
             'purse', 'jewelry', 'watches', 'glasses', 'sunglasses',
             'hoodie', 'sweater',
+            # Culturally relevant apparel
+            'dashiki', 'kufi', 'ankara', 'kente', 'durag', 'durags',
+            'fitted', 'timberlands', 'forces', 'jordans', 'sweatsuits',
+            'streetwear', 'headwrap', 'gele', 'agbada', 'boubou',
+            'caftan', 'jumpsuit', 'romper', 'bodysuit', 'leggings',
+            'joggers', 'shorts', 'skirt', 'blazer', 'suit', 'tuxedo',
+            'accessories', 'earrings', 'necklace', 'bracelet', 'ring',
+            'anklet', 'waist beads',
         })
 
-        FOOD_DINING = frozenset({
-            'food', 'breakfast', 'lunch', 'dinner', 'brunch', 'dessert',
-            'pizza', 'tacos', 'sushi', 'burger', 'coffee', 'tea',
-            'drinks', 'cocktails', 'wings', 'seafood', 'barbecue', 'bbq',
-            'vegetarian', 'halal', 'kosher',
+        BEAUTY = frozenset({
+            # Natural hair
+            'natural hair', '4c', '4b', '4a', '3c', 'protective styles',
+            'twist out', 'wash and go', 'big chop', 'loc', 'locs',
+            'sisterlocks', 'afro', 'fade', 'taper', 'lineup', 'shape up',
+            'edge control', 'edges', 'baby hairs', 'cornrows', 'braids',
+            'box braids', 'knotless', 'senegalese twist', 'marley twist',
+            'passion twist', 'butterfly locs', 'faux locs', 'crochet',
+            'weave', 'wig', 'lace front', 'closure', 'frontal',
+            'relaxer', 'texturizer', 'press and curl', 'blowout',
+            # Skincare
+            'shea butter', 'cocoa butter', 'skincare', 'skin care',
+            'hyperpigmentation', 'melanin', 'dark spots', 'even tone',
+            'moisturizer', 'serum', 'sunscreen', 'spf', 'toner',
+            'exfoliant', 'retinol', 'vitamin c', 'niacinamide',
+            # Makeup
+            'foundation', 'concealer', 'contour', 'highlight',
+            'highlighter', 'bronzer', 'blush', 'eyeshadow', 'mascara',
+            'eyeliner', 'lipstick', 'lip gloss', 'lip liner', 'setting spray',
+            'primer', 'beauty blender', 'makeup',
+            # Nails
+            'nails', 'manicure', 'pedicure', 'acrylic', 'gel nails',
+            'nail art', 'press on nails',
         })
 
-        SERVICES = frozenset({
-            'salon', 'barber', 'spa', 'gym', 'dentist', 'doctor',
-            'lawyer', 'plumber', 'mechanic', 'tutor', 'daycare',
-            'cleaning', 'catering', 'photography', 'moving', 'repair',
+        CULTURE_COMMUNITY = frozenset({
+            # Black institutions
+            'hbcu', 'hbcus', 'historically black', 'black college',
+            'black university', 'naacp', 'uncf', 'sclc', 'sncc',
+            'urban league', 'black church', 'ame', 'cogic',
+            # Greek life
+            'nphc', 'bglo', 'divine nine', 'pan hellenic', 'panhellenic',
+            'sorority', 'fraternity', 'greek', 'homecoming', 'stepshow',
+            'step show', 'yard', 'probate', 'line', 'pledge',
+            'alpha', 'omega', 'kappa', 'sigma', 'delta', 'zeta',
+            'aka', 'dst', 'sgrho', 'ophis',
+            # Cultural events
+            'juneteenth', 'kwanzaa', 'black history', 'black history month',
+            'civil rights', 'reparations', 'liberation', 'empowerment',
+            'black excellence', 'black joy', 'black love', 'black culture',
+            'afrobeats', 'diaspora', 'afrocentric', 'afrofuturism',
+            # Community terms
+            'black owned', 'black-owned', 'minority owned', 'minority-owned',
+            'wbe', 'mbe', 'dbe', 'community', 'neighborhood', 'hood',
+            'block', 'trap', 'struggle', 'grind', 'hustle',
         })
+
+        MUSIC_ENTERTAINMENT = frozenset({
+            # Genres
+            'hiphop', 'hip hop', 'rap', 'rnb', 'r&b', 'soul', 'gospel',
+            'reggae', 'dancehall', 'afrobeats', 'afropop', 'trap',
+            'gogo', 'go-go', 'bounce', 'chopped and screwed', 'drill',
+            'neo soul', 'funk', 'blues', 'jazz', 'motown',
+            # Industry terms
+            'mixtape', 'album', 'ep', 'single', 'collab', 'feature',
+            'verse', 'hook', 'beat', 'producer', 'dj', 'mc',
+            'emcee', 'rapper', 'artist', 'label', 'indie',
+            # Entertainment
+            'comedy', 'stand up', 'comedian', 'podcast', 'youtube',
+            'streaming', 'vlog', 'content creator', 'influencer',
+            'actor', 'actress', 'director', 'filmmaker', 'screenwriter',
+            # Venues and events
+            'club', 'lounge', 'venue', 'concert', 'festival', 'show',
+            'performance', 'open mic', 'cypher', 'battle',
+        })
+
+        KNOWN_ACRONYMS = frozenset({
+            # HBCU and education
+            'hbcu', 'hbcus', 'uncf', 'nphc', 'bglo',
+            # Civil rights and advocacy
+            'naacp', 'sclc', 'sncc', 'ados', 'blm',
+            # Business and finance
+            'mbe', 'wbe', 'dbe', 'sba', 'cdfi', 'llc', 'dba', 'ein',
+            'cdc', 'eidl', 'ppp',
+            # City slang and geography
+            'atl', 'nyc', 'dmv', 'pgc', 'bx', 'htx', 'nola', 'chi',
+            'kcmo', 'bmore', 'dc', 'la', 'sf', 'clt', 'cle',
+            # Music
+            'dj', 'mc', 'rnb',
+            # General
+            'og', 'goat', 'af', 'tbh', 'irl', 'fam', 'bro', 'sis',
+        })
+
+        # ── Union sets — built once, used in step 1 pre-gate ─────────────────
+        KNOWN_ADJECTIVES = COLORS | SUPERLATIVES | SIZES | COMMON_ADJECTIVES
+        KNOWN_NOUNS      = FOOD_DINING | SERVICES | APPAREL_PRODUCTS | BEAUTY | CULTURE_COMMUNITY | MUSIC_ENTERTAINMENT | KNOWN_ACRONYMS
 
         # Combined set for O(1) lookup
         ALWAYS_KEYWORD = (
