@@ -13352,12 +13352,69 @@ def get_fuzzy_suggestions(word: str, limit: int = 10, max_distance: int = 2) -> 
 #   MAIN WORD DISCOVERY v3 CLASS
 # =============================================================================
 
+
+
 class WordDiscovery:
     """
     Word Discovery v3 — Complete profile builder.
     Uses RAM cache (vocabulary_cache.py) for all lookups.
     Only uses Redis for fuzzy spelling correction (Step 4).
     """
+
+    COLORS = frozenset({
+        'black', 'white', 'red', 'blue', 'green', 'gold', 'silver',
+        'brown', 'pink', 'purple', 'yellow', 'orange', 'grey', 'gray',
+        'beige', 'cream', 'maroon', 'navy', 'teal', 'coral',
+    })
+
+    SUPERLATIVES = frozenset({
+        'best', 'worst', 'top', 'biggest', 'largest', 'smallest',
+        'oldest', 'newest', 'cheapest', 'fastest', 'highest',
+        'lowest', 'richest', 'poorest', 'strongest', 'weakest',
+        'most', 'least', 'greatest', 'finest',
+        'better', 'cheaper', 'faster', 'newer', 'bigger', 'smaller',
+    })
+
+    SIZES = frozenset({
+        'small', 'medium', 'large', 'big', 'little', 'tiny', 'huge',
+        'oversized', 'petite', 'slim', 'wide', 'narrow', 'tall',
+        'short', 'long', 'mini', 'plus',
+    })
+
+    COMMON_ADJECTIVES = frozenset({
+        'new', 'old', 'good', 'bad', 'hot', 'cold', 'fresh', 'free',
+        'clean', 'dark', 'light', 'bright', 'deep', 'flat', 'thin',
+        'wild', 'raw', 'real', 'true', 'nice', 'fine', 'fair',
+        'open', 'closed', 'natural', 'organic', 'vegan', 'vintage',
+        'modern', 'classic', 'luxury', 'premium', 'affordable',
+        'handmade', 'custom', 'local', 'popular', 'famous',
+        'traditional', 'authentic', 'homemade',
+    })
+
+    FOOD_DINING = frozenset({
+        'food', 'breakfast', 'lunch', 'dinner', 'brunch', 'dessert',
+        'pizza', 'tacos', 'sushi', 'burger', 'coffee', 'tea',
+        'drinks', 'cocktails', 'wings', 'seafood', 'barbecue', 'bbq',
+        'vegetarian', 'halal', 'kosher', 'restaurants', 'restaurant',
+        'cafe', 'bakery', 'catering', 'eatery', 'diner',
+    })
+
+    SERVICES = frozenset({
+        'salon', 'barber', 'spa', 'gym', 'dentist', 'doctor',
+        'lawyer', 'plumber', 'mechanic', 'tutor', 'daycare',
+        'cleaning', 'catering', 'photography', 'moving', 'repair',
+    })
+
+    APPAREL_PRODUCTS = frozenset({
+        'shoes', 'boots', 'sneakers', 'jacket', 'jackets', 'coat',
+        'dress', 'shirt', 'pants', 'jeans', 'hat', 'bag', 'bags',
+        'purse', 'jewelry', 'watches', 'glasses', 'sunglasses',
+        'hoodie', 'sweater',
+    })
+
+    # O(1) union sets — built once at class level
+    KNOWN_ADJECTIVES = COLORS | SUPERLATIVES | SIZES | COMMON_ADJECTIVES
+    KNOWN_NOUNS      = FOOD_DINING | SERVICES | APPAREL_PRODUCTS
 
     def __init__(self, verbose: bool = False):
         self.verbose = verbose
@@ -13389,10 +13446,136 @@ class WordDiscovery:
         profile = self._step6_build_profile(query, word_data, ngrams, consumed_positions, corrections, start_time)
         return profile
 
+
+
+ 
+
+
     # =========================================================================
     # STEP 1: Tokenize + RAM Hash Lookup + Inline Triggers
     # ISSUE 5 FIX: When abbreviation fires, also do direct RAM lookup and merge
     # =========================================================================
+
+    # def _step1_tokenize_and_lookup(self, words: List[str]) -> List[Dict[str, Any]]:
+    #     """Step 1: Tokenize + RAM Hash Lookup + Inline Triggers."""
+    #     if self.verbose:
+    #         print("\n" + "-" * 70)
+    #         print("📖 STEP 1: Tokenize + RAM Hash Lookup + Inline Triggers")
+    #         print("-" * 70)
+
+    #     word_data = []
+    #     location_signal_pending = False
+
+    #     for i, word in enumerate(words):
+    #         position = i
+    #         word_lower = word.lower().strip()
+
+    #         # --- Check stopword ---
+    #         if word_lower in STOPWORDS:
+    #             is_location_signal = word_lower in LOCATION_SIGNAL_WORDS
+    #             context_flags = ['location_signal'] if is_location_signal else []
+    #             word_data.append({
+    #                 'position': position, 'word': word_lower, 'status': 'stopword',
+    #                 'is_stopword': True, 'pos': STOPWORDS[word_lower],
+    #                 'predicted_pos': STOPWORDS[word_lower],
+    #                 'predicted_pos_list': [(STOPWORDS[word_lower], 1.0)],
+    #                 'all_matches': [],
+    #                 'selected_match': {
+    #                     'term': word_lower, 'display': word_lower, 'category': 'stopword',
+    #                     'description': '', 'pos': STOPWORDS[word_lower],
+    #                     'entity_type': 'stopword', 'rank': 0,
+    #                 },
+    #                 'context_flags': context_flags, 'location_context': False,
+    #             })
+    #             if is_location_signal:
+    #                 location_signal_pending = True
+    #             if self.verbose:
+    #                 sig = " [LOCATION_SIGNAL]" if is_location_signal else ""
+    #                 print(f"  [{position}] '{word_lower}' → STOPWORD ({STOPWORDS[word_lower]}){sig}")
+    #             continue
+
+    #         # --- Check abbreviation triggers ---
+    #         expanded = None
+    #         if word_lower in ABBREVIATION_TRIGGERS and word_lower not in ABBREVIATION_SKIP_IF_STOPWORD:
+    #             expanded_term = ABBREVIATION_TRIGGERS[word_lower]
+    #             expanded_matches = self.cache.get_term_matches(expanded_term)
+    #             if not expanded_matches:
+    #                 expanded_matches = self.cache.get_term_matches(expanded_term.replace(' ', '_'))
+    #             if expanded_matches:
+    #                 expanded = {
+    #                     'original_abbreviation': word_lower,
+    #                     'expanded_to': expanded_term,
+    #                     'matches': expanded_matches,
+    #                 }
+
+    #         # --- RAM hash lookup ---
+    #         has_location_ctx = location_signal_pending
+    #         location_signal_pending = False
+
+    #         if expanded:
+    #             # ISSUE 5 FIX: Also run direct RAM lookup for original word and merge
+    #             direct_matches = self.cache.get_term_matches(word_lower)
+    #             merged_matches = self._merge_match_sets(expanded['matches'], direct_matches)
+    #             expanded['matches'] = merged_matches
+    #             matches = merged_matches
+    #             context_flags = ['abbreviation_expanded']
+    #             if has_location_ctx:
+    #                 context_flags.append('location_context')
+    #             word_data.append({
+    #                 'position': position, 'word': word_lower, 'status': 'resolved',
+    #                 'is_stopword': False, 'pos': None, 'predicted_pos': None,
+    #                 'predicted_pos_list': [], 'all_matches': matches, 'selected_match': None,
+    #                 'context_flags': context_flags, 'location_context': has_location_ctx,
+    #                 'abbreviation': expanded,
+    #             })
+    #             if self.verbose:
+    #                 print(f"  [{position}] '{word_lower}' → ABBREVIATION → '{expanded['expanded_to']}' "
+    #                       f"({len(matches)} matches, incl. direct)")
+    #         else:
+    #             matches = self.cache.get_term_matches(word_lower)
+    #             context_flags = []
+    #             if has_location_ctx:
+    #                 context_flags.append('location_context')
+    #             if matches:
+    #                 word_data.append({
+    #                     'position': position, 'word': word_lower, 'status': 'resolved',
+    #                     'is_stopword': False, 'pos': None, 'predicted_pos': None,
+    #                     'predicted_pos_list': [], 'all_matches': matches, 'selected_match': None,
+    #                     'context_flags': context_flags, 'location_context': has_location_ctx,
+    #                 })
+    #                 if self.verbose:
+    #                     loc = " [LOCATION_CONTEXT]" if has_location_ctx else ""
+    #                     print(f"  [{position}] '{word_lower}' → RESOLVED ({len(matches)} matches){loc}")
+    #                     for m in matches[:3]:
+    #                         print(f"       - {m['category']}: pos={m['pos']}, rank={m['rank']}")
+    #                     if len(matches) > 3:
+    #                         print(f"       ... and {len(matches) - 3} more")
+    #             else:
+    #                 word_data.append({
+    #                     'position': position, 'word': word_lower, 'status': 'unknown',
+    #                     'is_stopword': False, 'pos': None, 'predicted_pos': None,
+    #                     'predicted_pos_list': [], 'all_matches': [], 'selected_match': None,
+    #                     'context_flags': context_flags, 'location_context': has_location_ctx,
+    #                 })
+    #                 if self.verbose:
+    #                     loc = " [LOCATION_CONTEXT]" if has_location_ctx else ""
+    #                     print(f"  [{position}] '{word_lower}' → UNKNOWN{loc}")
+    #     return word_data
+
+    # def _merge_match_sets(self, primary: List[Dict[str, Any]], secondary: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    #     """Merge two match sets, deduplicating by term+category. Keeps higher rank."""
+    #     seen = {}
+    #     for m in primary:
+    #         key = (m['term'].lower(), m['category'].lower())
+    #         if key not in seen or m['rank'] > seen[key]['rank']:
+    #             seen[key] = m
+    #     for m in secondary:
+    #         key = (m['term'].lower(), m['category'].lower())
+    #         if key not in seen or m['rank'] > seen[key]['rank']:
+    #             seen[key] = m
+    #     merged = list(seen.values())
+    #     merged.sort(key=lambda x: x['rank'], reverse=True)
+    #     return merged
 
     def _step1_tokenize_and_lookup(self, words: List[str]) -> List[Dict[str, Any]]:
         """Step 1: Tokenize + RAM Hash Lookup + Inline Triggers."""
@@ -13405,10 +13588,10 @@ class WordDiscovery:
         location_signal_pending = False
 
         for i, word in enumerate(words):
-            position = i
+            position  = i
             word_lower = word.lower().strip()
 
-            # --- Check stopword ---
+            # ── Stopword check ────────────────────────────────────────
             if word_lower in STOPWORDS:
                 is_location_signal = word_lower in LOCATION_SIGNAL_WORDS
                 context_flags = ['location_signal'] if is_location_signal else []
@@ -13432,37 +13615,82 @@ class WordDiscovery:
                     print(f"  [{position}] '{word_lower}' → STOPWORD ({STOPWORDS[word_lower]}){sig}")
                 continue
 
-            # --- Check abbreviation triggers ---
+            # ── Known set pre-gate ────────────────────────────────────
+            # Runs before RAM lookup. Words with known unambiguous POS
+            # are labeled immediately. No RAM lookup, no POS prediction,
+            # no rank competition from high-rank city/entity matches.
+            has_location_ctx = location_signal_pending
+
+            if word_lower in self.KNOWN_ADJECTIVES:
+                word_data.append({
+                    'position':           position,
+                    'word':               word_lower,
+                    'status':             'known',
+                    'is_stopword':        False,
+                    'pos':                'adjective',
+                    'predicted_pos':      'adjective',
+                    'predicted_pos_list': [('adjective', 1.0)],
+                    'all_matches':        [],
+                    'selected_match': {
+                        'term':        word_lower,
+                        'display':     word_lower,
+                        'category':    (
+                            'color'       if word_lower in self.COLORS       else
+                            'superlative' if word_lower in self.SUPERLATIVES  else
+                            'size'        if word_lower in self.SIZES         else
+                            'modifier'
+                        ),
+                        'pos':         'adjective',
+                        'entity_type': 'unigram',
+                        'rank':        0,
+                    },
+                    'context_flags':    ['known_adjective'],
+                    'location_context': has_location_ctx,
+                })
+                if self.verbose:
+                    print(f"  [{position}] '{word_lower}' → KNOWN ADJECTIVE (pre-gate, skip RAM)")
+                location_signal_pending = False
+                continue
+
+            if word_lower in self.KNOWN_NOUNS:
+                locked_pos      = 'noun'
+                locked_category = 'Keyword'
+            else:
+                locked_pos      = None
+                locked_category = None
+
+            # ── Abbreviation check ────────────────────────────────────
             expanded = None
             if word_lower in ABBREVIATION_TRIGGERS and word_lower not in ABBREVIATION_SKIP_IF_STOPWORD:
-                expanded_term = ABBREVIATION_TRIGGERS[word_lower]
+                expanded_term    = ABBREVIATION_TRIGGERS[word_lower]
                 expanded_matches = self.cache.get_term_matches(expanded_term)
                 if not expanded_matches:
                     expanded_matches = self.cache.get_term_matches(expanded_term.replace(' ', '_'))
                 if expanded_matches:
                     expanded = {
                         'original_abbreviation': word_lower,
-                        'expanded_to': expanded_term,
-                        'matches': expanded_matches,
+                        'expanded_to':           expanded_term,
+                        'matches':               expanded_matches,
                     }
 
-            # --- RAM hash lookup ---
-            has_location_ctx = location_signal_pending
+            # ── RAM hash lookup ───────────────────────────────────────
             location_signal_pending = False
 
             if expanded:
-                # ISSUE 5 FIX: Also run direct RAM lookup for original word and merge
-                direct_matches = self.cache.get_term_matches(word_lower)
-                merged_matches = self._merge_match_sets(expanded['matches'], direct_matches)
+                direct_matches   = self.cache.get_term_matches(word_lower)
+                merged_matches   = self._merge_match_sets(expanded['matches'], direct_matches)
                 expanded['matches'] = merged_matches
-                matches = merged_matches
-                context_flags = ['abbreviation_expanded']
+                matches          = merged_matches
+                context_flags    = ['abbreviation_expanded']
                 if has_location_ctx:
                     context_flags.append('location_context')
                 word_data.append({
                     'position': position, 'word': word_lower, 'status': 'resolved',
-                    'is_stopword': False, 'pos': None, 'predicted_pos': None,
-                    'predicted_pos_list': [], 'all_matches': matches, 'selected_match': None,
+                    'is_stopword': False,
+                    'pos':            locked_pos,
+                    'predicted_pos':  locked_pos,
+                    'predicted_pos_list': [(locked_pos, 1.0)] if locked_pos else [],
+                    'all_matches': matches, 'selected_match': None,
                     'context_flags': context_flags, 'location_context': has_location_ctx,
                     'abbreviation': expanded,
                 })
@@ -13477,13 +13705,17 @@ class WordDiscovery:
                 if matches:
                     word_data.append({
                         'position': position, 'word': word_lower, 'status': 'resolved',
-                        'is_stopword': False, 'pos': None, 'predicted_pos': None,
-                        'predicted_pos_list': [], 'all_matches': matches, 'selected_match': None,
+                        'is_stopword': False,
+                        'pos':            locked_pos,
+                        'predicted_pos':  locked_pos,
+                        'predicted_pos_list': [(locked_pos, 1.0)] if locked_pos else [],
+                        'all_matches': matches, 'selected_match': None,
                         'context_flags': context_flags, 'location_context': has_location_ctx,
                     })
                     if self.verbose:
                         loc = " [LOCATION_CONTEXT]" if has_location_ctx else ""
-                        print(f"  [{position}] '{word_lower}' → RESOLVED ({len(matches)} matches){loc}")
+                        kn  = " [KNOWN_NOUN]"       if locked_pos       else ""
+                        print(f"  [{position}] '{word_lower}' → RESOLVED ({len(matches)} matches){loc}{kn}")
                         for m in matches[:3]:
                             print(f"       - {m['category']}: pos={m['pos']}, rank={m['rank']}")
                         if len(matches) > 3:
@@ -13491,13 +13723,17 @@ class WordDiscovery:
                 else:
                     word_data.append({
                         'position': position, 'word': word_lower, 'status': 'unknown',
-                        'is_stopword': False, 'pos': None, 'predicted_pos': None,
-                        'predicted_pos_list': [], 'all_matches': [], 'selected_match': None,
+                        'is_stopword': False,
+                        'pos':            locked_pos,
+                        'predicted_pos':  locked_pos,
+                        'predicted_pos_list': [(locked_pos, 1.0)] if locked_pos else [],
+                        'all_matches': [], 'selected_match': None,
                         'context_flags': context_flags, 'location_context': has_location_ctx,
                     })
                     if self.verbose:
                         loc = " [LOCATION_CONTEXT]" if has_location_ctx else ""
                         print(f"  [{position}] '{word_lower}' → UNKNOWN{loc}")
+
         return word_data
 
     def _merge_match_sets(self, primary: List[Dict[str, Any]], secondary: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -13514,7 +13750,6 @@ class WordDiscovery:
         merged = list(seen.values())
         merged.sort(key=lambda x: x['rank'], reverse=True)
         return merged
-
     # =========================================================================
     # STEP 2: Context-Aware N-gram Resolution
     # =========================================================================
