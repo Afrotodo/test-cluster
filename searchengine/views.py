@@ -3691,7 +3691,6 @@ def contact(request):
 
 
 
-
 # ============================================================================
 # DEBUG VIEWS — debug_views.py
 # ============================================================================
@@ -3801,37 +3800,29 @@ def _t(label, fn, timings, *args, **kwargs):
 def debug_search_view(request):
     """
     Debug endpoint for testing the full pipeline with granular per-function
-    timings and full document ranking breakdown.
+    timings, full document ranking breakdown, and complete raw document data
+    so you can verify every word discovery signal is reaching document ranking.
 
     GET  /debug/search/?query=black+weave
     POST /debug/search/  { "query": "...", "alt_mode": "y", ... }
 
-    Timing breakdown covers every individual function call:
-        wd_process            — word_discovery_fulltest.WordDiscovery.process()
-        get_embedding         — embedding worker call
-        detect_intent         — intent_detect.detect_intent()
-        read_v3_profile       — _read_v3_profile()
-        extract_query_signals — _extract_query_signals()
-        fetch_doc_uuids       — fetch_candidate_uuids() Stage 1A
-        fetch_question_uuids  — questions vector search Stage 1B
-        validate_hits_total   — _validate_question_hit() loop total
-        validate_hits_avg     — _validate_question_hit() per-hit average
-        semantic_rerank       — semantic_rerank_candidates()
-        stage3_prune          — distance threshold filter
-        fetch_metadata        — fetch_candidate_metadata()
-        blend_scores          — blended score computation loop
-        ai_overview_check     — _should_trigger_ai_overview()
-        ai_overview_build     — _build_ai_overview()
-        fetch_full_docs       — fetch_full_documents()
-        total                 — wall clock for entire view
+    Top-level keys in response:
+        meta                          — query params and resolved mode
+        timings                       — per-function ms breakdown, slowest first
+        word_discovery_to_results_chain — full WD output → blend ratios → signals in one place
+        pipeline                      — per-stage debug (stages 1-7)
+        ranking_breakdown             — per-result: raw doc + WD trace + scores
+        counts                        — pagination info
+        errors                        — any non-fatal errors caught during pipeline
 
-    Document ranking breakdown shows for each result:
-        - final blended_score and how it was computed
-        - text_score, sem_score, auth_score components
-        - blend ratios used (changes by query_mode + signals)
-        - vector_distance, semantic_rank, authority_score
-        - which intent signals influenced this result's ranking
-        - matched keywords, entities, field boosts applied
+    Ranking breakdown per document includes:
+        raw_document                  — complete payload from fetch_full_documents
+        word_discovery_trace          — which WD keywords/entities hit this doc,
+                                        which signals shifted the blend, pool source,
+                                        and which questions pointed to this doc
+        scores                        — blended_score, authority, vector_distance, semantic_rank
+        score_components              — text/sem/auth sub-scores and weights with formula
+        ranking_context               — query_mode, field_boosts, active signals
     """
     if not BRIDGE_AVAILABLE:
         return JsonResponse({"error": "typesense_discovery_bridge not available"}, status=500)
@@ -3900,8 +3891,6 @@ def debug_search_view(request):
             fn_timings["wd_process"]    = pt.get("wd_ms")
             fn_timings["get_embedding"] = pt.get("embed_ms")
         else:
-            # Can't split further without modifying run_parallel_prep —
-            # flag this so you know the bundled time is the only granularity
             fn_timings["wd_process"]    = "(bundled in parallel_prep — split run_parallel_prep to measure separately)"
             fn_timings["get_embedding"] = "(bundled in parallel_prep — split run_parallel_prep to measure separately)"
 
@@ -3935,7 +3924,7 @@ def debug_search_view(request):
                     "entity_type":         t.get("entity_type"),
                     "is_stopword":         t.get("is_stopword"),
                     "part_of_ngram":       t.get("part_of_ngram"),
-                    "context_flags":       t.get("context_flags", []),  # v3 frozenset flags
+                    "context_flags":       t.get("context_flags", []),
                     "match_count":         t.get("match_count"),
                     "suggestion":          t.get("suggestion"),
                     "suggestion_display":  t.get("suggestion_display"),
@@ -4143,7 +4132,7 @@ def debug_search_view(request):
             query_tokens=query_tokens,
             query_phrases=query_phrases,
             primary_subject=primary_subject,
-            fn_timings=fn_timings,   # passed in so it can record validate_hits timing
+            fn_timings=fn_timings,
             max_results=50,
         )
         fn_timings["fetch_question_pool_total"] = round((time.perf_counter() - t_q) * 1000, 3)
@@ -4177,6 +4166,12 @@ def debug_search_view(request):
     # =========================================================================
     # STAGE 5C — Pool Overlap Analysis
     # =========================================================================
+    doc_set  = set()
+    q_set    = set()
+    overlap  = set()
+    doc_only = set()
+    q_only   = set()
+
     try:
         doc_set  = set(doc_uuids)
         q_set    = set(q_uuids)
@@ -4203,16 +4198,15 @@ def debug_search_view(request):
 
     # =========================================================================
     # STAGE 6 — Semantic Rerank + Score Blend
-    # Runs the same logic as execute_full_search so we can expose
-    # per-document score components in the ranking breakdown.
     # =========================================================================
     all_results  = []
     vector_data  = {}
     blend_used   = {}
     blend_notes  = []
 
-    combined_uuids = list(dict.fromkeys(list(overlap) + list(doc_only) + list(q_only))) \
-        if 'overlap' in dir() else doc_uuids
+    combined_uuids = list(dict.fromkeys(list(overlap) + list(doc_only) + list(q_only)))
+    if not combined_uuids:
+        combined_uuids = doc_uuids
 
     semantic_enabled = query_embedding is not None
     query_mode       = signals.get("query_mode", "explore")
@@ -4231,7 +4225,6 @@ def debug_search_view(request):
                 for item in reranked
             }
 
-            # Stage 3 prune — same thresholds as execute_full_search
             DISTANCE_THRESHOLDS = {
                 "answer":  0.60, "explore": 0.70, "compare": 0.65,
                 "browse":  0.85, "local":   0.85, "shop":    0.80,
@@ -4245,11 +4238,11 @@ def debug_search_view(request):
             fn_timings["stage3_prune"] = f"{before_prune} → {len(survivor_uuids)} (threshold={threshold})"
 
             debug["stage6_rerank"] = {
-                "semantic_enabled":    True,
-                "candidates_in":       before_prune,
+                "semantic_enabled":      True,
+                "candidates_in":         before_prune,
                 "survivors_after_prune": len(survivor_uuids),
-                "distance_threshold":  threshold,
-                "query_mode":          query_mode,
+                "distance_threshold":    threshold,
+                "query_mode":            query_mode,
             }
 
         except Exception as e:
@@ -4269,7 +4262,7 @@ def debug_search_view(request):
     except Exception as e:
         errors.append(f"fetch_candidate_metadata: {str(e)}")
 
-    # ── Blend scores — mirror execute_full_search logic exactly ───────
+    # ── Blend scores ──────────────────────────────────────────────────
     if vector_data and all_results:
         try:
             t_blend        = time.perf_counter()
@@ -4277,7 +4270,6 @@ def debug_search_view(request):
             max_sem_rank   = len(vector_data)
             blend_used     = BLEND_RATIOS.get(query_mode, BLEND_RATIOS["explore"]).copy()
 
-            # Same signal-driven adjustments as execute_full_search
             if query_mode == "answer" and signals.get("wants_single_result"):
                 blend_used  = {"text_match": 0.70, "semantic": 0.30, "authority": 0.00}
                 blend_notes.append("answer+wants_single → text_match=0.70, semantic=0.30, authority=0.00")
@@ -4309,12 +4301,11 @@ def debug_search_view(request):
                 )
                 auth_score = min(authority / 100.0, 1.0)
 
-                item["blended_score"]    = round(
+                item["blended_score"] = round(
                     blend_used["text_match"] * text_score +
                     blend_used["semantic"]   * sem_score  +
                     blend_used["authority"]  * auth_score, 6
                 )
-                # Store components so the ranking breakdown can show them
                 item["_score_components"] = {
                     "text_score":  round(text_score, 4),
                     "sem_score":   round(sem_score, 4),
@@ -4331,10 +4322,10 @@ def debug_search_view(request):
             fn_timings["blend_scores"] = round((time.perf_counter() - t_blend) * 1000, 3)
 
             debug["stage6_blend"] = {
-                "query_mode":    query_mode,
-                "blend_used":    blend_used,
-                "blend_notes":   blend_notes,
-                "total_scored":  len(all_results),
+                "query_mode":   query_mode,
+                "blend_used":   blend_used,
+                "blend_notes":  blend_notes,
+                "total_scored": len(all_results),
             }
 
         except Exception as e:
@@ -4346,8 +4337,8 @@ def debug_search_view(request):
     ai_overview = None
     try:
         if all_results:
-            preview_ids   = [item["id"] for item in all_results[:per_page]]
-            preview_docs  = fetch_full_documents(preview_ids, query)
+            preview_ids  = [item["id"] for item in all_results[:per_page]]
+            preview_docs = fetch_full_documents(preview_ids, query)
 
             t_ai_check = time.perf_counter()
             should_ai  = _should_trigger_ai_overview(signals, preview_docs, query)
@@ -4361,8 +4352,8 @@ def debug_search_view(request):
                 fn_timings["ai_overview_build"] = "skipped (trigger=false)"
 
             debug["stage7_ai_overview"] = {
-                "triggered":  should_ai,
-                "generated":  ai_overview is not None,
+                "triggered": should_ai,
+                "generated": ai_overview is not None,
                 "preview_ms": fn_timings.get("ai_overview_build"),
             }
     except Exception as e:
@@ -4376,8 +4367,8 @@ def debug_search_view(request):
         page_items = all_results[(page - 1) * per_page: page * per_page]
         page_ids   = [item["id"] for item in page_items]
 
-        t_fetch  = time.perf_counter()
-        results  = fetch_full_documents(page_ids, query)
+        t_fetch = time.perf_counter()
+        results = fetch_full_documents(page_ids, query)
         fn_timings["fetch_full_documents"] = round((time.perf_counter() - t_fetch) * 1000, 3)
 
         if results and page == 1 and ai_overview:
@@ -4386,9 +4377,7 @@ def debug_search_view(request):
         errors.append(f"fetch_full_documents: {str(e)}")
 
     # =========================================================================
-    # DOCUMENT RANKING BREAKDOWN
-    # Build per-result explanation: scores, weights, signals that influenced
-    # ranking, matched keywords/entities, field boosts applied.
+    # BUILD PROFILE KEYWORD / ENTITY LISTS (reused in ranking breakdown)
     # =========================================================================
     active_signals = [
         k for k, v in signals.items()
@@ -4396,80 +4385,183 @@ def debug_search_view(request):
     ]
     field_boosts = profile.get("field_boosts", {})
 
+    profile_kws = [
+        k.get("phrase") or k.get("word", "")
+        for k in profile.get("keywords", [])
+    ]
+    profile_kws = [kw for kw in profile_kws if kw]
+
+    profile_entities = (
+        [p.get("phrase") or p.get("word", "") for p in profile.get("persons", [])] +
+        [o.get("phrase") or o.get("word", "") for o in profile.get("organizations", [])]
+    )
+    profile_entities = [e for e in profile_entities if e]
+
+    # All matched questions indexed by document_uuid for fast per-doc lookup
+    matched_questions_by_doc = {}
+    for q in q_debug.get("matched_questions", []) if 'q_debug' in dir() else []:
+        uuid = q.get("document_uuid")
+        if uuid:
+            matched_questions_by_doc.setdefault(uuid, []).append(q)
+
+    # =========================================================================
+    # DOCUMENT RANKING BREAKDOWN
+    # Per result: raw document, WD trace, score components, ranking context.
+    # =========================================================================
     ranking_breakdown = []
     for i, doc in enumerate(results):
-        doc_id   = doc.get("id") or doc.get("uuid")
-        meta     = next((m for m in all_results if m.get("id") == doc_id), {})
-        comps    = meta.get("_score_components", {})
+        doc_id = doc.get("id") or doc.get("uuid")
+        meta   = next((m for m in all_results if m.get("id") == doc_id), {})
+        comps  = meta.get("_score_components", {})
 
-        # Which profile keywords appear in this doc's searchable fields
-        profile_kws = [
-            k.get("phrase") or k.get("word", "")
-            for k in profile.get("keywords", [])
-        ]
-        doc_text = " ".join([
+        # ── Build full doc_text for keyword matching ───────────────────
+        # Covers every searchable field so missed_keywords is accurate.
+        doc_text = " ".join(filter(None, [
             str(doc.get("title", "")),
             str(doc.get("description", "")),
-            " ".join(doc.get("key_facts", [])),
+            str(doc.get("body", "")),
+            str(doc.get("content", "")),
+            str(doc.get("summary", "")),
+            str(doc.get("tags", "")),
+            str(doc.get("category", "")),
+            str(doc.get("schema", "")),
+            str(doc.get("data_type", "")),
+            str(doc.get("source", "")),
+            " ".join(doc.get("key_facts", []) if isinstance(doc.get("key_facts"), list) else []),
             " ".join(doc.get("primary_keywords", []) if isinstance(doc.get("primary_keywords"), list) else []),
-        ]).lower()
+            " ".join(doc.get("semantic_keywords", []) if isinstance(doc.get("semantic_keywords"), list) else []),
+            " ".join(doc.get("entities", []) if isinstance(doc.get("entities"), list) else []),
+        ])).lower()
 
-        matched_kws = [kw for kw in profile_kws if kw and kw.lower() in doc_text]
+        matched_kws      = [kw for kw in profile_kws     if kw and kw.lower() in doc_text]
+        missed_kws       = [kw for kw in profile_kws     if kw and kw.lower() not in doc_text]
+        matched_entities = [e  for e  in profile_entities if e  and e.lower()  in doc_text]
+        missed_entities  = [e  for e  in profile_entities if e  and e.lower()  not in doc_text]
 
-        profile_entities = (
-            [p.get("phrase") or p.get("word", "") for p in profile.get("persons", [])] +
-            [o.get("phrase") or o.get("word", "") for o in profile.get("organizations", [])]
+        # Which pool(s) surfaced this document
+        pool_source = (
+            "both"     if doc_id in doc_set and doc_id in q_set else
+            "doc_pool" if doc_id in doc_set else
+            "q_pool"   if doc_id in q_set   else
+            "unknown"
         )
-        matched_entities = [e for e in profile_entities if e and e.lower() in doc_text]
+
+        # Questions from stage 5B that pointed to this doc
+        questions_for_doc = [
+            {
+                "question":        q["question"],
+                "answer":          q.get("answer", ""),
+                "answer_type":     q.get("answer_type", ""),
+                "question_type":   q.get("question_type", ""),
+                "vector_distance": q.get("vector_distance"),
+                "semantic_score":  q.get("semantic_score"),
+                "confidence":      q.get("confidence"),
+                "primary_keywords": q.get("primary_keywords", []),
+                "entities":        q.get("entities", []),
+            }
+            for q in matched_questions_by_doc.get(doc_id, [])
+        ]
 
         ranking_breakdown.append({
-            "rank":        i + 1,
-            "id":          doc_id,
-            "title":       doc.get("title"),
-            "url":         doc.get("url"),
-            "data_type":   doc.get("data_type"),
-            "category":    doc.get("category"),
-            "schema":      doc.get("schema"),
+            "rank":      i + 1,
+            "id":        doc_id,
+            "title":     doc.get("title"),
+            "url":       doc.get("url"),
+            "data_type": doc.get("data_type"),
+            "category":  doc.get("category"),
+            "schema":    doc.get("schema"),
 
-            # ── Scores ──────────────────────────────────────────────
-            "scores": {
-                "blended_score":    meta.get("blended_score"),
-                "authority_score":  doc.get("authority_score") or meta.get("authority_score"),
-                "vector_distance":  meta.get("vector_distance"),
-                "semantic_rank":    meta.get("semantic_rank"),
+            # ── Complete raw document payload ──────────────────────────
+            # Every field returned by fetch_full_documents, unfiltered.
+            "raw_document": doc,
+
+            # ── Word discovery → document trace ───────────────────────
+            # Shows exactly which WD signals reached this document and
+            # which ones didn't, so you can verify the pipeline end-to-end.
+            "word_discovery_trace": {
+                # Which pool(s) found this doc
+                "pool_source":             pool_source,
+
+                # WD keywords extracted from the query
+                "profile_keywords":        profile_kws,
+                "matched_keywords":        matched_kws,
+                "missed_keywords":         missed_kws,
+                "keyword_hit_rate":        f"{len(matched_kws)}/{len(profile_kws)}" if profile_kws else "0/0",
+
+                # WD entities extracted from the query
+                "profile_entities":        profile_entities,
+                "matched_entities":        matched_entities,
+                "missed_entities":         missed_entities,
+                "entity_hit_rate":         f"{len(matched_entities)}/{len(profile_entities)}" if profile_entities else "0/0",
+
+                # WD search terms (the cleaned query terms sent to Typesense)
+                "search_terms_used":       profile.get("search_terms", []),
+
+                # Field boosts that WD applied (e.g. title_boost, body_boost)
+                "field_boosts_applied":    field_boosts,
+
+                # WD primary intent that determined query_mode
+                "wd_primary_intent":       discovery.get("primary_intent", "general"),
+
+                # Signals that shifted the blend ratios away from defaults
+                "blend_shift_signals":     blend_notes,
+
+                # All boolean signals that were True for this query
+                "active_bool_signals":     active_signals,
+
+                # Questions from stage 5B that pointed to this doc
+                "questions_matched_count": len(questions_for_doc),
+                "questions_matched":       questions_for_doc,
+
+                # Per-field keyword presence check (useful when missed_keywords is non-empty)
+                "field_keyword_presence": {
+                    field: any(kw.lower() in str(doc.get(field, "")).lower() for kw in profile_kws)
+                    for field in [
+                        "title", "description", "body", "content",
+                        "summary", "primary_keywords", "semantic_keywords",
+                        "entities", "key_facts", "tags", "category",
+                    ]
+                    if profile_kws
+                },
             },
 
-            # ── Score components (how blended_score was built) ───────
+            # ── Scores ────────────────────────────────────────────────
+            "scores": {
+                "blended_score":   meta.get("blended_score"),
+                "authority_score": doc.get("authority_score") or meta.get("authority_score"),
+                "vector_distance": meta.get("vector_distance"),
+                "semantic_rank":   meta.get("semantic_rank"),
+            },
+
+            # ── Score components ──────────────────────────────────────
             "score_components": {
-                "text_score":   comps.get("text_score"),
-                "sem_score":    comps.get("sem_score"),
-                "auth_score":   comps.get("auth_score"),
-                "text_weight":  comps.get("text_weight"),
-                "sem_weight":   comps.get("sem_weight"),
-                "auth_weight":  comps.get("auth_weight"),
+                "text_score":  comps.get("text_score"),
+                "sem_score":   comps.get("sem_score"),
+                "auth_score":  comps.get("auth_score"),
+                "text_weight": comps.get("text_weight"),
+                "sem_weight":  comps.get("sem_weight"),
+                "auth_weight": comps.get("auth_weight"),
                 "formula": (
                     f"({comps.get('text_weight', '?')} × {comps.get('text_score', '?')}) + "
-                    f"({comps.get('sem_weight', '?')} × {comps.get('sem_score', '?')}) + "
+                    f"({comps.get('sem_weight',  '?')} × {comps.get('sem_score',  '?')}) + "
                     f"({comps.get('auth_weight', '?')} × {comps.get('auth_score', '?')})"
                     if comps else "unavailable (keyword path or no embedding)"
                 ),
             },
 
-            # ── Why it ranked here ───────────────────────────────────
+            # ── Ranking context ───────────────────────────────────────
             "ranking_context": {
-                "query_mode":         query_mode,
-                "blend_adjustments":  blend_notes,
-                "active_signals":     active_signals,
-                "field_boosts":       field_boosts,
-                "matched_keywords":   matched_kws,
-                "matched_entities":   matched_entities,
+                "query_mode":        query_mode,
+                "blend_adjustments": blend_notes,
+                "active_signals":    active_signals,
+                "field_boosts":      field_boosts,
                 "location_match": {
                     "city":  doc.get("location", {}).get("city"),
                     "state": doc.get("location", {}).get("state"),
                 } if doc.get("location") else None,
             },
 
-            # ── Document detail ──────────────────────────────────────
+            # ── Quick-glance doc fields ───────────────────────────────
             "key_facts":       doc.get("key_facts", [])[:5],
             "key_facts_count": len(doc.get("key_facts", [])),
             "has_image":       bool(doc.get("image")),
@@ -4479,23 +4571,17 @@ def debug_search_view(request):
         })
 
     # =========================================================================
-    # TIMING SUMMARY — sorted slowest to fastest so bottleneck is obvious
+    # TIMING SUMMARY
     # =========================================================================
-    numeric_timings = {
-        k: v for k, v in fn_timings.items()
-        if isinstance(v, (int, float))
-    }
-    note_timings = {
-        k: v for k, v in fn_timings.items()
-        if not isinstance(v, (int, float))
-    }
+    numeric_timings = {k: v for k, v in fn_timings.items() if isinstance(v, (int, float))}
+    note_timings    = {k: v for k, v in fn_timings.items() if not isinstance(v, (int, float))}
 
     timing_summary = {
         "sorted_slowest_first": sorted(
             [{"fn": k, "ms": v} for k, v in numeric_timings.items()],
             key=lambda x: -x["ms"]
         ),
-        "notes": note_timings,
+        "notes":         note_timings,
         "total_wall_ms": round((time.perf_counter() - t_wall) * 1000, 3),
     }
 
@@ -4503,6 +4589,7 @@ def debug_search_view(request):
     # FINAL RESPONSE
     # =========================================================================
     return JsonResponse({
+
         # ── What was asked ────────────────────────────────────────────
         "meta": {
             "query":            query,
@@ -4513,8 +4600,59 @@ def debug_search_view(request):
             "alt_mode":         alt_mode,
         },
 
-        # ── THE MAIN EVENT — per-function timing breakdown ────────────
+        # ── Per-function timing breakdown ─────────────────────────────
         "timings": timing_summary,
+
+        # ── Word discovery → results chain ────────────────────────────
+        # One place to see everything WD produced and how it shaped ranking.
+        # Cross-reference with ranking_breakdown[n].word_discovery_trace
+        # to see which signals actually landed on each document.
+        "word_discovery_to_results_chain": {
+            "input_query":            query,
+            "corrected_query":        corrected_query,
+
+            # Raw WD term-by-term output
+            "terms":                  debug.get("stage1_word_discovery", {}).get("terms", []),
+            "ngrams":                 debug.get("stage1_word_discovery", {}).get("ngrams", []),
+            "corrections":            debug.get("stage1_word_discovery", {}).get("corrections", []),
+            "stats":                  debug.get("stage1_word_discovery", {}).get("stats", {}),
+
+            # What WD gave the bridge to work with
+            "search_terms":           debug.get("stage1_word_discovery", {}).get("search_terms", []),
+            "keywords_extracted":     debug.get("stage1_word_discovery", {}).get("keywords", []),
+            "persons_extracted":      debug.get("stage1_word_discovery", {}).get("persons", []),
+            "organizations_extracted":debug.get("stage1_word_discovery", {}).get("organizations", []),
+            "media_extracted":        debug.get("stage1_word_discovery", {}).get("media", []),
+            "cities_extracted":       debug.get("stage1_word_discovery", {}).get("cities", []),
+            "states_extracted":       debug.get("stage1_word_discovery", {}).get("states", []),
+            "location_terms":         debug.get("stage1_word_discovery", {}).get("location_terms", []),
+
+            # WD intent → query_mode resolution
+            "wd_primary_intent":      debug.get("stage1_word_discovery", {}).get("primary_intent"),
+            "wd_intent_scores":       debug.get("stage1_word_discovery", {}).get("intent_scores", {}),
+            "wd_field_boosts":        debug.get("stage1_word_discovery", {}).get("field_boosts", {}),
+            "query_mode_resolved":    query_mode,
+
+            # How signals shifted blend ratios from the default
+            "default_blend_for_mode": BLEND_RATIOS.get(query_mode, {}) if BRIDGE_AVAILABLE else {},
+            "blend_ratios_used":      blend_used,
+            "blend_adjustments":      blend_notes,
+
+            # Query tokens + phrases used for question pool validation
+            "query_tokens":           debug.get("stage4_query_signals", {}).get("query_tokens", []),
+            "query_phrases":          debug.get("stage4_query_signals", {}).get("query_phrases", []),
+            "primary_subject":        debug.get("stage4_query_signals", {}).get("primary_subject"),
+
+            # Active boolean signals (everything that was True)
+            "active_bool_signals":    active_signals,
+
+            # Pool sizes that resulted from WD signals
+            "doc_pool_size":          len(doc_uuids),
+            "question_pool_size":     len(q_uuids),
+            "overlap_count":          len(overlap),
+            "survivors_after_rerank": len(survivor_uuids) if 'survivor_uuids' in dir() else 0,
+            "final_candidates":       len(all_results),
+        },
 
         # ── Pipeline stage debug ──────────────────────────────────────
         "pipeline": {
@@ -4531,18 +4669,19 @@ def debug_search_view(request):
             "stage7_ai_overview":    debug.get("stage7_ai_overview"),
         },
 
-        # ── Document ranking with full score breakdown ─────────────────
+        # ── Document ranking with full score + WD breakdown ───────────
         "ranking_breakdown": ranking_breakdown,
 
         # ── Counts ────────────────────────────────────────────────────
         "counts": {
-            "candidates_total":  len(all_results),
-            "page_results":      len(results),
-            "page":              page,
-            "per_page":          per_page,
+            "candidates_total": len(all_results),
+            "page_results":     len(results),
+            "page":             page,
+            "per_page":         per_page,
         },
 
         "errors": errors if errors else None,
+
     }, json_dumps_params={"indent": 2})
 
 
@@ -4564,12 +4703,12 @@ def _fetch_questions_debug(
     """
     Stage 1B with full timing instrumentation.
     Records:
-        - typesense_search_ms       — the actual Typesense vector search call
-        - validate_hits_total_ms    — total time for all _validate_question_hit calls
-        - validate_hits_avg_ms      — average per hit
-        - validate_hits_count       — number of hits validated
-        - fallback_search_ms        — time for fallback search if triggered
-    All timing values written into fn_timings dict passed from caller.
+        typesense_question_search_ms  — the actual Typesense vector search call
+        validate_hits_total_ms        — total time for all _validate_question_hit calls
+        validate_hits_avg_ms          — average per hit
+        validate_hits_count           — number of hits validated
+        question_fallback_search_ms   — time for fallback search if triggered
+    All timing values written into the fn_timings dict passed from caller.
     """
     if fn_timings is None:
         fn_timings = {}
@@ -4687,12 +4826,12 @@ def _fetch_questions_debug(
         hits   = result.get("hits", [])
 
         # ── Fallback ──────────────────────────────────────────────────
-        used_fallback     = None
-        fallback_ms       = None
+        used_fallback = None
+        fallback_ms   = None
         if len(hits) < 5 and filter_str and location_filter:
-            t_fb          = time.perf_counter()
+            t_fb            = time.perf_counter()
             fallback_filter = facet_filter if facet_filter else ""
-            sp_fb         = dict(search_params)
+            sp_fb           = dict(search_params)
             if fallback_filter:
                 sp_fb["filter_by"] = fallback_filter
             else:
@@ -4715,7 +4854,7 @@ def _fetch_questions_debug(
             fallback_ms = round((time.perf_counter() - t_fb) * 1000, 3)
             fn_timings["question_fallback_search_ms"] = fallback_ms
 
-        # ── Validate hits — time total + per-hit average ───────────────
+        # ── Validate hits ─────────────────────────────────────────────
         matched_questions  = []
         rejected_questions = []
         uuids              = []
@@ -4812,17 +4951,17 @@ def _fetch_questions_debug(
 
     except Exception as e:
         return {
-            "error":             str(e),
-            "filter_used":       filter_str,
-            "location_filter":   location_filter or "none",
-            "uuids":             [],
-            "matched_questions": [],
+            "error":              str(e),
+            "filter_used":        filter_str,
+            "location_filter":    location_filter or "none",
+            "uuids":              [],
+            "matched_questions":  [],
             "rejected_questions": [],
         }
 
 
 # ============================================================================
-# DEBUG WORD DISCOVERY VIEW — Step-by-Step Trace (unchanged except context_flags)
+# DEBUG WORD DISCOVERY VIEW — Step-by-Step Trace
 # ============================================================================
 
 @require_GET
@@ -4925,8 +5064,8 @@ def debug_word_discovery_view(request):
             }
 
             if result:
-                ngram_rank     = result.get("rank", 0)
-                ngram_category = result.get("category", "")
+                ngram_rank       = result.get("rank", 0)
+                ngram_category   = result.get("category", "")
                 individual_ranks = [
                     {
                         "word":      words[j],
@@ -5063,7 +5202,7 @@ def debug_word_discovery_view(request):
 
     trace["steps"]["step3_5_suffix"] = step3_5
 
-    # ── Step 4: Best Match Selection ─────────────────────────────────
+    # ── Step 4: Best Match Selection ──────────────────────────────────
     step4 = []
     for i, word_info in enumerate(step1):
         word = word_info["word"]
@@ -5211,7 +5350,7 @@ def debug_word_discovery_view(request):
                     "entity_type":         t.get("entity_type", ""),
                     "is_stopword":         t.get("is_stopword", False),
                     "part_of_ngram":       t.get("part_of_ngram", False),
-                    "context_flags":       t.get("context_flags", []),  # v3 frozenset flags
+                    "context_flags":       t.get("context_flags", []),
                     "match_count":         t.get("match_count", 0),
                     "suggestion":          t.get("suggestion"),
                     "suggestion_display":  t.get("suggestion_display"),
@@ -5268,7 +5407,6 @@ def debug_word_discovery_view(request):
                 "has_price_signal":       sigs.get("has_price_signal"),
                 "has_black_owned":        sigs.get("has_black_owned"),
                 "has_unknown_terms":      sigs.get("has_unknown_terms"),
-                # v3 context_flags-derived signals
                 "has_food_word":          sigs.get("has_food_word"),
                 "has_beauty_word":        sigs.get("has_beauty_word"),
                 "has_entertainment_word": sigs.get("has_entertainment_word"),
