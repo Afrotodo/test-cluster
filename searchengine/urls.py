@@ -97,8 +97,11 @@ urlpatterns = [
 
     #  Testing endpoints 
     # path('debug/search/', views.debug_search_view, name='debug_search'),
-    path('debug/search/', views.debug_search_view, name='debug_search'),
-    path('debug/word-discovery/', views.debug_word_discovery_view, name='debug_word_discovery'),
+    # path('debug/search/', views.debug_search_view, name='debug_search'),
+    # path('debug/word-discovery/', views.debug_word_discovery_view, name='debug_word_discovery'),
+    path('debug/keyword/',  views.debug_keyword,  name='debug_keyword'),
+    path('debug/semantic/', views.debug_semantic, name='debug_semantic'),
+    path('debug/question/', views.debug_question, name='debug_question'),
     # path('debug/business/', views.debug_business_search, name='debug_business'),
     # path('debug/schema/', views.debug_schema, name='debug_schema'),
     # path('debug/stage2/', views.debug_stage2_view, name='debug_stage2'),
