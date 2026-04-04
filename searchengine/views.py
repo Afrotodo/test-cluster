@@ -1,18 +1,28 @@
+# ============================================================
+# views.py — IMPORTS SECTION
+# Replace everything above your first view function with this
+# ============================================================
+ 
 import hashlib
 import json
 import logging
 import re
 import time
 import uuid
+import traceback
 from datetime import date, datetime, timedelta, timezone
 from functools import wraps
 from typing import Any, Dict, List, Optional, Tuple, Union
+from concurrent.futures import ThreadPoolExecutor
+ 
 from django.views.decorators.csrf import csrf_exempt
-from .address_utils import process_address_maps
-from .typesense_discovery_bridge import _generate_stable_cache_key, _get_cached_results, fetch_full_documents, _has_real_images
-
-
-
+from django.conf import settings
+from django.core.cache import cache
+from django.http import Http404, HttpResponseBadRequest, JsonResponse
+from django.shortcuts import redirect, render
+from django.utils.html import escape
+from django.views.decorators.http import require_GET, require_http_methods
+ 
 import redis
 import typesense
 from typesense.exceptions import (
@@ -23,43 +33,198 @@ from typesense.exceptions import (
     ServiceUnavailable,
     Timeout as TypesenseTimeout,
 )
-
-from django.conf import settings
-from django.core.cache import cache
-from django.http import Http404, HttpResponseBadRequest, JsonResponse
-from django.shortcuts import redirect, render
-from django.utils.html import escape
-from django.views.decorators.http import require_GET, require_http_methods
-from .typesense_discovery_bridge import _generate_stable_cache_key, _get_cached_results, fetch_full_documents
-
+ 
 from decouple import config
-
-# Near the top with other imports
+ 
+from .address_utils import process_address_maps
+ 
+ 
+# ── Analytics ────────────────────────────────────────────────────────────────
+ 
 try:
     from .redis_analytics import SearchAnalytics
     ANALYTICS_AVAILABLE = True
 except ImportError:
     ANALYTICS_AVAILABLE = False
     SearchAnalytics = None
-
-# Local imports - wrap in try/except for graceful degradation
+ 
+ 
+# ── Autocomplete ─────────────────────────────────────────────────────────────
+ 
 try:
     from .searchapi import get_autocomplete
 except ImportError:
     get_autocomplete = None
-
+ 
+ 
+# ── Search submission ─────────────────────────────────────────────────────────
+ 
 try:
     from .searchsubmission import process_search_submission
 except ImportError:
     process_search_submission = None
-
+ 
+ 
+# ── Word Discovery — handled inside bridge, not needed here ──────────────────
+ 
+word_discovery_multi = None
+ 
+ 
+# ── Intent Detection ──────────────────────────────────────────────────────────
+ 
 try:
-    from .word_discovery import word_discovery_multi
+    from .intent_detect import detect_intent
+    INTENT_AVAILABLE = True
 except ImportError:
-    word_discovery_multi = None
+    INTENT_AVAILABLE = False
+    detect_intent = None
+ 
+ 
+# ── typesense_bridge_v3 — core search functions ───────────────────────────────
+ 
+try:
+    from .typesense_bridge_v3 import (
+        # Main entry point
+        execute_full_search,
+        # Compatibility stubs
+        detect_query_intent,
+        get_facets,
+        get_featured_result,
+        get_related_searches,
+        log_search_event,
+        # Cache helpers used directly in the view
+        _generate_stable_cache_key,
+        _get_cached_results,
+        _has_real_images,
+        # Document fetching used directly in the view
+        fetch_full_documents,
+    )
+    BRIDGE_AVAILABLE = True
+except ImportError as e:
+    BRIDGE_AVAILABLE = False
+    execute_full_search        = None
+    detect_query_intent        = None
+    get_facets                 = None
+    get_featured_result        = None
+    get_related_searches       = None
+    log_search_event           = None
+    _generate_stable_cache_key = None
+    _get_cached_results        = None
+    _has_real_images           = None
+    fetch_full_documents       = None
+    print(f"⚠️ typesense_bridge_v3 not available: {e}")
+ 
+ 
+# ── typesense_bridge_v3 — debug functions ─────────────────────────────────────
+ 
+try:
+    from .typesense_bridge_v3 import (
+        _run_word_discovery,
+        _run_embedding,
+        run_parallel_prep,
+        _read_v3_profile,
+        build_typesense_params,
+        build_filter_string_without_data_type,
+        _resolve_blend,
+        _extract_authority_score,
+        _compute_text_score,
+        _compute_semantic_score,
+        _domain_relevance,
+        _content_intent_match,
+        _pool_type_multiplier,
+        _score_document,
+        fetch_candidate_uuids,
+        fetch_candidate_uuids_from_questions,
+        fetch_all_candidate_uuids,
+        semantic_rerank_candidates,
+        fetch_candidate_metadata,
+        fetch_candidates_with_metadata,
+        count_all,
+        fetch_documents_by_semantic_uuid,
+        _should_trigger_ai_overview,
+        _build_ai_overview,
+        BLEND_RATIOS,
+        SEMANTIC_DISTANCE_GATE,
+    )
+    DEBUG_BRIDGE_AVAILABLE = True
+except ImportError as e:
+    DEBUG_BRIDGE_AVAILABLE = False
+    DEBUG_BRIDGE_IMPORT_ERROR = str(e)
+    print(f"⚠️ typesense_bridge_v3 debug imports not available: {e}")
+ 
+ 
+# ── Thread pool for debug endpoints ──────────────────────────────────────────
+ 
+_debug_executor = ThreadPoolExecutor(max_workers=4)
+ 
+ 
+# ============================================================
+# END OF IMPORTS
+# your existing view functions and debug endpoints continue below
+# import hashlib
+# import json
+# import logging
+# import re
+# import time
+# import uuid
+# from datetime import date, datetime, timedelta, timezone
+# from functools import wraps
+# from typing import Any, Dict, List, Optional, Tuple, Union
+# from django.views.decorators.csrf import csrf_exempt
+# from .address_utils import process_address_maps
+# from .typesense_discovery_bridge import _generate_stable_cache_key, _get_cached_results, fetch_full_documents, _has_real_images
+
+
+
+# import redis
+# import typesense
+# from typesense.exceptions import (
+#     ObjectNotFound,
+#     RequestMalformed,
+#     RequestUnauthorized,
+#     ServerError,
+#     ServiceUnavailable,
+#     Timeout as TypesenseTimeout,
+# )
+
+# from django.conf import settings
+# from django.core.cache import cache
+# from django.http import Http404, HttpResponseBadRequest, JsonResponse
+# from django.shortcuts import redirect, render
+# from django.utils.html import escape
+# from django.views.decorators.http import require_GET, require_http_methods
+# from .typesense_discovery_bridge import _generate_stable_cache_key, _get_cached_results, fetch_full_documents
+
+# from decouple import config
+
+# # Near the top with other imports
+# try:
+#     from .redis_analytics import SearchAnalytics
+#     ANALYTICS_AVAILABLE = True
+# except ImportError:
+#     ANALYTICS_AVAILABLE = False
+#     SearchAnalytics = None
+
+# # Local imports - wrap in try/except for graceful degradation
+# try:
+#     from .searchapi import get_autocomplete
+# except ImportError:
+#     get_autocomplete = None
 
 # try:
-#     from .typesense_calculations import (
+#     from .searchsubmission import process_search_submission
+# except ImportError:
+#     process_search_submission = None
+
+# try:
+#     from .word_discovery import word_discovery_multi
+# except ImportError:
+#     word_discovery_multi = None
+
+# word_discovery_multi = None
+
+# try:
+#     from .typesense_discovery_bridge import (
 #         detect_query_intent,
 #         execute_full_search,
 #         get_facets,
@@ -74,25 +239,6 @@ except ImportError:
 #     get_featured_result = None
 #     get_related_searches = None
 #     log_search_event = None
-# Word Discovery v2 - no longer need word_discovery_multi (handled inside bridge)
-word_discovery_multi = None
-
-try:
-    from .typesense_discovery_bridge import (
-        detect_query_intent,
-        execute_full_search,
-        get_facets,
-        get_featured_result,
-        get_related_searches,
-        log_search_event,
-    )
-except ImportError:
-    detect_query_intent = None
-    execute_full_search = None
-    get_facets = None
-    get_featured_result = None
-    get_related_searches = None
-    log_search_event = None
 
 
 # =============================================================================
