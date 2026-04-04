@@ -2110,6 +2110,401 @@ def fetch_all_candidate_uuids(
 # END OF PART 5
 # ============================================================
 
+# # ============================================================
+# # PART 6 OF 8 — METADATA FETCHING, RERANKING, COUNTING,
+# #               FILTERING, PAGINATION
+# # ============================================================
+
+# def semantic_rerank_candidates(
+#     candidate_ids: List[str],
+#     query_embedding: List[float],
+#     max_to_rerank: int = 250
+# ) -> List[Dict]:
+#     """
+#     Stage 2 — pure vector ranking of the candidate pool.
+
+#     Takes the UUID list from Stage 1 and re-orders it by
+#     vector similarity to the query embedding.
+
+#     Returns a list of dicts with:
+#         id              — document_uuid
+#         vector_distance — raw distance from Typesense
+#         semantic_rank   — position in the reranked list (0-indexed)
+
+#     Documents not returned by Typesense (rare) are appended at
+#     the end with distance=1.0 and rank=len(reranked).
+#     """
+#     if not candidate_ids or not query_embedding:
+#         return [
+#             {'id': cid, 'vector_distance': 1.0, 'semantic_rank': i}
+#             for i, cid in enumerate(candidate_ids)
+#         ]
+
+#     ids_to_rerank = candidate_ids[:max_to_rerank]
+#     id_filter     = ','.join([f'`{doc_id}`' for doc_id in ids_to_rerank])
+#     embedding_str = ','.join(str(x) for x in query_embedding)
+
+#     params = {
+#         'q':              '*',
+#         'vector_query':   f"embedding:([{embedding_str}], k:{len(ids_to_rerank)}, alpha:1.0)",
+#         'filter_by':      f'document_uuid:[{id_filter}]',
+#         'per_page':       len(ids_to_rerank),
+#         'include_fields': 'document_uuid',
+#     }
+
+#     try:
+#         search_requests = {'searches': [{'collection': COLLECTION_NAME, **params}]}
+#         response        = client.multi_search.perform(search_requests, {})
+#         hits            = response['results'][0].get('hits', [])
+
+#         reranked = [
+#             {
+#                 'id':              hit['document'].get('document_uuid'),
+#                 'vector_distance': hit.get('vector_distance', 1.0),
+#                 'semantic_rank':   i,
+#             }
+#             for i, hit in enumerate(hits)
+#         ]
+
+#         # Append any ids that Typesense did not return
+#         reranked_ids = {r['id'] for r in reranked}
+#         for cid in ids_to_rerank:
+#             if cid not in reranked_ids:
+#                 reranked.append({
+#                     'id':              cid,
+#                     'vector_distance': 1.0,
+#                     'semantic_rank':   len(reranked),
+#                 })
+
+#         print(f"🎯 Stage 2: reranked {len(reranked)} candidates")
+#         return reranked
+
+#     except Exception as e:
+#         print(f"⚠️ Stage 2 error: {e}")
+#         return [
+#             {'id': cid, 'vector_distance': 1.0, 'semantic_rank': i}
+#             for i, cid in enumerate(ids_to_rerank)
+#         ]
+
+
+# def fetch_candidate_metadata(survivor_ids: List[str]) -> List[Dict]:
+#     """
+#     Stage 4 — fetch lightweight metadata for documents that survived
+#     vector pruning. Preserves the semantic rank order of survivor_ids.
+
+#     Fetches all fields needed by the scoring functions in Part 4:
+#         document_data_type, document_category, document_schema
+#         authority_score, content_intent
+#         service_rating, service_review_count
+#         product_rating, product_review_count
+#         recipe_rating, recipe_review_count
+#         media_rating
+#         factual_density_score, evergreen_score
+#         primary_keywords, black_owned
+#         image_url, logo_url
+
+#     Batches in groups of 250 to stay within Typesense limits.
+#     """
+#     if not survivor_ids:
+#         return []
+
+#     BATCH_SIZE = 250
+#     doc_map    = {}
+
+#     for i in range(0, len(survivor_ids), BATCH_SIZE):
+#         batch_ids = survivor_ids[i:i + BATCH_SIZE]
+#         id_filter = ','.join([f'`{doc_id}`' for doc_id in batch_ids])
+
+#         params = {
+#             'q':         '*',
+#             'filter_by': f'document_uuid:[{id_filter}]',
+#             'per_page':  len(batch_ids),
+#             'include_fields': ','.join([
+#                 'document_uuid',
+#                 'document_data_type',
+#                 'document_category',
+#                 'document_schema',
+#                 'content_intent',
+#                 'authority_score',
+#                 'service_rating',
+#                 'service_review_count',
+#                 'product_rating',
+#                 'product_review_count',
+#                 'recipe_rating',
+#                 'recipe_review_count',
+#                 'media_rating',
+#                 'factual_density_score',
+#                 'evergreen_score',
+#                 'primary_keywords',
+#                 'black_owned',
+#                 'image_url',
+#                 'logo_url',
+#             ]),
+#         }
+
+#         try:
+#             search_requests = {'searches': [{'collection': COLLECTION_NAME, **params}]}
+#             response        = client.multi_search.perform(search_requests, {})
+#             hits            = response['results'][0].get('hits', [])
+
+#             for hit in hits:
+#                 doc  = hit.get('document', {})
+#                 uuid = doc.get('document_uuid')
+#                 if uuid:
+#                     doc_map[uuid] = {
+#                         'id':                   uuid,
+#                         'data_type':            doc.get('document_data_type', ''),
+#                         'category':             doc.get('document_category', ''),
+#                         'schema':               doc.get('document_schema', ''),
+#                         'content_intent':       doc.get('content_intent', ''),
+#                         'authority_score':      doc.get('authority_score', 0),
+#                         'service_rating':       doc.get('service_rating', 0),
+#                         'service_review_count': doc.get('service_review_count', 0),
+#                         'product_rating':       doc.get('product_rating', 0),
+#                         'product_review_count': doc.get('product_review_count', 0),
+#                         'recipe_rating':        doc.get('recipe_rating', 0),
+#                         'recipe_review_count':  doc.get('recipe_review_count', 0),
+#                         'media_rating':         doc.get('media_rating', 0),
+#                         'factual_density_score': doc.get('factual_density_score', 0),
+#                         'evergreen_score':      doc.get('evergreen_score', 0),
+#                         'primary_keywords':     doc.get('primary_keywords', []),
+#                         'black_owned':          doc.get('black_owned', False),
+#                         'image_url':            doc.get('image_url', []),
+#                         'logo_url':             doc.get('logo_url', []),
+#                     }
+
+#         except Exception as e:
+#             print(f"❌ Stage 4 metadata fetch error (batch {i}): {e}")
+
+#     results = [doc_map[uuid] for uuid in survivor_ids if uuid in doc_map]
+#     print(f"📊 Stage 4: fetched metadata for {len(results)}/{len(survivor_ids)} survivors")
+#     return results
+
+
+# def fetch_candidates_with_metadata(
+#     search_query: str,
+#     profile: Dict,
+#     signals: Dict = None,
+#     max_results: int = MAX_CACHED_RESULTS
+# ) -> List[Dict]:
+#     """
+#     Keyword path only — fetch UUIDs and lightweight metadata together
+#     in one Typesense call per page.
+
+#     Used when alt_mode='n' or search_source is dropdown/keyword/
+#     suggestion/autocomplete. Since the keyword path has no vector
+#     pruning, all candidates survive so a separate metadata fetch
+#     would be a wasted round trip.
+#     """
+#     signals    = signals or {}
+#     params     = build_typesense_params(profile, signals=signals)
+#     filter_str = build_filter_string_without_data_type(profile, signals=signals)
+
+#     PAGE_SIZE    = 250
+#     all_results  = []
+#     current_page = 1
+#     max_pages    = (max_results // PAGE_SIZE) + 1
+#     query_mode   = signals.get('query_mode', 'explore')
+
+#     print(f"🔍 Stage 1 (keyword+metadata): '{params.get('q', search_query)}'")
+#     print(f"   Mode: {query_mode}")
+#     if filter_str:
+#         print(f"   Filters: {filter_str}")
+
+#     while len(all_results) < max_results and current_page <= max_pages:
+#         search_params = {
+#             'q':                     params.get('q', search_query),
+#             'query_by':              params.get('query_by', 'document_title,primary_keywords,entity_names,key_facts,semantic_keywords'),
+#             'query_by_weights':      params.get('query_by_weights', '10,8,6,4,3'),
+#             'per_page':              PAGE_SIZE,
+#             'page':                  current_page,
+#             'include_fields':        ','.join([
+#                 'document_uuid',
+#                 'document_data_type',
+#                 'document_category',
+#                 'document_schema',
+#                 'content_intent',
+#                 'authority_score',
+#                 'service_rating',
+#                 'service_review_count',
+#                 'product_rating',
+#                 'product_review_count',
+#                 'recipe_rating',
+#                 'recipe_review_count',
+#                 'media_rating',
+#                 'factual_density_score',
+#                 'evergreen_score',
+#                 'primary_keywords',
+#                 'black_owned',
+#                 'image_url',
+#                 'logo_url',
+#             ]),
+#             'num_typos':             params.get('num_typos', 0),
+#             'prefix':                params.get('prefix', 'no'),
+#             'drop_tokens_threshold': params.get('drop_tokens_threshold', 0),
+#             'sort_by':               params.get('sort_by', '_text_match:desc,authority_score:desc'),
+#         }
+
+#         if filter_str:
+#             search_params['filter_by'] = filter_str
+
+#         try:
+#             response = client.collections[COLLECTION_NAME].documents.search(search_params)
+#             hits     = response.get('hits', [])
+#             found    = response.get('found', 0)
+
+#             if not hits:
+#                 break
+
+#             for hit in hits:
+#                 doc = hit.get('document', {})
+#                 all_results.append({
+#                     'id':                   doc.get('document_uuid'),
+#                     'data_type':            doc.get('document_data_type', ''),
+#                     'category':             doc.get('document_category', ''),
+#                     'schema':               doc.get('document_schema', ''),
+#                     'content_intent':       doc.get('content_intent', ''),
+#                     'authority_score':      doc.get('authority_score', 0),
+#                     'service_rating':       doc.get('service_rating', 0),
+#                     'service_review_count': doc.get('service_review_count', 0),
+#                     'product_rating':       doc.get('product_rating', 0),
+#                     'product_review_count': doc.get('product_review_count', 0),
+#                     'recipe_rating':        doc.get('recipe_rating', 0),
+#                     'recipe_review_count':  doc.get('recipe_review_count', 0),
+#                     'media_rating':         doc.get('media_rating', 0),
+#                     'factual_density_score': doc.get('factual_density_score', 0),
+#                     'evergreen_score':      doc.get('evergreen_score', 0),
+#                     'primary_keywords':     doc.get('primary_keywords', []),
+#                     'black_owned':          doc.get('black_owned', False),
+#                     'image_url':            doc.get('image_url', []),
+#                     'logo_url':             doc.get('logo_url', []),
+#                     'text_match':           hit.get('text_match', 0),
+#                 })
+
+#             if len(all_results) >= found or len(hits) < PAGE_SIZE:
+#                 break
+
+#             current_page += 1
+
+#         except Exception as e:
+#             print(f"❌ Keyword fetch error (page {current_page}): {e}")
+#             break
+
+#     print(f"📊 Keyword path: {len(all_results)} candidates with metadata")
+#     return all_results[:max_results]
+
+
+# def count_facets_from_cache(cached_results: List[Dict]) -> Dict[str, List[Dict]]:
+#     """
+#     Single pass through the full result set counting by
+#     document_data_type, document_category, and document_schema.
+#     Returns facets dict with value, count, and label per entry.
+#     """
+#     data_type_counts = {}
+#     category_counts  = {}
+#     schema_counts    = {}
+
+#     for item in cached_results:
+#         dt  = item.get('data_type', '')
+#         cat = item.get('category', '')
+#         sch = item.get('schema', '')
+#         if dt:
+#             data_type_counts[dt] = data_type_counts.get(dt, 0) + 1
+#         if cat:
+#             category_counts[cat] = category_counts.get(cat, 0) + 1
+#         if sch:
+#             schema_counts[sch]   = schema_counts.get(sch, 0) + 1
+
+#     return {
+#         'data_type': [
+#             {
+#                 'value': dt,
+#                 'count': c,
+#                 'label': DATA_TYPE_LABELS.get(dt, dt.title()),
+#             }
+#             for dt, c in sorted(data_type_counts.items(), key=lambda x: -x[1])
+#         ],
+#         'category': [
+#             {
+#                 'value': cat,
+#                 'count': c,
+#                 'label': CATEGORY_LABELS.get(cat, cat.replace('_', ' ').title()),
+#             }
+#             for cat, c in sorted(category_counts.items(), key=lambda x: -x[1])
+#         ],
+#         'schema': [
+#             {
+#                 'value': sch,
+#                 'count': c,
+#                 'label': sch,
+#             }
+#             for sch, c in sorted(schema_counts.items(), key=lambda x: -x[1])
+#         ],
+#     }
+
+
+# def count_all(candidates: List[Dict]) -> Dict:
+#     """
+#     Stage 5 — single counting pass after all pruning and scoring is done.
+#     Single source of truth for facets, image count, and total.
+#     Called once, never again for the same cached result set.
+#     """
+#     facets      = count_facets_from_cache(candidates)
+#     image_count = _count_images_from_candidates(candidates)
+#     total       = len(candidates)
+
+#     print(f"📊 Stage 5 (final counts): total={total}, images={image_count}, "
+#           f"data_types={[(f['value'], f['count']) for f in facets.get('data_type', [])]}")
+
+#     return {
+#         'facets':            facets,
+#         'facet_total':       total,
+#         'total_image_count': image_count,
+#     }
+
+
+# def filter_cached_results(
+#     cached_results: List[Dict],
+#     data_type: str = None,
+#     category: str  = None,
+#     schema: str    = None
+# ) -> List[Dict]:
+#     """
+#     Filter the cached result set by UI-selected filters.
+#     All filters are optional — passing None skips that filter.
+#     """
+#     filtered = cached_results
+#     if data_type:
+#         filtered = [r for r in filtered if r.get('data_type') == data_type]
+#     if category:
+#         filtered = [r for r in filtered if r.get('category') == category]
+#     if schema:
+#         filtered = [r for r in filtered if r.get('schema') == schema]
+#     return filtered
+
+
+# def paginate_cached_results(
+#     cached_results: List[Dict],
+#     page: int,
+#     per_page: int
+# ) -> Tuple[List[Dict], int]:
+#     """
+#     Slice the filtered result set to the requested page.
+#     Returns (page_items, total_count).
+#     Returns empty list if page is beyond the total.
+#     """
+#     total = len(cached_results)
+#     start = (page - 1) * per_page
+#     end   = start + per_page
+#     if start >= total:
+#         return [], total
+#     return cached_results[start:end], total
+
+
+# # ============================================================
+# # END OF PART 6
+# # ============================================================
+
 # ============================================================
 # PART 6 OF 8 — METADATA FETCHING, RERANKING, COUNTING,
 #               FILTERING, PAGINATION
@@ -2201,6 +2596,7 @@ def fetch_candidate_metadata(survivor_ids: List[str]) -> List[Dict]:
         media_rating
         factual_density_score, evergreen_score
         primary_keywords, black_owned
+        document_title, service_type
         image_url, logo_url
 
     Batches in groups of 250 to stay within Typesense limits.
@@ -2224,10 +2620,12 @@ def fetch_candidate_metadata(survivor_ids: List[str]) -> List[Dict]:
                 'document_data_type',
                 'document_category',
                 'document_schema',
+                'document_title',
                 'content_intent',
                 'authority_score',
                 'service_rating',
                 'service_review_count',
+                'service_type',
                 'product_rating',
                 'product_review_count',
                 'recipe_rating',
@@ -2256,10 +2654,12 @@ def fetch_candidate_metadata(survivor_ids: List[str]) -> List[Dict]:
                         'data_type':            doc.get('document_data_type', ''),
                         'category':             doc.get('document_category', ''),
                         'schema':               doc.get('document_schema', ''),
+                        'title':                doc.get('document_title', ''),
                         'content_intent':       doc.get('content_intent', ''),
                         'authority_score':      doc.get('authority_score', 0),
                         'service_rating':       doc.get('service_rating', 0),
                         'service_review_count': doc.get('service_review_count', 0),
+                        'service_type':         doc.get('service_type', []),
                         'product_rating':       doc.get('product_rating', 0),
                         'product_review_count': doc.get('product_review_count', 0),
                         'recipe_rating':        doc.get('recipe_rating', 0),
@@ -2295,10 +2695,24 @@ def fetch_candidates_with_metadata(
     suggestion/autocomplete. Since the keyword path has no vector
     pruning, all candidates survive so a separate metadata fetch
     would be a wasted round trip.
+
+    FIX — uses the full filter from build_typesense_params so the
+    keyword path applies the same data type scoping as the semantic
+    path. Previously used build_filter_string_without_data_type which
+    stripped the document_data_type:=business filter for local mode,
+    causing Houston restaurants to return zero results on keyword path
+    even though the documents existed in the index.
     """
     signals    = signals or {}
     params     = build_typesense_params(profile, signals=signals)
-    filter_str = build_filter_string_without_data_type(profile, signals=signals)
+
+    # FIX — use the full filter from build_typesense_params which
+    # includes document_data_type:=business for local mode.
+    # Fall back to location-only filter if full params has no filter.
+    filter_str = params.get(
+        'filter_by',
+        build_filter_string_without_data_type(profile, signals=signals)
+    )
 
     PAGE_SIZE    = 250
     all_results  = []
@@ -2323,10 +2737,12 @@ def fetch_candidates_with_metadata(
                 'document_data_type',
                 'document_category',
                 'document_schema',
+                'document_title',
                 'content_intent',
                 'authority_score',
                 'service_rating',
                 'service_review_count',
+                'service_type',
                 'product_rating',
                 'product_review_count',
                 'recipe_rating',
@@ -2363,10 +2779,12 @@ def fetch_candidates_with_metadata(
                     'data_type':            doc.get('document_data_type', ''),
                     'category':             doc.get('document_category', ''),
                     'schema':               doc.get('document_schema', ''),
+                    'title':                doc.get('document_title', ''),
                     'content_intent':       doc.get('content_intent', ''),
                     'authority_score':      doc.get('authority_score', 0),
                     'service_rating':       doc.get('service_rating', 0),
                     'service_review_count': doc.get('service_review_count', 0),
+                    'service_type':         doc.get('service_type', []),
                     'product_rating':       doc.get('product_rating', 0),
                     'product_review_count': doc.get('product_review_count', 0),
                     'recipe_rating':        doc.get('recipe_rating', 0),
@@ -2504,7 +2922,6 @@ def paginate_cached_results(
 # ============================================================
 # END OF PART 6
 # ============================================================
-
 # ============================================================
 # PART 7 OF 8 — DOCUMENT FETCHING, FORMATTING, AI OVERVIEW
 # ============================================================
