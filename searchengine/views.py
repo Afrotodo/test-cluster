@@ -6517,10 +6517,13 @@ def debug_question(request):
         report['steps']['total_results'] = len(results)
 
     except Exception as e:
-        report = _debug_error_response('debug_question', query, e)
+            report = _debug_error_response('debug_question', query, e)
 
+    report['timings'] = report.get('timings', {})
     report['timings']['total_ms'] = round((time.time() - t0) * 1000, 2)
     return JsonResponse(report, json_dumps_params={'indent': 2})
+
+
 # def debug_question(request):
 #     """
 #     Tests the question path from the Redis dropdown.
