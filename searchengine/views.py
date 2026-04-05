@@ -146,6 +146,7 @@ try:
         _build_ai_overview,
         BLEND_RATIOS,
         SEMANTIC_DISTANCE_GATE,
+        QUESTION_SEMANTIC_DISTANCE_GATE
     )
     DEBUG_BRIDGE_AVAILABLE = True
 except ImportError as e:

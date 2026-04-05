@@ -261,6 +261,7 @@ INTENT_CONTENT_MAP = {
 # ── Scoring Thresholds ────────────────────────────────────────────────────────
 
 SEMANTIC_DISTANCE_GATE    = 0.65
+QUESTION_SEMANTIC_DISTANCE_GATE = 0.40  
 REVIEW_COUNT_SCALE_BIZ    = 500
 REVIEW_COUNT_SCALE_RECIPE = 200
 BLACK_OWNED_BOOST         = 0.12
@@ -2007,10 +2008,10 @@ def fetch_candidate_uuids_from_questions(
                 continue
 
             # Hard gate — discard before validation
-            if hit_distance >= SEMANTIC_DISTANCE_GATE:
+            if hit_distance >= QUESTION_SEMANTIC_DISTANCE_GATE:
                 rejected += 1
                 print(f"   🚫 Distance gate: '{doc.get('question', '')[:60]}' "
-                      f"(distance={hit_distance:.4f} >= {SEMANTIC_DISTANCE_GATE})")
+                      f"(distance={hit_distance:.4f} >= {QUESTION_SEMANTIC_DISTANCE_GATE})")
                 continue
 
             # ── Step D: Token validation ──────────────────────────────────
