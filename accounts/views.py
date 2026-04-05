@@ -13,7 +13,11 @@ from django.core.exceptions import ValidationError
 from django.core.validators import EmailValidator
 from user_agents import parse
 import re
+from django.conf import settings
+from django.http import Http404, HttpResponseBadRequest, JsonResponse
+import json
 
+api_key = settings.ABSTRACT_API_KEY
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +26,34 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     filename='app.log'
 )
+
+
+# views.py
+import json
+
+def get_location(request):
+    try:
+        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+        ip_address = x_forwarded_for.split(',')[0] if x_forwarded_for else request.META.get('REMOTE_ADDR')
+        
+        api_key = settings.ABSTRACT_API_KEY
+        response = requests.get(
+            f"https://ipgeolocation.abstractapi.com/v1/?api_key={api_key}&ip_address={ip_address}"
+        )
+        data = response.json()
+        
+        return JsonResponse({
+            'ip_address': ip_address,
+            'city': data.get('city', ''),
+            'region': data.get('region_iso_code', ''),
+            'country': data.get('country_code', ''),
+            'postal_code': data.get('postal_code', ''),
+            'latitude': data.get('latitude', ''),
+            'longitude': data.get('longitude', ''),
+            'timezone': data.get('timezone', {}).get('name', '')
+        })
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
 
 def login(request):
     if request.method == 'POST':
@@ -158,6 +190,7 @@ def business(request):
             print("❌ Frontend data incomplete, falling back to API call")
             try:
                 # Use the actual user's IP address instead of hardcoded one
+
                 api_url = f"https://ipgeolocation.abstractapi.com/v1/?api_key=69f8a774e279408e8fa7f7d0ed6937d6&ip_address={ip_address}"
                 print(f"Making API call to: {api_url}")
                 response = requests.get(api_url)

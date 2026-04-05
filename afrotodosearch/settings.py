@@ -25,6 +25,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = config('SECRET_KEY')
 CACHE_API_SECRET = config('CACHE_API_SECRET')
+ABSTRACT_API_KEY = config('ABSTRACTAPI_GEOLOCATION_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True

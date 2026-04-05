@@ -1316,66 +1316,14 @@
 
         // ==================== LOCATION DETECTION ====================
         class LocationService {
-            constructor() {
-                this.apiKey = '69f8a774e279408e8fa7f7d0ed6937d6';
-                this.userIP = null;
-                this.locationData = null;
-            }
-
-            async getUserIP() {
+            async getLocationData() {
                 try {
-                    const response = await fetch('https://api.ipify.org?format=json');
+                    const response = await fetch('/accounts/get-location/');
                     const data = await response.json();
-                    this.userIP = data.ip;
-                    return data.ip;
+                    return data;
                 } catch (error) {
-                    console.error('Error getting IP:', error);
-                    return null;
-                }
-            }
-
-            async getLocationData(ip = null) {
-                try {
-                    const ipToUse = ip || this.userIP || await this.getUserIP();
-                    
-                    if (!ipToUse) {
-                        throw new Error('Could not determine IP address');
-                    }
-
-                    const response = await fetch(
-                        `https://ipgeolocation.abstractapi.com/v1/?api_key=${this.apiKey}&ip_address=${ipToUse}`
-                    );
-                    
-                    if (!response.ok) {
-                        throw new Error(`API request failed: ${response.status}`);
-                    }
-                    
-                    const data = await response.json();
-                    
-                    this.locationData = {
-                        ip_address: ipToUse,
-                        city: data.city || '',
-                        region: data.region_iso_code || '',
-                        country: data.country_code || '',
-                        postal_code: data.postal_code || '',
-                        latitude: data.latitude || '',
-                        longitude: data.longitude || '',
-                        timezone: data.timezone?.name || ''
-                    };
-                    
-                    return this.locationData;
-                } catch (error) {
-                    console.error('Error getting location data:', error);
-                    return {
-                        ip_address: this.userIP || '',
-                        city: '',
-                        region: '',
-                        country: '',
-                        postal_code: '',
-                        latitude: '',
-                        longitude: '',
-                        timezone: ''
-                    };
+                    console.error('Error getting location:', error);
+                    return {};
                 }
             }
 
