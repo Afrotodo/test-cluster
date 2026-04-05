@@ -98,6 +98,7 @@ try:
         _has_real_images,
         # Document fetching used directly in the view
         fetch_full_documents,
+        client,  
     )
     BRIDGE_AVAILABLE = True
 except ImportError as e:
@@ -5716,6 +5717,7 @@ try:
         _get_cached_results,
         _has_real_images,
         fetch_full_documents,
+        
     )
     BRIDGE_AVAILABLE = True
 except ImportError as e:
