@@ -6353,15 +6353,20 @@ def debug_semantic(request):
 # ============================================================
 
 @require_GET
+@require_GET
 def debug_question(request):
     """
-    Tests the question path from the Redis dropdown.
-    Fetches the document directly by document_uuid.
-    Shows everything — no second endpoint needed.
+    Tests the questions collection vector search for a given query.
+    Embeds the query and searches the questions collection to show
+    vector distance distribution — use this to set the threshold
+    for the questions collection in the semantic pipeline.
+
+    Each result shows the matched question AND the full linked document
+    so you can assess relevance at each threshold level.
 
     URL:
-        http://127.0.0.1:8000/debug/question/?uuid=YOUR_UUID&query=what+is+soul+food
-        http://127.0.0.1:8000/debug/question/?uuid=YOUR_UUID
+        http://127.0.0.1:8000/debug/question/?query=what+is+soul+food
+        http://127.0.0.1:8000/debug/question/?query=best+black+owned+barbershop+dc
     """
     if not DEBUG_BRIDGE_AVAILABLE:
         return JsonResponse(
@@ -6369,202 +6374,365 @@ def debug_question(request):
             status=500
         )
 
-    document_uuid = request.GET.get('uuid', '').strip()
-    query         = request.GET.get('query', '').strip()
-
-    if not document_uuid:
-        return JsonResponse({'error': 'uuid parameter required'}, status=400)
+    query = request.GET.get('query', '').strip()
+    if not query:
+        return JsonResponse({'error': 'query parameter required'}, status=400)
 
     t0     = time.time()
     report = {
-        'endpoint':      'debug_question',
-        'document_uuid': document_uuid,
-        'query':         query or '(no query provided)',
-        'status':        'ok',
-        'timings':       {},
-        'steps':         {},
+        'endpoint': 'debug_question',
+        'query':    query,
+        'status':   'ok',
+        'timings':  {},
+        'steps':    {},
     }
 
     try:
-        # ── Fetch document directly ───────────────────────────────────────
-        t1      = time.time()
-        results = fetch_full_documents([document_uuid], query)
-        report['timings']['fetch_ms'] = round((time.time() - t1) * 1000, 2)
+        # ── Step 1: Embed the query ───────────────────────────────────────
+        t1              = time.time()
+        query_embedding = _run_embedding(query)
+        report['timings']['embedding_ms'] = round((time.time() - t1) * 1000, 2)
 
-        if not results:
-            report['status'] = 'not_found'
-            report['steps']['fetch'] = {
-                'found':         False,
-                'document_uuid': document_uuid,
-                'note':          'No document found with this uuid in Typesense',
-            }
-            return JsonResponse(report, json_dumps_params={'indent': 2})
-
-        doc = results[0]
-
-        # ── Full document ─────────────────────────────────────────────────
-        report['steps']['document'] = {
-            'title':                doc.get('title', ''),
-            'data_type':            doc.get('data_type', ''),
-            'category':             doc.get('category', ''),
-            'schema':               doc.get('schema', ''),
-            'url':                  doc.get('url', ''),
-            'source':               doc.get('source', ''),
-            'summary':              doc.get('summary', ''),
-            'authority_score':      doc.get('authority_score', 0),
-            'black_owned':          doc.get('black_owned', False),
-            'service_rating':       doc.get('service_rating'),
-            'service_review_count': doc.get('service_review_count'),
-            'service_type':         doc.get('service_type', []),
-            'service_specialties':  doc.get('service_specialties', []),
-            'service_price_range':  doc.get('service_price_range'),
-            'service_hours':        doc.get('service_hours'),
-            'location': {
-                'city':    doc.get('location', {}).get('city'),
-                'state':   doc.get('location', {}).get('state'),
-                'address': doc.get('location', {}).get('address'),
-            },
-            'key_facts':     doc.get('key_facts', []),
-            'image_url':     doc.get('image_url', []),
-            'logo_url':      doc.get('logo_url', []),
-            'semantic_uuid': doc.get('semantic_uuid', ''),
-            'cluster_uuid':  doc.get('cluster_uuid', ''),
-            'published_date': doc.get('published_date', ''),
-        }
-
-        # ── AI Overview ───────────────────────────────────────────────────
-        question_word = None
-        if query:
-            for word in ('who', 'what', 'where', 'when', 'why', 'how'):
-                if query.lower().startswith(word):
-                    question_word = word
-                    break
-
-        question_signals = {
-            'query_mode':          'answer',
-            'wants_single_result': True,
-            'question_word':       question_word,
-            'primary_domain':      None,
-        }
-
-        ai_overview       = None
-        ai_overview_fired = False
-
-        if doc.get('key_facts'):
-            ai_overview_fired = _should_trigger_ai_overview(
-                question_signals, results, query or 'test'
+        if not query_embedding:
+            return JsonResponse(
+                {'error': 'Embedding failed — check embedding_client'},
+                status=500
             )
-            if ai_overview_fired:
-                ai_overview = _build_ai_overview(
-                    question_signals, results, query or 'test'
-                )
 
-        report['steps']['ai_overview'] = {
-            'question_word':   question_word,
-            'fired':           ai_overview_fired,
-            'text':            ai_overview or '',
-            'key_facts_count': len(doc.get('key_facts', [])),
-            'key_facts':       doc.get('key_facts', []),
+        report['steps']['embedding'] = {
+            'generated':  True,
+            'dimensions': len(query_embedding),
         }
 
-        # ── Related documents ─────────────────────────────────────────────
-        related = []
-        if doc.get('semantic_uuid'):
-            t2      = time.time()
-            related = fetch_documents_by_semantic_uuid(
-                doc['semantic_uuid'],
-                exclude_uuid=document_uuid,
-                limit=5
-            )
-            report['timings']['related_fetch_ms'] = round((time.time() - t2) * 1000, 2)
+        # ── Step 2: Vector search against questions collection ────────────
+        t2            = time.time()
+        embedding_str = ','.join(str(x) for x in query_embedding)
+        TOP_K         = 30
 
-        report['steps']['related_documents'] = {
-            'semantic_uuid': doc.get('semantic_uuid', ''),
-            'count':         len(related),
-            'documents':     related,
+        search_params = {
+            'q':              '*',
+            'vector_query':   f'embedding:([{embedding_str}], k:{TOP_K})',
+            'per_page':       TOP_K,
+            'include_fields': 'document_uuid,question,answer_type,question_type,primary_keywords,entities',
         }
 
-        # ── Hypothetical scores across all modes ──────────────────────────
-        mock_item = {
-            'id':                    document_uuid,
-            'data_type':             doc.get('data_type', ''),
-            'document_data_type':    doc.get('data_type', ''),
-            'category':              doc.get('category', ''),
-            'schema':                doc.get('schema', ''),
-            'content_intent':        doc.get('content_intent', ''),
-            'authority_score':       doc.get('authority_score', 0),
-            'service_rating':        doc.get('service_rating') or 0,
-            'service_review_count':  doc.get('service_review_count') or 0,
-            'service_type':          doc.get('service_type', []),
-            'product_rating':        0,
-            'product_review_count':  0,
-            'recipe_rating':         0,
-            'recipe_review_count':   0,
-            'media_rating':          0,
-            'factual_density_score': 0,
-            'evergreen_score':       0,
-            'primary_keywords':      [],
-            'black_owned':           doc.get('black_owned', False),
-        }
+        search_requests = {'searches': [{'collection': 'questions', **search_params}]}
+        response        = client.multi_search.perform(search_requests, {})
+        hits            = response['results'][0].get('hits', [])
+        report['timings']['vector_search_ms'] = round((time.time() - t2) * 1000, 2)
 
-        auth_n = _extract_authority_score(mock_item)
+        # ── Step 3: Build results with threshold flags ────────────────────
+        THRESHOLDS = [0.30, 0.35, 0.40, 0.45, 0.50, 0.55, 0.60, 0.65]
 
-        hypothetical = {}
-        for mode, ratios in BLEND_RATIOS.items():
-            mock_signals = {
-                'query_mode':     mode,
-                'primary_domain': _infer_domain({
-                    'has_food_word':    'restaurant' in [s.lower() for s in doc.get('service_type', [])],
-                    'has_beauty_word':  'salon' in [s.lower() for s in doc.get('service_type', [])],
-                    'has_service_word': True,
-                    'is_local_search':  True,
-                }),
-            }
-            dom_m  = _domain_relevance(mock_item, mock_signals)
-            cint_m = _content_intent_match(mock_item, mode)
-            pool_m = _pool_type_multiplier(mock_item, mode)
-            blend_score = (
-                ratios['text_match'] * 0.80 +
-                ratios['semantic']   * 0.60 +
-                ratios['authority']  * auth_n
-            )
-            hypothetical[mode] = {
-                'blend_ratios':        ratios,
-                'authority_score_n':   round(auth_n, 4),
-                'example_blend_score': round(blend_score, 4),
-                'multipliers': {
-                    'domain_relevance': round(dom_m, 3),
-                    'content_intent':   round(cint_m, 3),
-                    'pool_type':        round(pool_m, 3),
+        threshold_counts = {str(t): 0 for t in THRESHOLDS}
+        results          = []
+
+        for hit in hits:
+            doc      = hit.get('document', {})
+            distance = hit.get('vector_distance', 1.0)
+
+            for t in THRESHOLDS:
+                if distance < t:
+                    threshold_counts[str(t)] += 1
+
+            results.append({
+                'document_uuid':    doc.get('document_uuid', ''),
+                'question':         doc.get('question', ''),
+                'question_type':    doc.get('question_type', ''),
+                'answer_type':      doc.get('answer_type', ''),
+                'primary_keywords': doc.get('primary_keywords', []),
+                'entities':         doc.get('entities', []),
+                'vector_distance':  round(distance, 4),
+                'passes_0_30':      distance < 0.30,
+                'passes_0_35':      distance < 0.35,
+                'passes_0_40':      distance < 0.40,
+                'passes_0_45':      distance < 0.45,
+                'passes_0_50':      distance < 0.50,
+                'passes_0_55':      distance < 0.55,
+                'passes_0_60':      distance < 0.60,
+                'passes_0_65':      distance < 0.65,
+                'document':         {},
+            })
+
+        # Sort by distance ascending so closest is first
+        results.sort(key=lambda x: x['vector_distance'])
+
+        # ── Step 4: Fetch full documents for all question hits ────────────
+        t3        = time.time()
+        all_uuids      = [r['document_uuid'] for r in results if r.get('document_uuid')]
+        full_docs_list = fetch_full_documents(all_uuids, query)
+        full_docs_map  = {doc.get('id'): doc for doc in full_docs_list}
+        report['timings']['fetch_full_docs_ms'] = round((time.time() - t3) * 1000, 2)
+
+        # ── Step 5: Merge full document into each result ──────────────────
+        for r in results:
+            full_doc   = full_docs_map.get(r['document_uuid'], {})
+            r['document'] = {
+                'title':        full_doc.get('title', ''),
+                'url':          full_doc.get('url', ''),
+                'data_type':    full_doc.get('data_type', ''),
+                'category':     full_doc.get('category', ''),
+                'summary':      full_doc.get('summary', ''),
+                'source':       full_doc.get('source', ''),
+                'black_owned':  full_doc.get('black_owned', False),
+                'service_type': full_doc.get('service_type', []),
+                'location': {
+                    'city':    full_doc.get('location', {}).get('city'),
+                    'state':   full_doc.get('location', {}).get('state'),
                 },
-                'final_hypothetical':  round(blend_score * dom_m * cint_m * pool_m, 4),
+                'key_facts':    full_doc.get('key_facts', []),
+                'image_url':    full_doc.get('image_url', []),
             }
 
-        report['steps']['hypothetical_scores'] = {
-            'note':    'Assumes text_score=0.80 semantic_score=0.60 as example inputs',
-            'by_mode': hypothetical,
+        # ── Step 6: Distance distribution + threshold analysis ────────────
+        distances = [r['vector_distance'] for r in results]
+
+        report['steps']['threshold_analysis'] = {
+            'total_hits': len(hits),
+            'counts_below_threshold': {
+                f'below_{str(t).replace(".", "_")}': threshold_counts[str(t)]
+                for t in THRESHOLDS
+            },
+            'recommendation': (
+                'Look at the question text and linked document at each threshold '
+                'to find the cutoff where results become irrelevant.'
+            ),
         }
 
-        # ── Summary ───────────────────────────────────────────────────────
-        report['summary'] = {
-            'document_found':    True,
-            'title':             doc.get('title', ''),
-            'data_type':         doc.get('data_type', ''),
-            'service_type':      doc.get('service_type', []),
-            'location':          f"{doc.get('location', {}).get('city')}, "
-                                 f"{doc.get('location', {}).get('state')}",
-            'ai_overview_fired': ai_overview_fired,
-            'ai_overview_text':  ai_overview or '',
-            'related_count':     len(related),
-            'authority_score_n': round(auth_n, 4),
-            'black_owned':       doc.get('black_owned', False),
+        report['steps']['distance_distribution'] = {
+            'min':        round(min(distances, default=1.0), 4),
+            'max':        round(max(distances, default=1.0), 4),
+            'mean':       round(sum(distances) / max(len(distances), 1), 4),
+            'below_0_30': sum(1 for d in distances if d < 0.30),
+            'below_0_35': sum(1 for d in distances if d < 0.35),
+            'below_0_40': sum(1 for d in distances if d < 0.40),
+            'below_0_45': sum(1 for d in distances if d < 0.45),
+            'below_0_50': sum(1 for d in distances if d < 0.50),
+            'below_0_55': sum(1 for d in distances if d < 0.55),
+            'below_0_60': sum(1 for d in distances if d < 0.60),
+            'below_0_65': sum(1 for d in distances if d < 0.65),
         }
+
+        report['results']              = results
+        report['steps']['total_results'] = len(results)
 
     except Exception as e:
         report = _debug_error_response('debug_question', query, e)
 
     report['timings']['total_ms'] = round((time.time() - t0) * 1000, 2)
     return JsonResponse(report, json_dumps_params={'indent': 2})
+# def debug_question(request):
+#     """
+#     Tests the question path from the Redis dropdown.
+#     Fetches the document directly by document_uuid.
+#     Shows everything — no second endpoint needed.
+
+#     URL:
+#         http://127.0.0.1:8000/debug/question/?uuid=YOUR_UUID&query=what+is+soul+food
+#         http://127.0.0.1:8000/debug/question/?uuid=YOUR_UUID
+#     """
+#     if not DEBUG_BRIDGE_AVAILABLE:
+#         return JsonResponse(
+#             {'error': f'Debug bridge not available: {DEBUG_BRIDGE_IMPORT_ERROR}'},
+#             status=500
+#         )
+
+#     document_uuid = request.GET.get('uuid', '').strip()
+#     query         = request.GET.get('query', '').strip()
+
+#     if not document_uuid:
+#         return JsonResponse({'error': 'uuid parameter required'}, status=400)
+
+#     t0     = time.time()
+#     report = {
+#         'endpoint':      'debug_question',
+#         'document_uuid': document_uuid,
+#         'query':         query or '(no query provided)',
+#         'status':        'ok',
+#         'timings':       {},
+#         'steps':         {},
+#     }
+
+#     try:
+#         # ── Fetch document directly ───────────────────────────────────────
+#         t1      = time.time()
+#         results = fetch_full_documents([document_uuid], query)
+#         report['timings']['fetch_ms'] = round((time.time() - t1) * 1000, 2)
+
+#         if not results:
+#             report['status'] = 'not_found'
+#             report['steps']['fetch'] = {
+#                 'found':         False,
+#                 'document_uuid': document_uuid,
+#                 'note':          'No document found with this uuid in Typesense',
+#             }
+#             return JsonResponse(report, json_dumps_params={'indent': 2})
+
+#         doc = results[0]
+
+#         # ── Full document ─────────────────────────────────────────────────
+#         report['steps']['document'] = {
+#             'title':                doc.get('title', ''),
+#             'data_type':            doc.get('data_type', ''),
+#             'category':             doc.get('category', ''),
+#             'schema':               doc.get('schema', ''),
+#             'url':                  doc.get('url', ''),
+#             'source':               doc.get('source', ''),
+#             'summary':              doc.get('summary', ''),
+#             'authority_score':      doc.get('authority_score', 0),
+#             'black_owned':          doc.get('black_owned', False),
+#             'service_rating':       doc.get('service_rating'),
+#             'service_review_count': doc.get('service_review_count'),
+#             'service_type':         doc.get('service_type', []),
+#             'service_specialties':  doc.get('service_specialties', []),
+#             'service_price_range':  doc.get('service_price_range'),
+#             'service_hours':        doc.get('service_hours'),
+#             'location': {
+#                 'city':    doc.get('location', {}).get('city'),
+#                 'state':   doc.get('location', {}).get('state'),
+#                 'address': doc.get('location', {}).get('address'),
+#             },
+#             'key_facts':     doc.get('key_facts', []),
+#             'image_url':     doc.get('image_url', []),
+#             'logo_url':      doc.get('logo_url', []),
+#             'semantic_uuid': doc.get('semantic_uuid', ''),
+#             'cluster_uuid':  doc.get('cluster_uuid', ''),
+#             'published_date': doc.get('published_date', ''),
+#         }
+
+#         # ── AI Overview ───────────────────────────────────────────────────
+#         question_word = None
+#         if query:
+#             for word in ('who', 'what', 'where', 'when', 'why', 'how'):
+#                 if query.lower().startswith(word):
+#                     question_word = word
+#                     break
+
+#         question_signals = {
+#             'query_mode':          'answer',
+#             'wants_single_result': True,
+#             'question_word':       question_word,
+#             'primary_domain':      None,
+#         }
+
+#         ai_overview       = None
+#         ai_overview_fired = False
+
+#         if doc.get('key_facts'):
+#             ai_overview_fired = _should_trigger_ai_overview(
+#                 question_signals, results, query or 'test'
+#             )
+#             if ai_overview_fired:
+#                 ai_overview = _build_ai_overview(
+#                     question_signals, results, query or 'test'
+#                 )
+
+#         report['steps']['ai_overview'] = {
+#             'question_word':   question_word,
+#             'fired':           ai_overview_fired,
+#             'text':            ai_overview or '',
+#             'key_facts_count': len(doc.get('key_facts', [])),
+#             'key_facts':       doc.get('key_facts', []),
+#         }
+
+#         # ── Related documents ─────────────────────────────────────────────
+#         related = []
+#         if doc.get('semantic_uuid'):
+#             t2      = time.time()
+#             related = fetch_documents_by_semantic_uuid(
+#                 doc['semantic_uuid'],
+#                 exclude_uuid=document_uuid,
+#                 limit=5
+#             )
+#             report['timings']['related_fetch_ms'] = round((time.time() - t2) * 1000, 2)
+
+#         report['steps']['related_documents'] = {
+#             'semantic_uuid': doc.get('semantic_uuid', ''),
+#             'count':         len(related),
+#             'documents':     related,
+#         }
+
+#         # ── Hypothetical scores across all modes ──────────────────────────
+#         mock_item = {
+#             'id':                    document_uuid,
+#             'data_type':             doc.get('data_type', ''),
+#             'document_data_type':    doc.get('data_type', ''),
+#             'category':              doc.get('category', ''),
+#             'schema':                doc.get('schema', ''),
+#             'content_intent':        doc.get('content_intent', ''),
+#             'authority_score':       doc.get('authority_score', 0),
+#             'service_rating':        doc.get('service_rating') or 0,
+#             'service_review_count':  doc.get('service_review_count') or 0,
+#             'service_type':          doc.get('service_type', []),
+#             'product_rating':        0,
+#             'product_review_count':  0,
+#             'recipe_rating':         0,
+#             'recipe_review_count':   0,
+#             'media_rating':          0,
+#             'factual_density_score': 0,
+#             'evergreen_score':       0,
+#             'primary_keywords':      [],
+#             'black_owned':           doc.get('black_owned', False),
+#         }
+
+#         auth_n = _extract_authority_score(mock_item)
+
+#         hypothetical = {}
+#         for mode, ratios in BLEND_RATIOS.items():
+#             mock_signals = {
+#                 'query_mode':     mode,
+#                 'primary_domain': _infer_domain({
+#                     'has_food_word':    'restaurant' in [s.lower() for s in doc.get('service_type', [])],
+#                     'has_beauty_word':  'salon' in [s.lower() for s in doc.get('service_type', [])],
+#                     'has_service_word': True,
+#                     'is_local_search':  True,
+#                 }),
+#             }
+#             dom_m  = _domain_relevance(mock_item, mock_signals)
+#             cint_m = _content_intent_match(mock_item, mode)
+#             pool_m = _pool_type_multiplier(mock_item, mode)
+#             blend_score = (
+#                 ratios['text_match'] * 0.80 +
+#                 ratios['semantic']   * 0.60 +
+#                 ratios['authority']  * auth_n
+#             )
+#             hypothetical[mode] = {
+#                 'blend_ratios':        ratios,
+#                 'authority_score_n':   round(auth_n, 4),
+#                 'example_blend_score': round(blend_score, 4),
+#                 'multipliers': {
+#                     'domain_relevance': round(dom_m, 3),
+#                     'content_intent':   round(cint_m, 3),
+#                     'pool_type':        round(pool_m, 3),
+#                 },
+#                 'final_hypothetical':  round(blend_score * dom_m * cint_m * pool_m, 4),
+#             }
+
+#         report['steps']['hypothetical_scores'] = {
+#             'note':    'Assumes text_score=0.80 semantic_score=0.60 as example inputs',
+#             'by_mode': hypothetical,
+#         }
+
+#         # ── Summary ───────────────────────────────────────────────────────
+#         report['summary'] = {
+#             'document_found':    True,
+#             'title':             doc.get('title', ''),
+#             'data_type':         doc.get('data_type', ''),
+#             'service_type':      doc.get('service_type', []),
+#             'location':          f"{doc.get('location', {}).get('city')}, "
+#                                  f"{doc.get('location', {}).get('state')}",
+#             'ai_overview_fired': ai_overview_fired,
+#             'ai_overview_text':  ai_overview or '',
+#             'related_count':     len(related),
+#             'authority_score_n': round(auth_n, 4),
+#             'black_owned':       doc.get('black_owned', False),
+#         }
+
+#     except Exception as e:
+#         report = _debug_error_response('debug_question', query, e)
+
+#     report['timings']['total_ms'] = round((time.time() - t0) * 1000, 2)
+#     return JsonResponse(report, json_dumps_params={'indent': 2})
 
 
 # ============================================================
