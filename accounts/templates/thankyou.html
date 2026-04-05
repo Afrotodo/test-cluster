@@ -318,20 +318,6 @@
 </head>
 <body>
     <!-- Header -->
-    <header class="header">
-        <div class="header-inner">
-            <a href="{% url 'searchengine:home' %}" class="logo">
-                <span class="a">A</span><span class="f">f</span><span class="r">r</span><span class="o">o</span>Todo
-            </a>
-            <nav class="nav-links">
-                <a href="{% url 'searchengine:category' 'business' %}" class="nav-link">Business</a>
-                <a href="{% url 'searchengine:category' 'culture' %}" class="nav-link">Culture</a>
-                <a href="{% url 'searchengine:category' 'health' %}" class="nav-link">Health</a>
-                <a href="{% url 'searchengine:category' 'news' %}" class="nav-link">News</a>
-                <a href="{% url 'searchengine:category' 'community' %}" class="nav-link">Community</a>
-            </nav>
-        </div>
-    </header>
 
     <!-- Main Content -->
     <main class="main-content">
@@ -356,12 +342,12 @@
                     </svg>
                     Back to Home
                 </a>
-                <a href="{% url 'searchengine:category' 'business' %}" class="btn btn-secondary">
+                <a href="{% url 'accounts:login' %}" class="btn btn-secondary">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <circle cx="11" cy="11" r="8"></circle>
                         <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
                     </svg>
-                    Explore Directory
+                    Login 
                 </a>
             </div>
 
@@ -393,12 +379,12 @@
             <div class="footer-logo">
                 <span class="a">A</span><span class="f">f</span><span class="r">r</span><span class="o">o</span>Todo
             </div>
-            <nav class="footer-links">
+            <!-- <nav class="footer-links">
                 <a href="#" class="footer-link">About</a>
                 <a href="#" class="footer-link">Contact</a>
                 <a href="#" class="footer-link">Privacy</a>
                 <a href="#" class="footer-link">Terms</a>
-            </nav>
+            </nav> -->
         </div>
     </footer>
 </body>
