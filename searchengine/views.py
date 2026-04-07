@@ -6315,24 +6315,51 @@ def contact(request):
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 # ============================================================
 # views_debug.py — DEBUG ENDPOINTS (ASYNC-COMPATIBLE)
 # ============================================================
 #
-# CHANGES FROM ORIGINAL:
-#   1. All bridge function calls now use async/await since the
-#      bridge was converted to async. Views use Django's
-#      async view support (async def).
-#   2. debug_question now applies the same safeguards as the
-#      bridge: distance gate + token validation + location
-#      filtering. Raw results are still shown but marked
-#      pass/fail so you can see what would be filtered.
-#   3. Fixed duplicate @require_GET on debug_question.
-#   4. Removed ThreadPoolExecutor — replaced with asyncio.gather.
+# UPDATED FOR WORD DISCOVERY v4 PIPELINE:
+#   - debug_keyword, debug_semantic, debug_question are unchanged
+#     because they consume the same profile dict output.
+#   - debug_word_discovery is fully rewritten to trace the v4
+#     4-step pipeline:
+#       Step 1: Tokenize + Known Sets + RAM Hash Lookup
+#       Step 2: Clean + Resolve (corrections → POS → "in" disambig)
+#       Step 3: N-gram Resolution (single pass)
+#       Step 4: Build Profile + Intent
 #
 # REQUIREMENTS:
 #   - Django 4.1+ (for async view support)
-#   - Or wrap with sync_to_async if on older Django
 # ============================================================
 
 
@@ -6527,7 +6554,7 @@ def _build_full_result(
 
 
 def _debug_error_response(endpoint: str, query: str, err: Exception) -> dict:
-    """Standard error envelope for all three debug endpoints."""
+    """Standard error envelope for all debug endpoints."""
     return {
         'endpoint':  endpoint,
         'query':     query,
@@ -6942,19 +6969,6 @@ async def debug_semantic(request):
 # ============================================================
 # DEBUG ENDPOINT 3 — /debug/question/
 # ============================================================
-#
-# NOW APPLIES THE SAME SAFEGUARDS AS THE BRIDGE:
-#   1. Word Discovery to extract query profile (cities, keywords, etc.)
-#   2. Distance gate at QUESTION_SEMANTIC_DISTANCE_GATE (0.40)
-#   3. Token validation via _validate_question_hit
-#   4. Location token enforcement (city/state must match)
-#
-# All 30 raw hits are still returned so you can inspect them,
-# but each is marked with:
-#   - passes_distance_gate: bool
-#   - passes_validation:    bool
-#   - validation_reason:    why it passed or failed
-# ============================================================
 
 @require_GET
 async def debug_question(request):
@@ -7009,7 +7023,6 @@ async def debug_question(request):
             profile, discovery=discovery
         )
 
-        # Build location tokens for mandatory location check
         location_tokens = set()
         for c in discovery.get('cities', []):
             location_tokens.update(_normalize_signal(c.get('name', '')))
@@ -7077,10 +7090,8 @@ async def debug_question(request):
                 if distance < t:
                     threshold_counts[str(t)] += 1
 
-            # ── Distance gate ─────────────────────────────────────────────
             passes_gate = distance < QUESTION_SEMANTIC_DISTANCE_GATE
 
-            # ── Token validation ──────────────────────────────────────────
             passes_validation = False
             validation_reason = ''
 
@@ -7090,7 +7101,6 @@ async def debug_question(request):
                     f'gate {QUESTION_SEMANTIC_DISTANCE_GATE}'
                 )
             else:
-                # Run the same validation the bridge uses
                 is_valid = _validate_question_hit(
                     hit_doc         = doc,
                     query_tokens    = query_tokens,
@@ -7102,8 +7112,6 @@ async def debug_question(request):
                 if not is_valid:
                     validation_reason = 'REJECTED: token validation failed (no matching tokens in primary_keywords/entities/semantic_keywords)'
                 elif location_tokens:
-                    # Mandatory location check: if query has a city/state,
-                    # the candidate must contain that location token
                     candidate_raw = (
                         doc.get('primary_keywords', []) +
                         doc.get('entities', []) +
@@ -7144,7 +7152,6 @@ async def debug_question(request):
                 'passes_distance_gate': passes_gate,
                 'passes_validation':   passes_validation,
                 'validation_reason':   validation_reason,
-                # Legacy threshold flags (still useful for tuning)
                 'passes_0_30':         distance < 0.30,
                 'passes_0_35':         distance < 0.35,
                 'passes_0_40':         distance < 0.40,
@@ -7156,7 +7163,6 @@ async def debug_question(request):
                 'document':            {},
             })
 
-        # Sort by distance ascending
         results.sort(key=lambda x: x['vector_distance'])
 
         # ── Step 6: Fetch full documents for all question hits ────────────
@@ -7230,15 +7236,32 @@ async def debug_question(request):
     return JsonResponse(report, json_dumps_params={'indent': 2})
 
 
+# ============================================================
+# DEBUG ENDPOINT 4 — /api/debug/word-discovery/
+#
+# REWRITTEN FOR v4 PIPELINE:
+#   Step 1: Tokenize + Known Sets + RAM Hash Lookup
+#   Step 2: Clean + Resolve
+#     2a: Fuzzy correction (Tier 1 known sets → Tier 2 RAM → Tier 3 Redis)
+#     2b: POS Prediction + Best Match Selection
+#     2c: "in" Disambiguation
+#   Step 3: N-gram Resolution (single pass on corrected words)
+#   Step 4: Build Profile + Intent
+#
+# Key difference from v3 debug: corrections run BEFORE n-grams
+# and disambiguation, so the trace shows the corrected pipeline
+# order.  Step 5 (re-check n-grams) is gone because n-grams now
+# run on already-corrected words.
+# ============================================================
+
 async def debug_word_discovery(request):
     """
     GET /api/debug/word-discovery/?q=restuarants+in+atl
-    
-    Traces every word through every stage of Word Discovery v3.
+
+    Traces every word through every stage of Word Discovery v4.
+    Shows the full journey of each word from raw input to final
+    profile, with all intermediate states visible.
     """
-    import asyncio
-    from django.http import JsonResponse
-    
     query = request.GET.get('q', '')
     if not query:
         return JsonResponse({'error': 'Missing ?q= parameter'}, status=400)
@@ -7266,25 +7289,32 @@ async def debug_word_discovery(request):
 
     try:
         from .intent_detect import detect_intent
-        INTENT_AVAILABLE = True
+        _INTENT_AVAILABLE = True
     except ImportError:
         try:
             from intent_detect import detect_intent
-            INTENT_AVAILABLE = True
+            _INTENT_AVAILABLE = True
         except ImportError:
-            INTENT_AVAILABLE = False
-
-    import time
+            _INTENT_AVAILABLE = False
 
     def run_trace(query):
         start = time.perf_counter()
         trace = {}
 
-        # META
+        # ── META ─────────────────────────────────────────────────────
         trace['meta'] = {
             'query': query,
+            'pipeline_version': 'v4',
+            'pipeline_order': [
+                'Step 1: Tokenize + Known Sets + RAM Hash Lookup',
+                'Step 2: Clean + Resolve (corrections → POS → "in" disambig)',
+                'Step 3: N-gram Resolution (single pass on corrected words)',
+                'Step 4: Build Profile + Intent',
+            ],
             'ram_cache_available': RAM_CACHE_AVAILABLE,
-            'ram_cache_loaded': bool(RAM_CACHE_AVAILABLE and vocab_cache and vocab_cache.loaded),
+            'ram_cache_loaded': bool(
+                RAM_CACHE_AVAILABLE and vocab_cache and vocab_cache.loaded
+            ),
         }
 
         words = [w.strip('?!.,;:"\'"()[]{}') for w in query.lower().split()]
@@ -7294,7 +7324,9 @@ async def debug_word_discovery(request):
         wd = WordDiscovery(verbose=False)
         cache = vocab_cache_wrapper
 
-        # ── STEP 1 ───────────────────────────────────────────────────
+        # ═════════════════════════════════════════════════════════════
+        # STEP 1: Tokenize + Known Sets + RAM Hash Lookup
+        # ═════════════════════════════════════════════════════════════
         word_data = wd._step1_tokenize_and_lookup(words)
 
         step1 = []
@@ -7316,10 +7348,12 @@ async def debug_word_discovery(request):
                 entry['path'] = 'KNOWN_SET'
                 entry['category'] = wd_item.get('selected_match', {}).get('category', '')
                 entry['pos'] = wd_item.get('pos', '')
-                # Which set
-                for set_name in ['COLORS','SUPERLATIVES','SIZES','COMMON_ADJECTIVES',
-                                 'FOOD_DINING','SERVICES','APPAREL_PRODUCTS','BEAUTY',
-                                 'CULTURE_COMMUNITY','MUSIC_ENTERTAINMENT','KNOWN_ACRONYMS']:
+                # Identify which set matched
+                for set_name in [
+                    'COLORS', 'SUPERLATIVES', 'SIZES', 'COMMON_ADJECTIVES',
+                    'FOOD_DINING', 'SERVICES', 'APPAREL_PRODUCTS', 'BEAUTY',
+                    'CULTURE_COMMUNITY', 'MUSIC_ENTERTAINMENT', 'KNOWN_ACRONYMS',
+                ]:
                     if w in getattr(wd, set_name, set()):
                         entry['known_set'] = set_name
                         break
@@ -7328,24 +7362,30 @@ async def debug_word_discovery(request):
                 entry['expanded_to'] = wd_item['abbreviation']['expanded_to']
                 entry['match_count'] = len(wd_item.get('all_matches', []))
                 entry['all_matches'] = [
-                    {'term': m['term'], 'category': m['category'],
-                     'pos': m['pos'], 'rank': m['rank']}
+                    {
+                        'term': m['term'], 'category': m['category'],
+                        'pos': m['pos'], 'rank': m['rank'],
+                    }
                     for m in wd_item.get('all_matches', [])
                 ]
             elif wd_item['status'] == 'resolved':
                 entry['path'] = 'RAM_HASH'
                 entry['match_count'] = len(wd_item.get('all_matches', []))
                 entry['all_matches'] = [
-                    {'term': m['term'], 'category': m['category'],
-                     'pos': m['pos'], 'rank': m['rank']}
+                    {
+                        'term': m['term'], 'category': m['category'],
+                        'pos': m['pos'], 'rank': m['rank'],
+                    }
                     for m in wd_item.get('all_matches', [])
                 ]
             elif wd_item['status'] == 'unknown':
                 entry['path'] = 'NOT_FOUND'
                 direct = cache.get_term_matches(w)
                 entry['direct_ram_check'] = [
-                    {'term': m['term'], 'category': m['category'],
-                     'pos': m['pos'], 'rank': m['rank']}
+                    {
+                        'term': m['term'], 'category': m['category'],
+                        'pos': m['pos'], 'rank': m['rank'],
+                    }
                     for m in direct
                 ]
                 entry['ram_empty'] = len(direct) == 0
@@ -7363,38 +7403,145 @@ async def debug_word_discovery(request):
                 'ram_hash': sum(1 for s in step1 if s.get('path') == 'RAM_HASH'),
                 'abbreviation': sum(1 for s in step1 if s.get('path') == 'ABBREVIATION'),
                 'not_found': sum(1 for s in step1 if s.get('path') == 'NOT_FOUND'),
+            },
+        }
+
+        # ═════════════════════════════════════════════════════════════
+        # STEP 2a: Clean + Resolve (fuzzy corrections)
+        #
+        # v4 KEY CHANGE: corrections happen BEFORE n-grams and POS.
+        # This means "restuarant" gets corrected to "restaurant" and
+        # tagged with known_food BEFORE "in" disambiguation runs.
+        # ═════════════════════════════════════════════════════════════
+        has_unknowns = any(wd_item['status'] == 'unknown' for wd_item in word_data)
+
+        if has_unknowns:
+            corrections = wd._step2_clean_and_resolve(word_data)
+        else:
+            corrections = []
+
+        step2a = []
+        for wd_item in word_data:
+            if wd_item['status'] not in (
+                'corrected', 'pos_corrected', 'unknown', 'unknown_suggest',
+            ):
+                continue
+
+            entry = {
+                'position': wd_item['position'],
+                'word': wd_item['word'],
+                'status': wd_item['status'],
+                'predicted_pos': wd_item.get('predicted_pos', ''),
+                'context_flags_after_correction': list(
+                    wd_item.get('context_flags', [])
+                ),
             }
-        }
 
-        # ── STEP 2 ───────────────────────────────────────────────────
-        ngrams, consumed = wd._step2_resolve_ngrams(words, word_data)
+            if wd_item['status'] == 'corrected':
+                entry['corrected_to'] = wd_item.get('corrected', '')
+                entry['distance'] = wd_item.get('distance', 0)
+                entry['corrected_pos'] = wd_item.get('pos', '')
+                entry['corrected_category'] = wd_item.get(
+                    'selected_match', {}
+                ).get('category', '')
+                entry['corrected_rank'] = wd_item.get(
+                    'selected_match', {}
+                ).get('rank', 0)
+            elif wd_item['status'] == 'unknown_suggest':
+                entry['suggestion'] = wd_item.get('suggestion', '')
+                entry['suggestion_distance'] = wd_item.get(
+                    'suggestion_distance', 0
+                )
+            elif wd_item['status'] == 'pos_corrected':
+                entry['corrected_to'] = wd_item.get('corrected', '')
+                entry['distance'] = wd_item.get('distance', 0)
 
-        trace['step2_ngrams'] = {
-            'description': 'N-gram Resolution',
-            'consumed_positions': sorted(consumed),
-            'ngrams': [
-                {'type': ng['type'], 'phrase': ng['phrase'], 'category': ng['category'],
-                 'rank': ng['rank'], 'positions': ng['positions'],
-                 'location_boosted': ng.get('location_boosted', False)}
-                for ng in ngrams
+            # Show Redis suggestions if available
+            redis_sugg = wd_item.get('redis_suggestions', [])
+            if redis_sugg:
+                entry['redis_suggestions'] = [
+                    {
+                        'term': s['term'], 'distance': s['distance'],
+                        'rank': s['rank'], 'pos': s['pos'],
+                        'category': s['category'],
+                        'compatible': s.get('compatible', False),
+                    }
+                    for s in redis_sugg[:5]
+                ]
+
+            step2a.append(entry)
+
+        # Find correction sources from the corrections list
+        correction_sources = {}
+        for c in corrections:
+            correction_sources[c.get('position', -1)] = c.get('source', 'unknown')
+
+        for entry in step2a:
+            entry['correction_source'] = correction_sources.get(
+                entry['position'], 'none'
+            )
+
+        trace['step2a_corrections'] = {
+            'description': (
+                'Clean + Resolve — fuzzy corrections BEFORE n-grams/POS '
+                '(v4 key change)'
+            ),
+            'skipped': not has_unknowns,
+            'correction_tiers': [
+                'Tier 1: Fuzzy match against known sets (frozenset, ~0.001ms)',
+                'Tier 2: Fuzzy match against RAM vocabulary cache (~1-10ms)',
+                'Tier 3: Batch Redis fuzzy lookup (~30-50ms)',
             ],
+            'words': step2a,
+            'corrections': corrections,
+            'summary': {
+                'total_unknowns': sum(
+                    1 for s in step1 if s.get('path') == 'NOT_FOUND'
+                ),
+                'corrected': sum(
+                    1 for e in step2a if e['status'] == 'corrected'
+                ),
+                'suggested_only': sum(
+                    1 for e in step2a if e['status'] == 'unknown_suggest'
+                ),
+                'still_unknown': sum(
+                    1 for e in step2a if e['status'] == 'unknown'
+                ),
+                'from_tier1': sum(
+                    1 for e in step2a
+                    if e.get('correction_source') == 'tier1_known_sets'
+                ),
+                'from_tier2': sum(
+                    1 for e in step2a
+                    if e.get('correction_source') == 'tier2_ram_cache'
+                ),
+                'from_redis': sum(
+                    1 for e in step2a
+                    if e.get('correction_source') == 'redis'
+                ),
+            },
         }
 
-        # ── STEP 3 ───────────────────────────────────────────────────
-        wd._step3_pos_and_select(word_data, consumed)
+        # ═════════════════════════════════════════════════════════════
+        # STEP 2b: POS Prediction + Best Match Selection
+        #
+        # Now runs on CORRECTED words — POS predictions are reliable.
+        # ═════════════════════════════════════════════════════════════
+        wd._step2_pos_and_select(word_data)
 
-        step3 = []
+        step2b = []
         for i, wd_item in enumerate(word_data):
             entry = {
                 'position': wd_item['position'],
                 'word': wd_item['word'],
                 'status': wd_item['status'],
                 'is_stopword': wd_item['is_stopword'],
-                'in_ngram': wd_item['position'] in consumed,
             }
-            if not wd_item['is_stopword']:
+            if not wd_item['is_stopword'] and wd_item['status'] != 'known':
                 entry['predicted_pos'] = wd_item.get('predicted_pos', '')
-                entry['predicted_pos_list'] = wd_item.get('predicted_pos_list', [])
+                entry['predicted_pos_list'] = wd_item.get(
+                    'predicted_pos_list', []
+                )
                 sm = wd_item.get('selected_match')
                 if sm:
                     entry['selected_match'] = {
@@ -7403,12 +7550,13 @@ async def debug_word_discovery(request):
                         'pos': sm.get('pos', ''),
                         'rank': sm.get('rank', 0),
                     }
-                    # Show all matches with compatibility
                     predicted = wd_item.get('predicted_pos', 'noun')
                     entry['all_matches_with_compatibility'] = [
                         {
-                            'term': m['term'], 'category': m['category'],
-                            'pos': m['pos'], 'rank': m['rank'],
+                            'term': m['term'],
+                            'category': m['category'],
+                            'pos': m['pos'],
+                            'rank': m['rank'],
                             'pos_compatible': is_pos_compatible(
                                 normalize_pos_string(m['pos']), predicted
                             ),
@@ -7417,115 +7565,150 @@ async def debug_word_discovery(request):
                     ]
                 else:
                     entry['selected_match'] = None
-            step3.append(entry)
 
-        trace['step3_pos_selection'] = {
-            'description': 'POS Prediction + Match Selection',
-            'words': step3,
+            step2b.append(entry)
+
+        trace['step2b_pos_selection'] = {
+            'description': (
+                'POS Prediction + Best Match Selection '
+                '(runs on corrected words)'
+            ),
+            'words': step2b,
         }
 
-        # ── STEP 3.5 ─────────────────────────────────────────────────
-        wd._step3_5_resolve_in_ambiguity(word_data, consumed)
+        # ═════════════════════════════════════════════════════════════
+        # STEP 2c: "in" Disambiguation
+        #
+        # v4 KEY CHANGE: runs AFTER corrections, so left-side context
+        # flags are correct.  "restuarant in atl" → "restaurant" now
+        # has known_food flag → Atlanta stays as city.
+        # ═════════════════════════════════════════════════════════════
+        wd._step2_resolve_in_ambiguity(word_data)
 
-        step3_5 = []
+        step2c = []
         for i, wd_item in enumerate(word_data):
             if not (wd_item['is_stopword'] and wd_item['word'] == 'in'):
                 continue
             if i + 1 >= len(word_data):
                 continue
+
             target = word_data[i + 1]
             all_m = target.get('all_matches', [])
-            city_m = [m for m in all_m if m.get('category', '').lower() in CITY_CATEGORIES]
-            non_city_m = [m for m in all_m if m.get('category', '').lower() not in LOCATION_CATEGORIES]
+            city_m = [
+                m for m in all_m
+                if m.get('category', '').lower() in CITY_CATEGORIES
+            ]
+            non_city_m = [
+                m for m in all_m
+                if m.get('category', '').lower() not in LOCATION_CATEGORIES
+            ]
 
             # Left context
             left_flags = set()
             left_words = []
             for j in range(i - 1, -1, -1):
                 lw = word_data[j]
-                if lw['is_stopword'] and lw['word'] not in ('the', 'a', 'an', 'for', 'and'):
+                if lw['is_stopword'] and lw['word'] not in (
+                    'the', 'a', 'an', 'for', 'and',
+                ):
                     break
                 if lw['is_stopword']:
                     continue
                 flags = set(lw.get('context_flags', []))
                 left_flags.update(flags)
-                left_words.append({'word': lw['word'], 'flags': list(flags)})
+                left_words.append({
+                    'word': lw['word'],
+                    'corrected': lw.get('corrected', None),
+                    'flags': list(flags),
+                    'status': lw['status'],
+                })
                 if len(left_words) >= 3:
                     break
 
-            step3_5.append({
+            step2c.append({
                 'target_word': target['word'],
                 'target_position': target['position'],
-                'city_matches': [{'term': m['term'], 'category': m['category'], 'rank': m['rank']} for m in city_m],
-                'non_city_matches': [{'term': m['term'], 'category': m['category'], 'rank': m['rank']} for m in non_city_m],
+                'city_matches': [
+                    {
+                        'term': m['term'],
+                        'category': m['category'],
+                        'rank': m['rank'],
+                    }
+                    for m in city_m
+                ],
+                'non_city_matches': [
+                    {
+                        'term': m['term'],
+                        'category': m['category'],
+                        'rank': m['rank'],
+                    }
+                    for m in non_city_m
+                ],
                 'left_context': left_words,
                 'left_flags': sorted(left_flags),
                 'has_location_intent': bool(left_flags & LOCATION_INTENT_FLAGS),
                 'has_keyword_intent': bool(left_flags & KEYWORD_INTENT_FLAGS),
-                'final_selected_category': target.get('selected_match', {}).get('category', ''),
-                'final_context_flags': list(target.get('context_flags', [])),
+                'final_selected_category': target.get(
+                    'selected_match', {}
+                ).get('category', ''),
+                'final_context_flags': list(
+                    target.get('context_flags', [])
+                ),
+                'v4_note': (
+                    'Left context flags are from CORRECTED words — '
+                    'this is the v4 fix for the misspelling bug'
+                ),
             })
 
-        trace['step3_5_in_disambiguation'] = {
-            'description': '"in" disambiguation — city vs keyword',
-            'results': step3_5,
+        trace['step2c_in_disambiguation'] = {
+            'description': (
+                '"in" disambiguation — city vs keyword '
+                '(runs on corrected words with correct flags)'
+            ),
+            'results': step2c,
         }
 
-        # ── STEP 4 ───────────────────────────────────────────────────
-        corrections = wd._step4_correct_unknowns(word_data)
-
-        step4 = []
-        for wd_item in word_data:
-            if wd_item['status'] not in ('corrected', 'pos_corrected', 'unknown', 'unknown_suggest'):
-                continue
-            entry = {
-                'position': wd_item['position'],
-                'word': wd_item['word'],
-                'status': wd_item['status'],
-                'predicted_pos': wd_item.get('predicted_pos', ''),
-            }
-            if wd_item['status'] == 'corrected':
-                entry['corrected_to'] = wd_item.get('corrected', '')
-                entry['distance'] = wd_item.get('distance', 0)
-                entry['corrected_pos'] = wd_item.get('pos', '')
-                entry['corrected_category'] = wd_item.get('selected_match', {}).get('category', '')
-                entry['corrected_rank'] = wd_item.get('selected_match', {}).get('rank', 0)
-            elif wd_item['status'] == 'unknown_suggest':
-                entry['suggestion'] = wd_item.get('suggestion', '')
-                entry['suggestion_distance'] = wd_item.get('suggestion_distance', 0)
-            elif wd_item['status'] == 'pos_corrected':
-                entry['corrected_to'] = wd_item.get('corrected', '')
-                entry['distance'] = wd_item.get('distance', 0)
-
-            redis_sugg = wd_item.get('redis_suggestions', [])
-            entry['redis_suggestions'] = [
-                {'term': s['term'], 'distance': s['distance'], 'rank': s['rank'],
-                 'pos': s['pos'], 'category': s['category'],
-                 'compatible': s.get('compatible', False)}
-                for s in redis_sugg[:5]
-            ]
-            step4.append(entry)
-
-        trace['step4_corrections'] = {
-            'description': 'Batch Correct Unknowns (Redis fuzzy)',
-            'words': step4,
-            'corrections': corrections,
-        }
-
-        # ── STEP 5 ───────────────────────────────────────────────────
+        # ═════════════════════════════════════════════════════════════
+        # STEP 3: N-gram Resolution (single pass on corrected words)
+        #
+        # v4 KEY CHANGE: no Step 5 re-check needed.  Words are already
+        # correct, so n-grams are found on the first and only pass.
+        # ═════════════════════════════════════════════════════════════
         corrected_words = wd._get_working_words(word_data)
-        new_ngrams, new_consumed = wd._step5_recheck_ngrams(corrected_words, word_data, consumed)
-        ngrams.extend(new_ngrams)
-        consumed.update(new_consumed)
+        ngrams, consumed = wd._step3_resolve_ngrams(corrected_words, word_data)
 
-        trace['step5_recheck'] = {
-            'description': 'Re-check N-grams after correction',
-            'corrected_words': corrected_words,
-            'new_ngrams': [{'phrase': ng['phrase'], 'category': ng['category'], 'rank': ng['rank']} for ng in new_ngrams],
+        trace['step3_ngrams'] = {
+            'description': (
+                'N-gram Resolution — single pass on corrected words '
+                '(no re-check needed)'
+            ),
+            'corrected_words_used': corrected_words,
+            'consumed_positions': sorted(consumed),
+            'ngrams': [
+                {
+                    'type': ng['type'],
+                    'phrase': ng['phrase'],
+                    'category': ng['category'],
+                    'rank': ng['rank'],
+                    'positions': ng['positions'],
+                    'location_boosted': ng.get('location_boosted', False),
+                    'location_compound': ng.get('location_compound', False),
+                }
+                for ng in ngrams
+            ],
+            'v4_note': (
+                'In v3 this ran BEFORE corrections on misspelled words, '
+                'then had to re-check in Step 5.  v4 runs once on '
+                'correct words.'
+            ),
         }
 
-        # ── STEP 6 ───────────────────────────────────────────────────
-        profile = wd._step6_build_profile(query, word_data, ngrams, consumed, corrections, start)
+        # ═════════════════════════════════════════════════════════════
+        # STEP 4: Build Profile + Intent
+        # ═════════════════════════════════════════════════════════════
+        profile = wd._step4_build_profile(
+            query, word_data, ngrams, consumed, corrections, start,
+        )
 
         # Entity routing trace
         entity_routing = []
@@ -7534,7 +7717,9 @@ async def debug_word_discovery(request):
             wd.COMMON_ADJECTIVES | wd.APPAREL_PRODUCTS |
             wd.FOOD_DINING | wd.SERVICES
         )
-        MODIFIER_POS = frozenset({'adjective', 'adverb', 'verb', 'determiner'})
+        MODIFIER_POS = frozenset({
+            'adjective', 'adverb', 'verb', 'determiner',
+        })
 
         for wd_item in word_data:
             if wd_item['is_stopword'] or wd_item['position'] in consumed:
@@ -7548,13 +7733,20 @@ async def debug_word_discovery(request):
             match_pos = normalize_pos_string(sm.get('pos'))
 
             # Where SHOULD it go based on category?
-            if cat in CITY_CATEGORIES: natural = 'cities'
-            elif cat in STATE_CATEGORIES: natural = 'states'
-            elif cat in LOCATION_CATEGORIES: natural = 'location_terms'
-            elif cat in PERSON_CATEGORIES: natural = 'persons'
-            elif cat in ORGANIZATION_CATEGORIES: natural = 'organizations'
-            elif cat in MEDIA_CATEGORIES: natural = 'media'
-            else: natural = 'keywords'
+            if cat in CITY_CATEGORIES:
+                natural = 'cities'
+            elif cat in STATE_CATEGORIES:
+                natural = 'states'
+            elif cat in LOCATION_CATEGORIES:
+                natural = 'location_terms'
+            elif cat in PERSON_CATEGORIES:
+                natural = 'persons'
+            elif cat in ORGANIZATION_CATEGORIES:
+                natural = 'organizations'
+            elif cat in MEDIA_CATEGORIES:
+                natural = 'media'
+            else:
+                natural = 'keywords'
 
             # Was it demoted?
             demoted = False
@@ -7562,8 +7754,11 @@ async def debug_word_discovery(request):
             if w in ALWAYS_KEYWORD:
                 demoted = True
                 reason = f"'{w}' is in ALWAYS_KEYWORD set"
-            elif (pred_pos in MODIFIER_POS and match_pos in ('noun', 'proper_noun')
-                  and not is_pos_compatible(match_pos, pred_pos)):
+            elif (
+                pred_pos in MODIFIER_POS
+                and match_pos in ('noun', 'proper_noun')
+                and not is_pos_compatible(match_pos, pred_pos)
+            ):
                 demoted = True
                 reason = f"POS gate: predicted={pred_pos}, match={match_pos}"
 
@@ -7577,15 +7772,24 @@ async def debug_word_discovery(request):
                 'final_destination': 'keywords' if demoted else natural,
             })
 
-        trace['step6_profile'] = {
+        trace['step4_profile'] = {
             'description': 'Build Profile — entity routing + search terms',
             'corrected_query': profile.get('corrected_query', ''),
-            'corrected_display_query': profile.get('corrected_display_query', ''),
+            'corrected_display_query': profile.get(
+                'corrected_display_query', ''
+            ),
             'search_terms': profile.get('search_terms', []),
             'entity_routing': entity_routing,
             'persons': profile.get('persons', []),
             'organizations': profile.get('organizations', []),
-            'keywords': [{'display': k.get('display',''), 'category': k.get('category',''), 'rank': k.get('rank',0)} for k in profile.get('keywords', [])],
+            'keywords': [
+                {
+                    'display': k.get('display', ''),
+                    'category': k.get('category', ''),
+                    'rank': k.get('rank', 0),
+                }
+                for k in profile.get('keywords', [])
+            ],
             'cities': profile.get('cities', []),
             'states': profile.get('states', []),
             'location_terms': profile.get('location_terms', []),
@@ -7596,7 +7800,7 @@ async def debug_word_discovery(request):
         }
 
         # ── INTENT DETECTION ─────────────────────────────────────────
-        if INTENT_AVAILABLE:
+        if _INTENT_AVAILABLE:
             try:
                 enriched = detect_intent(profile)
                 signals = enriched.get('signals', {})
@@ -7609,7 +7813,9 @@ async def debug_word_discovery(request):
                     'has_service_word': signals.get('has_service_word', False),
                     'has_black_owned': signals.get('has_black_owned', False),
                     'has_unknown_terms': signals.get('has_unknown_terms', False),
-                    'has_location_entity': signals.get('has_location_entity', False),
+                    'has_location_entity': signals.get(
+                        'has_location_entity', False
+                    ),
                 }
             except Exception as e:
                 trace['intent_detection'] = {'error': str(e)}
@@ -7618,6 +7824,7 @@ async def debug_word_discovery(request):
 
         # ── PROBLEMS DETECTED ─────────────────────────────────────────
         problems = []
+
         for wd_item in word_data:
             if wd_item['status'] in ('unknown', 'unknown_suggest'):
                 problems.append({
@@ -7626,13 +7833,19 @@ async def debug_word_discovery(request):
                     'position': wd_item['position'],
                     'suggestion': wd_item.get('suggestion', 'none'),
                 })
+
             if wd_item['is_stopword'] or wd_item['position'] in consumed:
                 continue
+
             sm = wd_item.get('selected_match')
             if not sm:
                 continue
+
             all_m = wd_item.get('all_matches', [])
-            has_city = any(m.get('category','').lower() in CITY_CATEGORIES for m in all_m)
+            has_city = any(
+                m.get('category', '').lower() in CITY_CATEGORIES
+                for m in all_m
+            )
             routed = sm.get('category', '').lower()
             if has_city and routed not in LOCATION_CATEGORIES:
                 problems.append({
@@ -7644,11 +7857,17 @@ async def debug_word_discovery(request):
                 })
 
         if not profile.get('cities') and not profile.get('states'):
-            has_loc_signal = any(wd_item.get('location_context', False) for wd_item in word_data)
+            has_loc_signal = any(
+                wd_item.get('location_context', False)
+                for wd_item in word_data
+            )
             if has_loc_signal:
                 problems.append({
                     'type': 'LOCATION_SIGNAL_NO_CITY',
-                    'detail': 'Location signal detected but no cities/states in profile',
+                    'detail': (
+                        'Location signal detected but no cities/states '
+                        'in profile'
+                    ),
                 })
 
         trace['problems_detected'] = problems
@@ -7661,19 +7880,43 @@ async def debug_word_discovery(request):
                 'position': wd_item['position'],
                 'word': wd_item['word'],
                 'final_status': wd_item['status'],
+                'context_flags': list(wd_item.get('context_flags', [])),
             }
             if wd_item['status'] == 'corrected':
                 j['corrected_to'] = wd_item.get('corrected', '')
+                j['note'] = 'CORRECTED — used for search'
             elif wd_item['status'] == 'unknown_suggest':
                 j['suggestion'] = wd_item.get('suggestion', '')
                 j['note'] = 'ORIGINAL KEPT — suggestion not applied'
+
             sm = wd_item.get('selected_match')
             if sm:
                 j['final_category'] = sm.get('category', '')
                 j['final_rank'] = sm.get('rank', 0)
+
             journey.append(j)
 
         trace['word_journey'] = journey
+
+        # ── v3 vs v4 COMPARISON NOTE ──────────────────────────────────
+        trace['v4_pipeline_notes'] = {
+            'key_changes': [
+                'Corrections run BEFORE n-grams (was after in v3)',
+                'Corrections run BEFORE POS prediction (was after in v3)',
+                'Corrections run BEFORE "in" disambiguation (was after in v3)',
+                '"in" disambiguation sees CORRECT context flags (was misspelled in v3)',
+                'N-grams run once on corrected words (was twice in v3: before + after correction)',
+                'Step 5 re-check eliminated (not needed when corrections come first)',
+                'Pipeline reduced from 6+ steps to 4 steps',
+            ],
+            'bug_fixed': (
+                'v3 bug: "restuarant in atl" → Step 3.5 saw misspelled '
+                '"restuarant" with no known_food flag → demoted Atlanta '
+                'to keyword. v4 fix: "restuarant" corrected to "restaurant" '
+                'with known_food flag BEFORE "in" disambiguation → Atlanta '
+                'stays as city.'
+            ),
+        }
 
         elapsed = (time.perf_counter() - start) * 1000
         trace['total_ms'] = round(elapsed, 2)
@@ -7681,7 +7924,7 @@ async def debug_word_discovery(request):
         return trace
 
     result = await asyncio.to_thread(run_trace, query)
- 
+
     return JsonResponse(result, safe=False)
 
 
