@@ -15404,6 +15404,9 @@
 # if __name__ == "__main__":
 #     main()
 
+
+
+
 """
 word_discovery_v3.py
 ====================
@@ -16589,22 +16592,36 @@ class WordDiscovery:
             'performance', 'open mic', 'cypher', 'battle',
         })
 
+    # KNOWN_ACRONYMS = frozenset({
+    #         # HBCU and education
+    #         'hbcu', 'hbcus', 'uncf', 'nphc', 'bglo',
+    #         # Civil rights and advocacy
+    #         'naacp', 'sclc', 'sncc', 'ados', 'blm',
+    #         # Business and finance
+    #         'mbe', 'wbe', 'dbe', 'sba', 'cdfi', 'llc', 'dba', 'ein',
+    #         'cdc', 'eidl', 'ppp',
+    #         # City slang and geography
+    #         'atl', 'nyc', 'dmv', 'pgc', 'bx', 'htx', 'nola', 'chi',
+    #         'kcmo', 'bmore', 'dc', 'la', 'sf', 'clt', 'cle',
+    #         # Music
+    #         'dj', 'mc', 'rnb',
+    #         # General
+    #         'og', 'goat', 'af', 'tbh', 'irl', 'fam', 'bro', 'sis',
+    #     })
+    
     KNOWN_ACRONYMS = frozenset({
-            # HBCU and education
-            'hbcu', 'hbcus', 'uncf', 'nphc', 'bglo',
-            # Civil rights and advocacy
-            'naacp', 'sclc', 'sncc', 'ados', 'blm',
-            # Business and finance
-            'mbe', 'wbe', 'dbe', 'sba', 'cdfi', 'llc', 'dba', 'ein',
-            'cdc', 'eidl', 'ppp',
-            # City slang and geography
-            'atl', 'nyc', 'dmv', 'pgc', 'bx', 'htx', 'nola', 'chi',
-            'kcmo', 'bmore', 'dc', 'la', 'sf', 'clt', 'cle',
-            # Music
-            'dj', 'mc', 'rnb',
-            # General
-            'og', 'goat', 'af', 'tbh', 'irl', 'fam', 'bro', 'sis',
-        })
+        # HBCU and education
+        'hbcu', 'hbcus', 'uncf', 'nphc', 'bglo',
+        # Civil rights and advocacy
+        'naacp', 'sclc', 'sncc', 'ados', 'blm',
+        # Business and finance
+        'mbe', 'wbe', 'dbe', 'sba', 'cdfi', 'llc', 'dba', 'ein',
+        'cdc', 'eidl', 'ppp',
+        # Music
+        'dj', 'mc', 'rnb',
+        # General
+        'og', 'goat', 'af', 'tbh', 'irl', 'fam', 'bro', 'sis',
+    })
 
     # ── Union sets — built once, used in step 1 pre-gate ─────────────────
     KNOWN_ADJECTIVES = COLORS | SUPERLATIVES | SIZES | COMMON_ADJECTIVES
@@ -17910,15 +17927,18 @@ class WordDiscovery:
         })
 
         KNOWN_ACRONYMS = frozenset({
-            'hbcu', 'hbcus', 'uncf', 'nphc', 'bglo',
-            'naacp', 'sclc', 'sncc', 'ados', 'blm',
-            'mbe', 'wbe', 'dbe', 'sba', 'cdfi', 'llc', 'dba', 'ein',
-            'cdc', 'eidl', 'ppp',
-            'atl', 'nyc', 'dmv', 'pgc', 'bx', 'htx', 'nola', 'chi',
-            'kcmo', 'bmore', 'dc', 'la', 'sf', 'clt', 'cle',
-            'dj', 'mc', 'rnb',
-            'og', 'goat', 'af', 'tbh', 'irl', 'fam', 'bro', 'sis',
-        })
+                # HBCU and education
+                'hbcu', 'hbcus', 'uncf', 'nphc', 'bglo',
+                # Civil rights and advocacy
+                'naacp', 'sclc', 'sncc', 'ados', 'blm',
+                # Business and finance
+                'mbe', 'wbe', 'dbe', 'sba', 'cdfi', 'llc', 'dba', 'ein',
+                'cdc', 'eidl', 'ppp',
+                # Music
+                'dj', 'mc', 'rnb',
+                # General
+                'og', 'goat', 'af', 'tbh', 'irl', 'fam', 'bro', 'sis',
+            })
 
         KNOWN_ADJECTIVES = COLORS | SUPERLATIVES | SIZES | COMMON_ADJECTIVES
         KNOWN_NOUNS      = FOOD_DINING | SERVICES | APPAREL_PRODUCTS | BEAUTY | CULTURE_COMMUNITY | MUSIC_ENTERTAINMENT | KNOWN_ACRONYMS
