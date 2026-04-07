@@ -2256,7 +2256,31 @@ def _build_image_pagination(total_image_count, page, img_per_page=40):
     
 #     return render(request, 'results2.html', context)
 
-async def search(request):
+# ============================================================
+# ADD THIS NEAR THE TOP OF views.py WITH YOUR OTHER IMPORTS
+# ============================================================
+
+import asyncio
+
+def _run_async(coro):
+    """Run an async coroutine from synchronous code."""
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as pool:
+                return pool.submit(asyncio.run, coro).result()
+        else:
+            return loop.run_until_complete(coro)
+    except RuntimeError:
+        return asyncio.run(coro)
+
+
+# ============================================================
+# REPLACE YOUR search() FUNCTION WITH THIS
+# ============================================================
+
+def search(request):
     """
     Main search endpoint with dynamic tab filtering.
     
@@ -2268,10 +2292,11 @@ async def search(request):
     
     Related searches are now handled inside execute_full_search().
     
-    ASYNC VERSION — uses await for:
-      - execute_full_search()
-      - _get_cached_results()
-      - fetch_full_documents()
+    ASYNC BRIDGE COMPATIBILITY:
+      The bridge functions (execute_full_search, _get_cached_results,
+      fetch_full_documents) are now async. This view stays synchronous
+      and wraps those calls with _run_async() to avoid Django's
+      SynchronousOnlyOperation error.
     """
     
     # === 1. EXTRACT & VALIDATE PARAMETERS ===
@@ -2653,8 +2678,8 @@ async def search(request):
     # === 8. EXECUTE SEARCH ===
     if execute_full_search:
         try:
-            # ASYNC: await the coroutine
-            result = await execute_full_search(
+            # _run_async wraps the async bridge call for sync context
+            result = _run_async(execute_full_search(
                 query=params.query,
                 session_id=params.session_id,
                 filters=filters,
@@ -2668,7 +2693,7 @@ async def search(request):
                 answer=answer if is_question_path else None,
                 answer_type=answer_type if is_question_path else None,
                 document_uuid=document_uuid if is_question_path else None,
-            )
+            ))
             
             results = result.get('results', [])
             total_results = result.get('total', 0)
@@ -2699,8 +2724,8 @@ async def search(request):
             if show_images:
                 try:
                     stable_key = _generate_stable_cache_key(params.session_id, params.query)
-                    # ASYNC: await the coroutine
-                    finished = await _get_cached_results(stable_key)
+                    # _run_async wraps the async bridge call for sync context
+                    finished = _run_async(_get_cached_results(stable_key))
 
                     if finished and finished.get('all_results'):
                         all_candidates = finished['all_results']
@@ -2710,8 +2735,8 @@ async def search(request):
                             first_batch = has_image[:20]
                             page_ids = [item['id'] for item in first_batch if item.get('id')]
                             if page_ids:
-                                # ASYNC: await the coroutine
-                                full_docs = await fetch_full_documents(page_ids, params.query)
+                                # _run_async wraps the async bridge call for sync context
+                                full_docs = _run_async(fetch_full_documents(page_ids, params.query))
                                 image_results = extract_images_from_results(full_docs)
                             else:
                                 image_results = []
