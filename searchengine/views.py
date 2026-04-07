@@ -5619,79 +5619,49 @@ def contact(request):
 
 
 
-
-
-
 # ============================================================
-# views.py — COMPLETE IMPORTS SECTION
-# Replace everything above your first view function with this
+# views_debug.py — DEBUG ENDPOINTS (ASYNC-COMPATIBLE)
+# ============================================================
+#
+# CHANGES FROM ORIGINAL:
+#   1. All bridge function calls now use async/await since the
+#      bridge was converted to async. Views use Django's
+#      async view support (async def).
+#   2. debug_question now applies the same safeguards as the
+#      bridge: distance gate + token validation + location
+#      filtering. Raw results are still shown but marked
+#      pass/fail so you can see what would be filtered.
+#   3. Fixed duplicate @require_GET on debug_question.
+#   4. Removed ThreadPoolExecutor — replaced with asyncio.gather.
+#
+# REQUIREMENTS:
+#   - Django 4.1+ (for async view support)
+#   - Or wrap with sync_to_async if on older Django
 # ============================================================
 
-import hashlib
-import json
-import logging
-import re
+
 import time
-import uuid
 import traceback
-from datetime import date, datetime, timedelta, timezone
-from functools import wraps
-from typing import Any, Dict, List, Optional, Tuple, Union
-from concurrent.futures import ThreadPoolExecutor
+import asyncio
+from typing import Optional
 
-from django.views.decorators.csrf import csrf_exempt
-from django.conf import settings
-from django.core.cache import cache
-from django.http import Http404, HttpResponseBadRequest, JsonResponse
-from django.shortcuts import redirect, render
-from django.utils.html import escape
-from django.views.decorators.http import require_GET, require_http_methods
+from django.http import JsonResponse
+from django.views.decorators.http import require_GET
 
-import redis
+# ── typesense client (for debug_question raw search) ─────────────────────────
+
 import typesense
-from typesense.exceptions import (
-    ObjectNotFound,
-    RequestMalformed,
-    RequestUnauthorized,
-    ServerError,
-    ServiceUnavailable,
-    Timeout as TypesenseTimeout,
-)
-
 from decouple import config
 
-from .address_utils import process_address_maps
-
-
-# ── Analytics ────────────────────────────────────────────────────────────────
-
-try:
-    from .redis_analytics import SearchAnalytics
-    ANALYTICS_AVAILABLE = True
-except ImportError:
-    ANALYTICS_AVAILABLE = False
-    SearchAnalytics = None
-
-
-# ── Autocomplete ─────────────────────────────────────────────────────────────
-
-try:
-    from .searchapi import get_autocomplete
-except ImportError:
-    get_autocomplete = None
-
-
-# ── Search submission ─────────────────────────────────────────────────────────
-
-try:
-    from .searchsubmission import process_search_submission
-except ImportError:
-    process_search_submission = None
-
-
-# ── Word Discovery (v2 no longer needed — handled inside bridge) ──────────────
-
-word_discovery_multi = None
+client = typesense.Client({
+    'api_key':  config('TYPESENSE_API_KEY'),
+    'nodes': [{
+        'host':     config('TYPESENSE_HOST'),
+        'port':     config('TYPESENSE_PORT'),
+        'protocol': config('TYPESENSE_PROTOCOL'),
+    }],
+    'connection_timeout_seconds': 5,
+})
 
 
 # ── Intent Detection ──────────────────────────────────────────────────────────
@@ -5704,48 +5674,23 @@ except ImportError:
     detect_intent = None
 
 
-# ── typesense_bridge_v3 — core search functions ───────────────────────────────
+# ── Bridge imports ────────────────────────────────────────────────────────────
 
 try:
     from .typesense_bridge_v3 import (
-        execute_full_search,
-        detect_query_intent,
-        get_facets,
-        get_featured_result,
-        get_related_searches,
-        log_search_event,
-        _generate_stable_cache_key,
-        _get_cached_results,
-        _has_real_images,
-        fetch_full_documents,
-        
-    )
-    BRIDGE_AVAILABLE = True
-except ImportError as e:
-    BRIDGE_AVAILABLE = False
-    execute_full_search        = None
-    detect_query_intent        = None
-    get_facets                 = None
-    get_featured_result        = None
-    get_related_searches       = None
-    log_search_event           = None
-    _generate_stable_cache_key = None
-    _get_cached_results        = None
-    _has_real_images           = None
-    fetch_full_documents       = None
-    print(f"⚠️ typesense_bridge_v3 not available: {e}")
-
-
-# ── typesense_bridge_v3 — debug functions ─────────────────────────────────────
-
-try:
-    from .typesense_bridge_v3 import (
+        # Async functions
         _run_word_discovery,
         _run_embedding,
         run_parallel_prep,
+        fetch_candidate_uuids,
+        fetch_candidate_uuids_from_questions,
+        semantic_rerank_candidates,
+        fetch_candidate_metadata,
+        fetch_candidates_with_metadata,
+        fetch_full_documents,
+        # Sync functions (CPU-only)
         _read_v3_profile,
         build_typesense_params,
-        build_filter_string_without_data_type,
         _resolve_blend,
         _extract_authority_score,
         _compute_text_score,
@@ -5754,18 +5699,15 @@ try:
         _content_intent_match,
         _pool_type_multiplier,
         _score_document,
-        fetch_candidate_uuids,
-        fetch_candidate_uuids_from_questions,
-        fetch_all_candidate_uuids,
-        semantic_rerank_candidates,
-        fetch_candidate_metadata,
-        fetch_candidates_with_metadata,
         count_all,
-        fetch_documents_by_semantic_uuid,
-        _should_trigger_ai_overview,
-        _build_ai_overview,
+        # Validation functions (sync, CPU-only)
+        _normalize_signal,
+        _extract_query_signals,
+        _validate_question_hit,
+        # Constants
         BLEND_RATIOS,
         SEMANTIC_DISTANCE_GATE,
+        QUESTION_SEMANTIC_DISTANCE_GATE,
     )
     DEBUG_BRIDGE_AVAILABLE = True
 except ImportError as e:
@@ -5774,25 +5716,12 @@ except ImportError as e:
     print(f"⚠️ typesense_bridge_v3 debug imports not available: {e}")
 
 
-# ── Thread pool for debug endpoints ──────────────────────────────────────────
-
-_debug_executor = ThreadPoolExecutor(max_workers=4)
-
-
-# ============================================================
-# END OF IMPORTS
-# ============================================================
-
-
 # ============================================================
 # DEBUG HELPER FUNCTIONS
 # ============================================================
 
 def _infer_domain(signals: dict) -> Optional[str]:
-    """
-    Infer primary_domain from intent signals when intent
-    detection did not set one explicitly.
-    """
+    """Infer primary_domain from intent signals."""
     if signals.get('has_food_word'):
         return 'food'
     if signals.get('has_beauty_word'):
@@ -5807,10 +5736,7 @@ def _infer_domain(signals: dict) -> Optional[str]:
 
 
 def _patch_signals_domain(signals: dict) -> dict:
-    """
-    Return a copy of signals with primary_domain filled in
-    if it was null. Does not mutate the original.
-    """
+    """Return a copy of signals with primary_domain filled in if null."""
     if signals.get('primary_domain'):
         return signals
     patched = dict(signals)
@@ -5824,18 +5750,7 @@ def _build_full_result(
     signals: dict,
     source_pool: str = 'document'
 ) -> dict:
-    """
-    Merge a scored metadata item with its full Typesense document.
-    Returns one complete dict with everything visible in one place:
-        - all document fields (title, url, summary, location, etc.)
-        - scoring breakdown (blended, text, semantic, authority)
-        - multiplier breakdown (domain, content_intent, pool_type)
-        - authority inputs (rating, review_count, etc.)
-        - source pool (document / questions / overlap)
-
-    This is what gets returned in ranked_results so you never
-    need to hit a second endpoint to identify a document.
-    """
+    """Merge a scored metadata item with its full Typesense document."""
     query_mode = signals.get('query_mode', 'explore')
 
     dom_m  = _domain_relevance(scored_item, signals)
@@ -5843,12 +5758,10 @@ def _build_full_result(
     pool_m = _pool_type_multiplier(scored_item, query_mode)
 
     return {
-        # ── Identity ──────────────────────────────────────────────────────
         'rank':          scored_item.get('rank', 0),
         'document_uuid': scored_item.get('id', ''),
         'source_pool':   source_pool,
 
-        # ── Document fields ───────────────────────────────────────────────
         'title':                full_doc.get('title', scored_item.get('title', '(no title)')),
         'data_type':            full_doc.get('data_type', scored_item.get('data_type', '')),
         'category':             full_doc.get('category', scored_item.get('category', '')),
@@ -5874,7 +5787,6 @@ def _build_full_result(
         'published_date': full_doc.get('published_date', ''),
         'semantic_uuid': full_doc.get('semantic_uuid', ''),
 
-        # ── Scoring breakdown ─────────────────────────────────────────────
         'scores': {
             'blended':         round(scored_item.get('blended_score', 0), 4),
             'text':            round(scored_item.get('text_score', 0), 4),
@@ -5883,7 +5795,6 @@ def _build_full_result(
             'vector_distance': round(scored_item.get('vector_distance', 1.0), 4),
         },
 
-        # ── Multipliers ───────────────────────────────────────────────────
         'multipliers': {
             'domain_relevance':    round(dom_m, 3),
             'content_intent':      round(cint_m, 3),
@@ -5891,7 +5802,6 @@ def _build_full_result(
             'combined_multiplier': round(dom_m * cint_m * pool_m, 3),
         },
 
-        # ── Authority inputs ──────────────────────────────────────────────
         'authority_inputs': {
             'authority_score':       scored_item.get('authority_score', 0),
             'service_rating':        scored_item.get('service_rating', 0),
@@ -5905,7 +5815,6 @@ def _build_full_result(
             'evergreen_score':       scored_item.get('evergreen_score', 0),
         },
 
-        # ── Why this score ────────────────────────────────────────────────
         'why_this_score': {
             'domain_match':    f"primary_domain={signals.get('primary_domain')} "
                                f"category={scored_item.get('category', '')} "
@@ -5937,19 +5846,13 @@ def _debug_error_response(endpoint: str, query: str, err: Exception) -> dict:
 # ============================================================
 
 @require_GET
-def debug_keyword(request):
+async def debug_keyword(request):
     """
     Tests the keyword path only.
 
-    Every result in ranked_results shows the FULL document —
-    title, url, summary, location, service_type, key_facts,
-    plus scoring breakdown and multipliers.
-    No second endpoint needed.
-
     URL:
-        http://127.0.0.1:8000/debug/keyword/?query=restaurants+in+atlanta
-        http://127.0.0.1:8000/debug/keyword/?query=best+soul+food+houston
-        http://127.0.0.1:8000/debug/keyword/?query=black+owned+barbershop
+        /debug/keyword/?query=restaurants+in+atlanta
+        /debug/keyword/?query=best+soul+food+houston
     """
     if not DEBUG_BRIDGE_AVAILABLE:
         return JsonResponse(
@@ -5973,7 +5876,7 @@ def debug_keyword(request):
     try:
         # ── Step 1: Word Discovery ────────────────────────────────────────
         t1        = time.time()
-        discovery = _run_word_discovery(query)
+        discovery = await _run_word_discovery(query)
         report['timings']['word_discovery_ms'] = round((time.time() - t1) * 1000, 2)
 
         report['steps']['word_discovery'] = {
@@ -5992,7 +5895,7 @@ def debug_keyword(request):
         signals = {}
         if INTENT_AVAILABLE and detect_intent:
             t2        = time.time()
-            discovery = detect_intent(discovery)
+            discovery = await asyncio.to_thread(detect_intent, discovery)
             signals   = discovery.get('signals', {})
             report['timings']['intent_ms'] = round((time.time() - t2) * 1000, 2)
 
@@ -6037,7 +5940,7 @@ def debug_keyword(request):
 
         # ── Step 5: Fetch candidates ──────────────────────────────────────
         t3         = time.time()
-        candidates = fetch_candidates_with_metadata(query, profile, signals=signals)
+        candidates = await fetch_candidates_with_metadata(query, profile, signals=signals)
         report['timings']['fetch_candidates_ms'] = round((time.time() - t3) * 1000, 2)
 
         report['steps']['candidates'] = {
@@ -6076,7 +5979,7 @@ def debug_keyword(request):
         # ── Step 7: Fetch full documents for ALL results ──────────────────
         t5       = time.time()
         all_ids  = [item.get('id') for item in candidates if item.get('id')]
-        full_docs_list = fetch_full_documents(all_ids, query)
+        full_docs_list = await fetch_full_documents(all_ids, query)
         full_docs_map  = {doc.get('id'): doc for doc in full_docs_list}
         report['timings']['fetch_full_docs_ms'] = round((time.time() - t5) * 1000, 2)
 
@@ -6085,7 +5988,7 @@ def debug_keyword(request):
         report['steps']['facets']            = counts['facets']
         report['steps']['total_image_count'] = counts['total_image_count']
 
-        # ── Full ranked results — everything in one place ─────────────────
+        # ── Full ranked results ───────────────────────────────────────────
         report['ranked_results'] = [
             _build_full_result(
                 scored_item = item,
@@ -6110,20 +6013,13 @@ def debug_keyword(request):
 # ============================================================
 
 @require_GET
-def debug_semantic(request):
+async def debug_semantic(request):
     """
     Tests the full semantic path.
 
-    Stage 1A (document) and Stage 1B (questions) run in parallel
-    using the same embedding.
-
-    Every result in ranked_results shows the FULL document plus
-    scoring breakdown, multipliers, and which pool it came from.
-
     URL:
-        http://127.0.0.1:8000/debug/semantic/?query=restaurants+in+atlanta
-        http://127.0.0.1:8000/debug/semantic/?query=what+is+soul+food
-        http://127.0.0.1:8000/debug/semantic/?query=best+black+owned+barbershop+dc
+        /debug/semantic/?query=restaurants+in+atlanta
+        /debug/semantic/?query=what+is+soul+food
     """
     if not DEBUG_BRIDGE_AVAILABLE:
         return JsonResponse(
@@ -6147,7 +6043,7 @@ def debug_semantic(request):
     try:
         # ── Step 1: Word Discovery + embedding in parallel ────────────────
         t1                         = time.time()
-        discovery, query_embedding = run_parallel_prep(query)
+        discovery, query_embedding = await run_parallel_prep(query)
         report['timings']['parallel_prep_ms'] = round((time.time() - t1) * 1000, 2)
 
         report['steps']['word_discovery'] = {
@@ -6170,7 +6066,7 @@ def debug_semantic(request):
         signals = {}
         if INTENT_AVAILABLE and detect_intent:
             t2        = time.time()
-            discovery = detect_intent(discovery)
+            discovery = await asyncio.to_thread(detect_intent, discovery)
             signals   = discovery.get('signals', {})
             report['timings']['intent_ms'] = round((time.time() - t2) * 1000, 2)
 
@@ -6196,16 +6092,12 @@ def debug_semantic(request):
         # ── Step 4: Stage 1A + 1B in parallel ────────────────────────────
         t3 = time.time()
 
-        doc_future = _debug_executor.submit(
-            fetch_candidate_uuids, query, profile, signals, 100
+        doc_uuids, q_uuids = await asyncio.gather(
+            fetch_candidate_uuids(query, profile, signals, 100),
+            fetch_candidate_uuids_from_questions(
+                profile, query_embedding, signals, 50, discovery
+            ),
         )
-        q_future = _debug_executor.submit(
-            fetch_candidate_uuids_from_questions,
-            profile, query_embedding, signals, 50, discovery
-        )
-
-        doc_uuids = doc_future.result()
-        q_uuids   = q_future.result()
 
         report['timings']['stage1_ms'] = round((time.time() - t3) * 1000, 2)
 
@@ -6240,7 +6132,7 @@ def debug_semantic(request):
 
         # ── Step 6: Stage 2 — vector rerank ──────────────────────────────
         t4       = time.time()
-        reranked = semantic_rerank_candidates(merged, query_embedding, max_to_rerank=500)
+        reranked = await semantic_rerank_candidates(merged, query_embedding, max_to_rerank=500)
         report['timings']['stage2_rerank_ms'] = round((time.time() - t4) * 1000, 2)
 
         vector_data = {
@@ -6284,7 +6176,7 @@ def debug_semantic(request):
 
         # ── Step 8: Stage 4 — metadata fetch ─────────────────────────────
         t5          = time.time()
-        all_results = fetch_candidate_metadata(survivor_uuids)
+        all_results = await fetch_candidate_metadata(survivor_uuids)
         report['timings']['stage4_metadata_ms'] = round((time.time() - t5) * 1000, 2)
 
         # ── Step 9: Resolve blend + score ────────────────────────────────
@@ -6318,7 +6210,7 @@ def debug_semantic(request):
         # ── Step 10: Fetch full documents for ALL results ─────────────────
         t7       = time.time()
         all_ids  = [item.get('id') for item in all_results if item.get('id')]
-        full_docs_list = fetch_full_documents(all_ids, query)
+        full_docs_list = await fetch_full_documents(all_ids, query)
         full_docs_map  = {doc.get('id'): doc for doc in full_docs_list}
         report['timings']['fetch_full_docs_ms'] = round((time.time() - t7) * 1000, 2)
 
@@ -6327,7 +6219,7 @@ def debug_semantic(request):
         report['steps']['facets']            = counts['facets']
         report['steps']['total_image_count'] = counts['total_image_count']
 
-        # ── Full ranked results — everything in one place ─────────────────
+        # ── Full ranked results ───────────────────────────────────────────
         report['ranked_results'] = [
             _build_full_result(
                 scored_item = item,
@@ -6354,22 +6246,31 @@ def debug_semantic(request):
 # ============================================================
 # DEBUG ENDPOINT 3 — /debug/question/
 # ============================================================
+#
+# NOW APPLIES THE SAME SAFEGUARDS AS THE BRIDGE:
+#   1. Word Discovery to extract query profile (cities, keywords, etc.)
+#   2. Distance gate at QUESTION_SEMANTIC_DISTANCE_GATE (0.40)
+#   3. Token validation via _validate_question_hit
+#   4. Location token enforcement (city/state must match)
+#
+# All 30 raw hits are still returned so you can inspect them,
+# but each is marked with:
+#   - passes_distance_gate: bool
+#   - passes_validation:    bool
+#   - validation_reason:    why it passed or failed
+# ============================================================
 
 @require_GET
-@require_GET
-def debug_question(request):
+async def debug_question(request):
     """
-    Tests the questions collection vector search for a given query.
-    Embeds the query and searches the questions collection to show
-    vector distance distribution — use this to set the threshold
-    for the questions collection in the semantic pipeline.
+    Tests the questions collection vector search with FULL validation.
 
-    Each result shows the matched question AND the full linked document
-    so you can assess relevance at each threshold level.
+    Each result shows the raw vector hit PLUS whether it would pass
+    the bridge's distance gate and token validation.
 
     URL:
-        http://127.0.0.1:8000/debug/question/?query=what+is+soul+food
-        http://127.0.0.1:8000/debug/question/?query=best+black+owned+barbershop+dc
+        /debug/question/?query=who+was+the+first+mayor+of+savannah
+        /debug/question/?query=what+is+soul+food
     """
     if not DEBUG_BRIDGE_AVAILABLE:
         return JsonResponse(
@@ -6391,10 +6292,46 @@ def debug_question(request):
     }
 
     try:
-        # ── Step 1: Embed the query ───────────────────────────────────────
-        t1              = time.time()
-        query_embedding = _run_embedding(query)
-        report['timings']['embedding_ms'] = round((time.time() - t1) * 1000, 2)
+        # ── Step 1: Word Discovery (to get profile for validation) ────────
+        t1        = time.time()
+        discovery = await _run_word_discovery(query)
+        report['timings']['word_discovery_ms'] = round((time.time() - t1) * 1000, 2)
+
+        profile = _read_v3_profile(discovery)
+
+        report['steps']['word_discovery'] = {
+            'corrected_query': discovery.get('corrected_query', query),
+            'search_terms':    discovery.get('search_terms', []),
+            'cities':          [c['name'] for c in discovery.get('cities', [])],
+            'states':          [s['name'] for s in discovery.get('states', [])],
+            'keywords':        [k.get('phrase', '') for k in discovery.get('keywords', [])],
+            'persons':         [p.get('phrase', '') for p in discovery.get('persons', [])],
+        }
+
+        # ── Step 2: Extract validation signals from profile ───────────────
+        query_tokens, query_phrases, primary_subject = _extract_query_signals(
+            profile, discovery=discovery
+        )
+
+        # Build location tokens for mandatory location check
+        location_tokens = set()
+        for c in discovery.get('cities', []):
+            location_tokens.update(_normalize_signal(c.get('name', '')))
+        for s in discovery.get('states', []):
+            location_tokens.update(_normalize_signal(s.get('name', '')))
+
+        report['steps']['validation_signals'] = {
+            'query_tokens':    sorted(query_tokens),
+            'query_phrases':   query_phrases,
+            'primary_subject': sorted(primary_subject) if primary_subject else None,
+            'location_tokens': sorted(location_tokens),
+            'distance_gate':   QUESTION_SEMANTIC_DISTANCE_GATE,
+        }
+
+        # ── Step 3: Embed the query ───────────────────────────────────────
+        t2              = time.time()
+        query_embedding = await _run_embedding(query)
+        report['timings']['embedding_ms'] = round((time.time() - t2) * 1000, 2)
 
         if not query_embedding:
             return JsonResponse(
@@ -6407,8 +6344,8 @@ def debug_question(request):
             'dimensions': len(query_embedding),
         }
 
-        # ── Step 2: Vector search against questions collection ────────────
-        t2            = time.time()
+        # ── Step 4: Vector search against questions collection ────────────
+        t3            = time.time()
         embedding_str = ','.join(str(x) for x in query_embedding)
         TOP_K         = 30
 
@@ -6416,19 +6353,25 @@ def debug_question(request):
             'q':              '*',
             'vector_query':   f'embedding:([{embedding_str}], k:{TOP_K})',
             'per_page':       TOP_K,
-            'include_fields': 'document_uuid,question,answer_type,question_type,primary_keywords,entities',
+            'include_fields': 'document_uuid,question,answer_type,question_type,'
+                              'primary_keywords,entities,semantic_keywords',
         }
 
         search_requests = {'searches': [{'collection': 'questions', **search_params}]}
-        response        = client.multi_search.perform(search_requests, {})
+        response        = await asyncio.to_thread(
+            client.multi_search.perform,
+            search_requests, {}
+        )
         hits            = response['results'][0].get('hits', [])
-        report['timings']['vector_search_ms'] = round((time.time() - t2) * 1000, 2)
+        report['timings']['vector_search_ms'] = round((time.time() - t3) * 1000, 2)
 
-        # ── Step 3: Build results with threshold flags ────────────────────
+        # ── Step 5: Apply distance gate + token validation ────────────────
         THRESHOLDS = [0.30, 0.35, 0.40, 0.45, 0.50, 0.55, 0.60, 0.65]
 
         threshold_counts = {str(t): 0 for t in THRESHOLDS}
         results          = []
+        accepted_count   = 0
+        rejected_count   = 0
 
         for hit in hits:
             doc      = hit.get('document', {})
@@ -6438,38 +6381,98 @@ def debug_question(request):
                 if distance < t:
                     threshold_counts[str(t)] += 1
 
+            # ── Distance gate ─────────────────────────────────────────────
+            passes_gate = distance < QUESTION_SEMANTIC_DISTANCE_GATE
+
+            # ── Token validation ──────────────────────────────────────────
+            passes_validation = False
+            validation_reason = ''
+
+            if not passes_gate:
+                validation_reason = (
+                    f'REJECTED: distance {distance:.4f} >= '
+                    f'gate {QUESTION_SEMANTIC_DISTANCE_GATE}'
+                )
+            else:
+                # Run the same validation the bridge uses
+                is_valid = _validate_question_hit(
+                    hit_doc         = doc,
+                    query_tokens    = query_tokens,
+                    query_phrases   = query_phrases,
+                    primary_subject = primary_subject,
+                    min_matches     = 1,
+                )
+
+                if not is_valid:
+                    validation_reason = 'REJECTED: token validation failed (no matching tokens in primary_keywords/entities/semantic_keywords)'
+                elif location_tokens:
+                    # Mandatory location check: if query has a city/state,
+                    # the candidate must contain that location token
+                    candidate_raw = (
+                        doc.get('primary_keywords', []) +
+                        doc.get('entities', []) +
+                        doc.get('semantic_keywords', [])
+                    )
+                    candidate_tokens = set()
+                    for val in candidate_raw:
+                        if val:
+                            candidate_tokens.update(_normalize_signal(val))
+
+                    location_found = bool(location_tokens & candidate_tokens)
+
+                    if not location_found:
+                        validation_reason = (
+                            f'REJECTED: location tokens {sorted(location_tokens)} '
+                            f'not found in candidate'
+                        )
+                    else:
+                        passes_validation = True
+                        validation_reason = 'ACCEPTED: distance + tokens + location all pass'
+                else:
+                    passes_validation = True
+                    validation_reason = 'ACCEPTED: distance + tokens pass (no location required)'
+
+            if passes_validation:
+                accepted_count += 1
+            else:
+                rejected_count += 1
+
             results.append({
-                'document_uuid':    doc.get('document_uuid', ''),
-                'question':         doc.get('question', ''),
-                'question_type':    doc.get('question_type', ''),
-                'answer_type':      doc.get('answer_type', ''),
-                'primary_keywords': doc.get('primary_keywords', []),
-                'entities':         doc.get('entities', []),
-                'vector_distance':  round(distance, 4),
-                'passes_0_30':      distance < 0.30,
-                'passes_0_35':      distance < 0.35,
-                'passes_0_40':      distance < 0.40,
-                'passes_0_45':      distance < 0.45,
-                'passes_0_50':      distance < 0.50,
-                'passes_0_55':      distance < 0.55,
-                'passes_0_60':      distance < 0.60,
-                'passes_0_65':      distance < 0.65,
-                'document':         {},
+                'document_uuid':       doc.get('document_uuid', ''),
+                'question':            doc.get('question', ''),
+                'question_type':       doc.get('question_type', ''),
+                'answer_type':         doc.get('answer_type', ''),
+                'primary_keywords':    doc.get('primary_keywords', []),
+                'entities':            doc.get('entities', []),
+                'vector_distance':     round(distance, 4),
+                'passes_distance_gate': passes_gate,
+                'passes_validation':   passes_validation,
+                'validation_reason':   validation_reason,
+                # Legacy threshold flags (still useful for tuning)
+                'passes_0_30':         distance < 0.30,
+                'passes_0_35':         distance < 0.35,
+                'passes_0_40':         distance < 0.40,
+                'passes_0_45':         distance < 0.45,
+                'passes_0_50':         distance < 0.50,
+                'passes_0_55':         distance < 0.55,
+                'passes_0_60':         distance < 0.60,
+                'passes_0_65':         distance < 0.65,
+                'document':            {},
             })
 
-        # Sort by distance ascending so closest is first
+        # Sort by distance ascending
         results.sort(key=lambda x: x['vector_distance'])
 
-        # ── Step 4: Fetch full documents for all question hits ────────────
-        t3        = time.time()
+        # ── Step 6: Fetch full documents for all question hits ────────────
+        t4             = time.time()
         all_uuids      = [r['document_uuid'] for r in results if r.get('document_uuid')]
-        full_docs_list = fetch_full_documents(all_uuids, query)
+        full_docs_list = await fetch_full_documents(all_uuids, query)
         full_docs_map  = {doc.get('id'): doc for doc in full_docs_list}
-        report['timings']['fetch_full_docs_ms'] = round((time.time() - t3) * 1000, 2)
+        report['timings']['fetch_full_docs_ms'] = round((time.time() - t4) * 1000, 2)
 
-        # ── Step 5: Merge full document into each result ──────────────────
+        # ── Step 7: Merge full document into each result ──────────────────
         for r in results:
-            full_doc   = full_docs_map.get(r['document_uuid'], {})
+            full_doc      = full_docs_map.get(r['document_uuid'], {})
             r['document'] = {
                 'title':        full_doc.get('title', ''),
                 'url':          full_doc.get('url', ''),
@@ -6487,8 +6490,16 @@ def debug_question(request):
                 'image_url':    full_doc.get('image_url', []),
             }
 
-        # ── Step 6: Distance distribution + threshold analysis ────────────
+        # ── Step 8: Distance distribution + validation summary ────────────
         distances = [r['vector_distance'] for r in results]
+
+        report['steps']['validation_summary'] = {
+            'total_raw_hits': len(hits),
+            'accepted':       accepted_count,
+            'rejected':       rejected_count,
+            'distance_gate':  QUESTION_SEMANTIC_DISTANCE_GATE,
+            'note':           'Only accepted results would be returned by the bridge',
+        }
 
         report['steps']['threshold_analysis'] = {
             'total_hits': len(hits),
@@ -6496,10 +6507,6 @@ def debug_question(request):
                 f'below_{str(t).replace(".", "_")}': threshold_counts[str(t)]
                 for t in THRESHOLDS
             },
-            'recommendation': (
-                'Look at the question text and linked document at each threshold '
-                'to find the cutoff where results become irrelevant.'
-            ),
         }
 
         report['steps']['distance_distribution'] = {
@@ -6516,16 +6523,15 @@ def debug_question(request):
             'below_0_65': sum(1 for d in distances if d < 0.65),
         }
 
-        report['results']              = results
+        report['results']                = results
         report['steps']['total_results'] = len(results)
 
     except Exception as e:
-            report = _debug_error_response('debug_question', query, e)
+        report = _debug_error_response('debug_question', query, e)
 
     report['timings'] = report.get('timings', {})
     report['timings']['total_ms'] = round((time.time() - t0) * 1000, 2)
     return JsonResponse(report, json_dumps_params={'indent': 2})
-
 
 # def debug_question(request):
 #     """
