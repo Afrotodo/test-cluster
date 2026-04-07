@@ -1850,6 +1850,14 @@
 #     print(f"RESULTS: {passed} passed, {failed} failed out of {len(test_cases)} tests")
 #     print(f"{'═' * 70}")
 
+
+
+
+
+
+
+
+
 """
 intent_detect.py
 Pure fact extraction from word discovery output.
@@ -1901,6 +1909,7 @@ USAGE:
     if signals['has_price_signal']:
         # Apply price sorting
 """
+
 
 from typing import Dict, Any, List, Optional, Tuple
 
