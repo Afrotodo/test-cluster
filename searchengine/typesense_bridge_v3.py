@@ -6850,155 +6850,205 @@ def _read_v3_profile(discovery: Dict, signals: Dict = None) -> Dict:
     }
 
 
-def build_typesense_params(
-    profile: Dict,
-    ui_filters: Dict = None,
-    signals: Dict = None
-) -> Dict:
-    """
-    Convert the v3 profile into Typesense search parameters.
+# def build_typesense_params(
+#     profile: Dict,
+#     ui_filters: Dict = None,
+#     signals: Dict = None
+# ) -> Dict:
+#     """
+#     Convert the v3 profile into Typesense search parameters.
 
-    Builds query_by, query_by_weights, filter_by, sort_by,
-    typo settings, and prefix settings from the profile and signals.
+#     Builds query_by, query_by_weights, filter_by, sort_by,
+#     typo settings, and prefix settings from the profile and signals.
 
-    FIX — local mode pool scoping:
-        Adds document_data_type:=business to filter_by when
-        query_mode is local and no UI data_type filter overrides it.
-        This prevents restaurant queries competing against every
-        article in the index.
-    """
-    signals    = signals or {}
-    query_mode = signals.get('query_mode', 'explore')
-    params     = {}
+#     FIX — local mode pool scoping:
+#         Adds document_data_type:=business to filter_by when
+#         query_mode is local and no UI data_type filter overrides it.
+#         This prevents restaurant queries competing against every
+#         article in the index.
+#     """
+#     signals    = signals or {}
+#     query_mode = signals.get('query_mode', 'explore')
+#     params     = {}
 
-    # ── Query string — deduplicate search_terms ───────────────────────────
-    seen         = set()
-    unique_terms = []
-    for term in profile.get('search_terms', []):
-        term_lower = term.lower()
-        if term_lower not in seen:
-            seen.add(term_lower)
-            unique_terms.append(term)
+#     # ── Query string — deduplicate search_terms ───────────────────────────
+#     seen         = set()
+#     unique_terms = []
+#     for term in profile.get('search_terms', []):
+#         term_lower = term.lower()
+#         if term_lower not in seen:
+#             seen.add(term_lower)
+#             unique_terms.append(term)
 
-    params['q'] = ' '.join(unique_terms) if unique_terms else '*'
+#     params['q'] = ' '.join(unique_terms) if unique_terms else '*'
 
-    # ── Field boosts — read from v3, add mode-specific fields ────────────
-    field_boosts = dict(profile.get('field_boosts', {}))
+#     # ── Field boosts — read from v3, add mode-specific fields ────────────
+#     field_boosts = dict(profile.get('field_boosts', {}))
 
-    if query_mode == 'local':
-        field_boosts.setdefault('service_type',        12)
-        field_boosts.setdefault('service_specialties', 10)
+#     if query_mode == 'local':
+#         field_boosts.setdefault('service_type',        12)
+#         field_boosts.setdefault('service_specialties', 10)
 
-    sorted_fields              = sorted(field_boosts.items(), key=lambda x: x[1], reverse=True)
-    params['query_by']         = ','.join(f[0] for f in sorted_fields)
-    params['query_by_weights'] = ','.join(str(f[1]) for f in sorted_fields)
+#     sorted_fields              = sorted(field_boosts.items(), key=lambda x: x[1], reverse=True)
+#     params['query_by']         = ','.join(f[0] for f in sorted_fields)
+#     params['query_by_weights'] = ','.join(str(f[1]) for f in sorted_fields)
 
-    # ── Typo / prefix / drop-token settings by mode ──────────────────────
-    has_corrections = bool(profile.get('corrections'))
-    term_count      = len(unique_terms)
+#     # ── Typo / prefix / drop-token settings by mode ──────────────────────
+#     has_corrections = bool(profile.get('corrections'))
+#     term_count      = len(unique_terms)
 
-    if query_mode == 'answer':
-        params['num_typos']             = 0
-        params['prefix']                = 'no'
-        params['drop_tokens_threshold'] = 0
-    elif query_mode == 'explore':
-        params['num_typos']             = 0 if has_corrections else 1
-        params['prefix']                = 'no'
-        params['drop_tokens_threshold'] = 0 if term_count <= 2 else 1
-    elif query_mode == 'browse':
-        params['num_typos']             = 1
-        params['prefix']                = 'no'
-        params['drop_tokens_threshold'] = 1 if term_count <= 3 else 2
-    elif query_mode == 'local':
-        params['num_typos']             = 1
-        params['prefix']                = 'no'
-        params['drop_tokens_threshold'] = 1
-    elif query_mode == 'compare':
-        params['num_typos']             = 0
-        params['prefix']                = 'no'
-        params['drop_tokens_threshold'] = 0
-    elif query_mode == 'shop':
-        params['num_typos']             = 1
-        params['prefix']                = 'no'
-        params['drop_tokens_threshold'] = 1
-    else:
-        params['num_typos']             = 1
-        params['prefix']                = 'no'
-        params['drop_tokens_threshold'] = 1
+#     if query_mode == 'answer':
+#         params['num_typos']             = 0
+#         params['prefix']                = 'no'
+#         params['drop_tokens_threshold'] = 0
+#     elif query_mode == 'explore':
+#         params['num_typos']             = 0 if has_corrections else 1
+#         params['prefix']                = 'no'
+#         params['drop_tokens_threshold'] = 0 if term_count <= 2 else 1
+#     elif query_mode == 'browse':
+#         params['num_typos']             = 1
+#         params['prefix']                = 'no'
+#         params['drop_tokens_threshold'] = 1 if term_count <= 3 else 2
+#     elif query_mode == 'local':
+#         params['num_typos']             = 1
+#         params['prefix']                = 'no'
+#         params['drop_tokens_threshold'] = 1
+#     elif query_mode == 'compare':
+#         params['num_typos']             = 0
+#         params['prefix']                = 'no'
+#         params['drop_tokens_threshold'] = 0
+#     elif query_mode == 'shop':
+#         params['num_typos']             = 1
+#         params['prefix']                = 'no'
+#         params['drop_tokens_threshold'] = 1
+#     else:
+#         params['num_typos']             = 1
+#         params['prefix']                = 'no'
+#         params['drop_tokens_threshold'] = 1
 
-    # ── Sort order ────────────────────────────────────────────────────────
-    temporal_direction = signals.get('temporal_direction')
-    price_direction    = signals.get('price_direction')
-    has_superlative    = signals.get('has_superlative', False)
-    has_rating         = signals.get('has_rating_signal', False)
+#     # ── Sort order ────────────────────────────────────────────────────────
+#     temporal_direction = signals.get('temporal_direction')
+#     price_direction    = signals.get('price_direction')
+#     has_superlative    = signals.get('has_superlative', False)
+#     has_rating         = signals.get('has_rating_signal', False)
 
-    if temporal_direction == 'oldest':
-        params['sort_by'] = 'time_period_start:asc,authority_score:desc'
-    elif temporal_direction == 'newest':
-        params['sort_by'] = 'published_date:desc,authority_score:desc'
-    elif price_direction == 'cheap':
-        params['sort_by'] = 'product_price:asc,authority_score:desc'
-    elif price_direction == 'expensive':
-        params['sort_by'] = 'product_price:desc,authority_score:desc'
-    elif query_mode == 'local':
-        params['sort_by'] = 'authority_score:desc'
-    elif query_mode == 'browse' and has_superlative:
-        params['sort_by'] = 'authority_score:desc'
-    elif has_rating:
-        params['sort_by'] = 'authority_score:desc'
-    else:
-        params['sort_by'] = '_text_match:desc,authority_score:desc'
+#     if temporal_direction == 'oldest':
+#         params['sort_by'] = 'time_period_start:asc,authority_score:desc'
+#     elif temporal_direction == 'newest':
+#         params['sort_by'] = 'published_date:desc,authority_score:desc'
+#     elif price_direction == 'cheap':
+#         params['sort_by'] = 'product_price:asc,authority_score:desc'
+#     elif price_direction == 'expensive':
+#         params['sort_by'] = 'product_price:desc,authority_score:desc'
+#     elif query_mode == 'local':
+#         params['sort_by'] = 'authority_score:desc'
+#     elif query_mode == 'browse' and has_superlative:
+#         params['sort_by'] = 'authority_score:desc'
+#     elif has_rating:
+#         params['sort_by'] = 'authority_score:desc'
+#     else:
+#         params['sort_by'] = '_text_match:desc,authority_score:desc'
 
-    # ── filter_by — locations + black_owned + local scope + UI filters ────
-    filter_conditions = []
+#     # ── filter_by — locations + black_owned + local scope + UI filters ────
+#     filter_conditions = []
 
-    is_location_subject = (
-        query_mode == 'answer' and
-        signals.get('has_question_word') and
-        signals.get('question_word') in ('where',) and
-        signals.get('has_location_entity', False)
-    )
+#     is_location_subject = (
+#         query_mode == 'answer' and
+#         signals.get('has_question_word') and
+#         signals.get('question_word') in ('where',) and
+#         signals.get('has_location_entity', False)
+#     )
 
-    if not is_location_subject:
-        cities = profile.get('cities', [])
-        if cities:
-            city_filters = [f"location_city:={c['name']}" for c in cities]
-            filter_conditions.append(
-                city_filters[0] if len(city_filters) == 1
-                else '(' + ' || '.join(city_filters) + ')'
-            )
+#     if not is_location_subject:
+#         cities = profile.get('cities', [])
+#         if cities:
+#             city_filters = [f"location_city:={c['name']}" for c in cities]
+#             filter_conditions.append(
+#                 city_filters[0] if len(city_filters) == 1
+#                 else '(' + ' || '.join(city_filters) + ')'
+#             )
 
-        states = profile.get('states', [])
-        if states:
-            state_conditions = [
-                f"location_state:={variant}"
-                for state in states
-                for variant in state.get('variants', [state['name']])
-            ]
-            filter_conditions.append(
-                state_conditions[0] if len(state_conditions) == 1
-                else '(' + ' || '.join(state_conditions) + ')'
-            )
+#         states = profile.get('states', [])
+#         if states:
+#             state_conditions = [
+#                 f"location_state:={variant}"
+#                 for state in states
+#                 for variant in state.get('variants', [state['name']])
+#             ]
+#             filter_conditions.append(
+#                 state_conditions[0] if len(state_conditions) == 1
+#                 else '(' + ' || '.join(state_conditions) + ')'
+#             )
 
-    if signals.get('has_black_owned', False):
-        filter_conditions.append('black_owned:=true')
+#     if signals.get('has_black_owned', False):
+#         filter_conditions.append('black_owned:=true')
 
-    # FIX — local mode: scope pool to business documents only
-    if query_mode == 'local' and not (ui_filters and ui_filters.get('data_type')):
-        filter_conditions.append('document_data_type:=business')
+#     # FIX — local mode: scope pool to business documents only
+#     if query_mode == 'local' and not (ui_filters and ui_filters.get('data_type')):
+#         filter_conditions.append('document_data_type:=business')
 
-    if ui_filters:
-        if ui_filters.get('data_type'):
-            filter_conditions.append(f"document_data_type:={ui_filters['data_type']}")
-        if ui_filters.get('category'):
-            filter_conditions.append(f"document_category:={ui_filters['category']}")
-        if ui_filters.get('schema'):
-            filter_conditions.append(f"document_schema:={ui_filters['schema']}")
+#     if ui_filters:
+#         if ui_filters.get('data_type'):
+#             filter_conditions.append(f"document_data_type:={ui_filters['data_type']}")
+#         if ui_filters.get('category'):
+#             filter_conditions.append(f"document_category:={ui_filters['category']}")
+#         if ui_filters.get('schema'):
+#             filter_conditions.append(f"document_schema:={ui_filters['schema']}")
 
-    if filter_conditions:
-        params['filter_by'] = ' && '.join(filter_conditions)
+#     if filter_conditions:
+#         params['filter_by'] = ' && '.join(filter_conditions)
 
-    return params
+#     return params
+
+
+
+# def build_filter_string_without_data_type(
+#     profile: Dict,
+#     signals: Dict = None
+# ) -> str:
+#     """
+#     Build the location-only filter string used in Stage 1A.
+#     No data_type included so facet counting stays accurate across all types.
+#     black_owned is included because it is a hard filter, not a facet.
+#     """
+#     signals           = signals or {}
+#     filter_conditions = []
+#     query_mode        = signals.get('query_mode', 'explore')
+
+#     is_location_subject = (
+#         query_mode == 'answer' and
+#         signals.get('has_question_word') and
+#         signals.get('question_word') in ('where',) and
+#         signals.get('has_location_entity', False)
+#     )
+
+#     if not is_location_subject:
+#         cities = profile.get('cities', [])
+#         if cities:
+#             city_filters = [f"location_city:={c['name']}" for c in cities]
+#             filter_conditions.append(
+#                 city_filters[0] if len(city_filters) == 1
+#                 else '(' + ' || '.join(city_filters) + ')'
+#             )
+
+#         states = profile.get('states', [])
+#         if states:
+#             state_conditions = [
+#                 f"location_state:={variant}"
+#                 for state in states
+#                 for variant in state.get('variants', [state['name']])
+#             ]
+#             filter_conditions.append(
+#                 state_conditions[0] if len(state_conditions) == 1
+#                 else '(' + ' || '.join(state_conditions) + ')'
+#             )
+
+#     if signals.get('has_black_owned', False):
+#         filter_conditions.append('black_owned:=true')
+
+#     return ' && '.join(filter_conditions) if filter_conditions else ''
+
+
 
 def build_typesense_params(
     profile: Dict,
@@ -7140,52 +7190,54 @@ def build_typesense_params(
 
     return params
 
-# def build_filter_string_without_data_type(
-#     profile: Dict,
-#     signals: Dict = None
-# ) -> str:
-#     """
-#     Build the location-only filter string used in Stage 1A.
-#     No data_type included so facet counting stays accurate across all types.
-#     black_owned is included because it is a hard filter, not a facet.
-#     """
-#     signals           = signals or {}
-#     filter_conditions = []
-#     query_mode        = signals.get('query_mode', 'explore')
 
-#     is_location_subject = (
-#         query_mode == 'answer' and
-#         signals.get('has_question_word') and
-#         signals.get('question_word') in ('where',) and
-#         signals.get('has_location_entity', False)
-#     )
+def build_filter_string_without_data_type(
+    profile: Dict,
+    signals: Dict = None
+) -> str:
+    """
+    Build the filter string used in Stage 1A.
+    Includes location filters and pool scoping from POOL_SCOPE.
+    """
+    signals           = signals or {}
+    filter_conditions = []
+    query_mode        = signals.get('query_mode', 'explore')
 
-#     if not is_location_subject:
-#         cities = profile.get('cities', [])
-#         if cities:
-#             city_filters = [f"location_city:={c['name']}" for c in cities]
-#             filter_conditions.append(
-#                 city_filters[0] if len(city_filters) == 1
-#                 else '(' + ' || '.join(city_filters) + ')'
-#             )
+    is_location_subject = (
+        query_mode == 'answer' and
+        signals.get('has_question_word') and
+        signals.get('question_word') in ('where',) and
+        signals.get('has_location_entity', False)
+    )
 
-#         states = profile.get('states', [])
-#         if states:
-#             state_conditions = [
-#                 f"location_state:={variant}"
-#                 for state in states
-#                 for variant in state.get('variants', [state['name']])
-#             ]
-#             filter_conditions.append(
-#                 state_conditions[0] if len(state_conditions) == 1
-#                 else '(' + ' || '.join(state_conditions) + ')'
-#             )
+    if not is_location_subject:
+        cities = profile.get('cities', [])
+        if cities:
+            city_filters = [f"location_city:={c['name']}" for c in cities]
+            filter_conditions.append(
+                city_filters[0] if len(city_filters) == 1
+                else '(' + ' || '.join(city_filters) + ')'
+            )
 
-#     if signals.get('has_black_owned', False):
-#         filter_conditions.append('black_owned:=true')
+        states = profile.get('states', [])
+        if states:
+            state_conditions = [
+                f"location_state:={variant}"
+                for state in states
+                for variant in state.get('variants', [state['name']])
+            ]
+            filter_conditions.append(
+                state_conditions[0] if len(state_conditions) == 1
+                else '(' + ' || '.join(state_conditions) + ')'
+            )
 
-#     return ' && '.join(filter_conditions) if filter_conditions else ''
+    # Pool scoping — read primary type from POOL_SCOPE
+    scope = POOL_SCOPE.get(query_mode, {})
+    primary_type = scope.get('primary')
+    if primary_type:
+        filter_conditions.append(f'document_data_type:={primary_type}')
 
+    return ' && '.join(filter_conditions) if filter_conditions else ''
 
 # ============================================================
 # END OF PART 3
