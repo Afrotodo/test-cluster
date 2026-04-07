@@ -17652,22 +17652,277 @@ class WordDiscovery:
     #
     # If no suggestions at all, status stays 'unknown' and the original
     # word passes through as-is.
+    # # =========================================================================
+
+    # def _step4_correct_unknowns(self, word_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    #     """Step 4: Batch Correct Unknowns (Redis fuzzy — only Redis step).
+
+    #     Two correction paths:
+
+    #     1. UNKNOWN words (not in RAM hash):
+    #        - distance 1 + POS compatible + rank >= 50 → status='corrected',
+    #          word is REPLACED in corrected_query and used for search.
+    #        - distance 2 or low rank or POS mismatch → status='unknown_suggest',
+    #          original KEPT for search, suggestion shown as "did you mean?"
+
+    #     2. POS MISMATCH words (in RAM hash but wrong POS):
+    #        - Same logic as before — strict gate (distance<=1, rank>3x original).
+    #     """
+    #     # ── Collect candidates ────────────────────────────────────────────
+    #     unknowns = []
+    #     pos_mismatches = []
+
+    #     for wd in word_data:
+    #         if wd['status'] == 'unknown':
+    #             unknowns.append(wd)
+    #         elif (wd['status'] == 'resolved'
+    #               and not wd['is_stopword']
+    #               and wd.get('predicted_pos')
+    #               and wd.get('pos')
+    #               and wd['predicted_pos'] != wd['pos']):
+    #             predicted_list = wd.get('predicted_pos_list', [])
+    #             top_confidence = predicted_list[0][1] if predicted_list else 0
+    #             word_rank = wd.get('selected_match', {}).get('rank', 0) or 0
+    #             if top_confidence >= 0.90 and word_rank < 200:
+    #                 pos_mismatches.append(wd)
+
+    #     if not unknowns and not pos_mismatches:
+    #         if self.verbose:
+    #             print("\n" + "-" * 70)
+    #             print("🔧 STEP 4: Batch Correct Unknowns (Redis)")
+    #             print("-" * 70)
+    #             print("  (no unknown words)")
+    #         return []
+
+    #     if self.verbose:
+    #         print("\n" + "-" * 70)
+    #         print("🔧 STEP 4: Batch Correct Unknowns (Redis — Pipeline Batch)")
+    #         print("-" * 70)
+    #         print(f"  Unknowns:       {len(unknowns)}")
+    #         print(f"  POS mismatches: {len(pos_mismatches)}")
+
+    #     # ── Build batch list ──────────────────────────────────────────────
+    #     all_words_to_correct = [
+    #         {
+    #             'wd': wd,
+    #             'word': wd['word'],
+    #             'predicted_pos': wd.get('predicted_pos') or 'noun',
+    #             'correction_type': 'unknown',
+    #         }
+    #         for wd in unknowns
+    #     ] + [
+    #         {
+    #             'wd': wd,
+    #             'word': wd['word'],
+    #             'predicted_pos': wd.get('predicted_pos') or 'noun',
+    #             'correction_type': 'pos_mismatch',
+    #             'word_rank': wd.get('selected_match', {}).get('rank', 0) or 0,
+    #         }
+    #         for wd in pos_mismatches
+    #     ]
+
+    #     # ── Single Redis pipeline call for ALL words ──────────────────────
+    #     words_to_fetch = [item['word'] for item in all_words_to_correct]
+
+    #     if self.verbose:
+    #         print(f"  Sending to Redis pipeline: {words_to_fetch}")
+
+    #     batch_suggestions = get_fuzzy_suggestions_batch(
+    #         words_to_fetch, limit=10, max_distance=2
+    #     )
+
+    #     corrections = []
+
+    #     # ── Process each word ─────────────────────────────────────────────
+    #     for item in all_words_to_correct:
+    #         wd              = item['wd']
+    #         word            = item['word']
+    #         position        = wd['position']
+    #         predicted_pos   = item['predicted_pos']
+    #         correction_type = item['correction_type']
+
+    #         suggestions = batch_suggestions.get(word.lower().strip(), [])
+
+    #         # Tag each suggestion with POS compatibility
+    #         for s in suggestions:
+    #             s['compatible'] = is_pos_compatible(s['pos'], predicted_pos)
+
+    #         wd['redis_suggestions'] = suggestions
+
+    #         if not suggestions:
+    #             if self.verbose:
+    #                 print(f"  [{position}] '{word}' → No suggestions found")
+    #             continue
+
+    #         # ── Find best compatible suggestion ───────────────────────────
+    #         compatible = [s for s in suggestions if s['compatible']]
+
+    #         if correction_type == 'pos_mismatch':
+    #             # POS MISMATCH PATH — unchanged from original
+    #             word_rank = item.get('word_rank', 0)
+    #             compatible = [
+    #                 s for s in compatible
+    #                 if s['term'] != word
+    #                 and s['distance'] <= 1
+    #                 and s['rank'] > word_rank * 3
+    #             ]
+
+    #         if compatible:
+    #             compatible.sort(key=lambda x: (
+    #                 x['distance'],
+    #                 self._pos_match_score(x['pos'], predicted_pos),
+    #                 -x['rank'],
+    #             ))
+    #             best = compatible[0]
+    #         else:
+    #             best = suggestions[0]
+
+    #         # ── Apply correction based on type ────────────────────────────
+
+    #         if correction_type == 'pos_mismatch':
+    #             # ── POS mismatch: replace word (unchanged) ────────────────
+    #             if not compatible:
+    #                 # No viable replacement passed the strict gate
+    #                 if self.verbose:
+    #                     print(f"  [{position}] '{word}' → POS mismatch but no "
+    #                           f"viable replacement (best='{best['term']}', "
+    #                           f"distance={best['distance']})")
+    #                 continue
+
+    #             if self.verbose:
+    #                 print(f"  [{position}] '{word}' → REPLACED with "
+    #                       f"'{best['term']}' (pos_mismatch, "
+    #                       f"distance={best['distance']})")
+
+    #             wd['status']            = 'pos_corrected'
+    #             wd['corrected']         = best['term']
+    #             wd['corrected_display'] = best['display']
+    #             wd['pos']               = best['pos']
+    #             wd['distance']          = best['distance']
+    #             wd['selected_match']    = {
+    #                 'term':        best['term'],
+    #                 'display':     best['display'],
+    #                 'category':    best['category'],
+    #                 'description': best['description'],
+    #                 'pos':         best['pos'],
+    #                 'entity_type': best['entity_type'],
+    #                 'rank':        best['rank'],
+    #             }
+
+    #             corrections.append({
+    #                 'position':        position,
+    #                 'original':        word,
+    #                 'corrected':       best['term'],
+    #                 'distance':        best['distance'],
+    #                 'pos':             best['pos'],
+    #                 'category':        best['category'],
+    #                 'correction_type': 'pos_mismatch',
+    #             })
+
+    #         else:
+    #             # ── UNKNOWN word path ─────────────────────────────────────
+    #             #
+    #             # Confidence gate:
+    #             #   distance <= 1  AND  rank >= 50  AND  POS compatible
+    #             #   → CORRECTED (word replaced in corrected_query, used
+    #             #     for search)
+    #             #
+    #             # Otherwise:
+    #             #   → UNKNOWN_SUGGEST (original kept, "did you mean?" only)
+    #             #
+
+    #             is_confident = (
+    #                 best.get('compatible', False)
+    #                 and best['distance'] <= 1
+    #                 and best['rank'] >= 50
+    #             )
+
+    #             if is_confident:
+    #                 # ── HIGH CONFIDENCE — commit the correction ───────────
+    #                 if self.verbose:
+    #                     print(f"  [{position}] '{word}' → CORRECTED to "
+    #                           f"'{best['term']}' (distance={best['distance']}, "
+    #                           f"rank={best['rank']}, pos={best['pos']})")
+
+    #                 wd['status']            = 'corrected'
+    #                 wd['corrected']         = best['term']
+    #                 wd['corrected_display'] = best['display']
+    #                 wd['pos']               = best['pos']
+    #                 wd['distance']          = best['distance']
+    #                 wd['selected_match']    = {
+    #                     'term':        best['term'],
+    #                     'display':     best['display'],
+    #                     'category':    best['category'],
+    #                     'description': best['description'],
+    #                     'pos':         best['pos'],
+    #                     'entity_type': best['entity_type'],
+    #                     'rank':        best['rank'],
+    #                 }
+
+    #                 corrections.append({
+    #                     'position':        position,
+    #                     'original':        word,
+    #                     'corrected':       best['term'],
+    #                     'distance':        best['distance'],
+    #                     'pos':             best['pos'],
+    #                     'category':        best['category'],
+    #                     'correction_type': 'corrected',
+    #                 })
+
+    #             else:
+    #                 # ── LOW CONFIDENCE — suggest only, keep original ──────
+    #                 if self.verbose:
+    #                     reason = []
+    #                     if best['distance'] > 1:
+    #                         reason.append(f"distance={best['distance']}")
+    #                     if best['rank'] < 50:
+    #                         reason.append(f"rank={best['rank']}")
+    #                     if not best.get('compatible', False):
+    #                         reason.append("POS incompatible")
+    #                     print(f"  [{position}] '{word}' → KEPT for search "
+    #                           f"(low confidence: {', '.join(reason)}). "
+    #                           f"Suggestion: '{best['term']}'")
+
+    #                 wd['status']              = 'unknown_suggest'
+    #                 wd['suggestion']          = best['term']
+    #                 wd['suggestion_display']  = best['display']
+    #                 wd['suggestion_distance'] = best['distance']
+
+    #                 corrections.append({
+    #                     'position':        position,
+    #                     'original':        word,
+    #                     'corrected':       best['term'],
+    #                     'distance':        best['distance'],
+    #                     'pos':             best['pos'],
+    #                     'category':        best['category'],
+    #                     'correction_type': 'suggestion',
+    #                 })
+
+    #     return corrections
+
+
+    # =========================================================================
+    # STEP 4: Batch Correct Unknowns
+    #
+    # REWRITE: RAM-first fuzzy matching.
+    #
+    # For each unknown word:
+    #   1. Check RAM cache — scan known word sets using Damerau-Levenshtein
+    #      distance. Use predicted POS to pick the best match.
+    #   2. Only if RAM finds nothing → fall back to Redis fuzzy search.
+    #
+    # Confidence gates for auto-correct:
+    #   - distance <= 1  (single character error or transposition)
+    #   - POS compatible with predicted POS
+    #   - rank >= 50  (not a garbage match)
+    #
+    # If confidence gate fails → status='unknown_suggest' (did-you-mean only)
+    # If no match anywhere → status='unknown' (original passed through)
     # =========================================================================
 
     def _step4_correct_unknowns(self, word_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Step 4: Batch Correct Unknowns (Redis fuzzy — only Redis step).
+        """Step 4: Batch Correct Unknowns — RAM first, Redis fallback."""
 
-        Two correction paths:
-
-        1. UNKNOWN words (not in RAM hash):
-           - distance 1 + POS compatible + rank >= 50 → status='corrected',
-             word is REPLACED in corrected_query and used for search.
-           - distance 2 or low rank or POS mismatch → status='unknown_suggest',
-             original KEPT for search, suggestion shown as "did you mean?"
-
-        2. POS MISMATCH words (in RAM hash but wrong POS):
-           - Same logic as before — strict gate (distance<=1, rank>3x original).
-        """
         # ── Collect candidates ────────────────────────────────────────────
         unknowns = []
         pos_mismatches = []
@@ -17689,167 +17944,215 @@ class WordDiscovery:
         if not unknowns and not pos_mismatches:
             if self.verbose:
                 print("\n" + "-" * 70)
-                print("🔧 STEP 4: Batch Correct Unknowns (Redis)")
+                print("🔧 STEP 4: Batch Correct Unknowns")
                 print("-" * 70)
                 print("  (no unknown words)")
             return []
 
         if self.verbose:
             print("\n" + "-" * 70)
-            print("🔧 STEP 4: Batch Correct Unknowns (Redis — Pipeline Batch)")
+            print("🔧 STEP 4: Batch Correct Unknowns (RAM first, Redis fallback)")
             print("-" * 70)
             print(f"  Unknowns:       {len(unknowns)}")
             print(f"  POS mismatches: {len(pos_mismatches)}")
 
-        # ── Build batch list ──────────────────────────────────────────────
-        all_words_to_correct = [
-            {
-                'wd': wd,
-                'word': wd['word'],
-                'predicted_pos': wd.get('predicted_pos') or 'noun',
-                'correction_type': 'unknown',
-            }
-            for wd in unknowns
-        ] + [
-            {
-                'wd': wd,
-                'word': wd['word'],
-                'predicted_pos': wd.get('predicted_pos') or 'noun',
-                'correction_type': 'pos_mismatch',
-                'word_rank': wd.get('selected_match', {}).get('rank', 0) or 0,
-            }
-            for wd in pos_mismatches
-        ]
-
-        # ── Single Redis pipeline call for ALL words ──────────────────────
-        words_to_fetch = [item['word'] for item in all_words_to_correct]
-
-        if self.verbose:
-            print(f"  Sending to Redis pipeline: {words_to_fetch}")
-
-        batch_suggestions = get_fuzzy_suggestions_batch(
-            words_to_fetch, limit=10, max_distance=2
-        )
-
         corrections = []
 
-        # ── Process each word ─────────────────────────────────────────────
-        for item in all_words_to_correct:
-            wd              = item['wd']
-            word            = item['word']
-            position        = wd['position']
-            predicted_pos   = item['predicted_pos']
-            correction_type = item['correction_type']
+        # ══════════════════════════════════════════════════════════════════
+        # PHASE 1: RAM FUZZY MATCHING — scan known sets + RAM cache
+        # ══════════════════════════════════════════════════════════════════
 
-            suggestions = batch_suggestions.get(word.lower().strip(), [])
+        # Build a word bank from known sets + RAM cache terms to check against.
+        # These are all in memory — no network calls.
+        ram_word_bank = self._build_ram_word_bank()
 
-            # Tag each suggestion with POS compatibility
-            for s in suggestions:
-                s['compatible'] = is_pos_compatible(s['pos'], predicted_pos)
+        if self.verbose:
+            print(f"  RAM word bank size: {len(ram_word_bank)} words")
 
-            wd['redis_suggestions'] = suggestions
+        ram_resolved = set()  # positions resolved by RAM
 
-            if not suggestions:
-                if self.verbose:
-                    print(f"  [{position}] '{word}' → No suggestions found")
-                continue
+        for wd in unknowns:
+            word = wd['word'].lower()
+            position = wd['position']
+            predicted_pos = wd.get('predicted_pos') or 'noun'
 
-            # ── Find best compatible suggestion ───────────────────────────
-            compatible = [s for s in suggestions if s['compatible']]
+            if self.verbose:
+                print(f"\n  [{position}] '{word}' — scanning RAM (predicted_pos={predicted_pos})...")
 
-            if correction_type == 'pos_mismatch':
-                # POS MISMATCH PATH — unchanged from original
-                word_rank = item.get('word_rank', 0)
-                compatible = [
-                    s for s in compatible
-                    if s['term'] != word
-                    and s['distance'] <= 1
-                    and s['rank'] > word_rank * 3
-                ]
+            best_match = self._fuzzy_match_ram(
+                word, predicted_pos, ram_word_bank
+            )
 
-            if compatible:
-                compatible.sort(key=lambda x: (
-                    x['distance'],
-                    self._pos_match_score(x['pos'], predicted_pos),
-                    -x['rank'],
-                ))
-                best = compatible[0]
-            else:
-                best = suggestions[0]
-
-            # ── Apply correction based on type ────────────────────────────
-
-            if correction_type == 'pos_mismatch':
-                # ── POS mismatch: replace word (unchanged) ────────────────
-                if not compatible:
-                    # No viable replacement passed the strict gate
-                    if self.verbose:
-                        print(f"  [{position}] '{word}' → POS mismatch but no "
-                              f"viable replacement (best='{best['term']}', "
-                              f"distance={best['distance']})")
-                    continue
-
-                if self.verbose:
-                    print(f"  [{position}] '{word}' → REPLACED with "
-                          f"'{best['term']}' (pos_mismatch, "
-                          f"distance={best['distance']})")
-
-                wd['status']            = 'pos_corrected'
-                wd['corrected']         = best['term']
-                wd['corrected_display'] = best['display']
-                wd['pos']               = best['pos']
-                wd['distance']          = best['distance']
-                wd['selected_match']    = {
-                    'term':        best['term'],
-                    'display':     best['display'],
-                    'category':    best['category'],
-                    'description': best['description'],
-                    'pos':         best['pos'],
-                    'entity_type': best['entity_type'],
-                    'rank':        best['rank'],
-                }
-
-                corrections.append({
-                    'position':        position,
-                    'original':        word,
-                    'corrected':       best['term'],
-                    'distance':        best['distance'],
-                    'pos':             best['pos'],
-                    'category':        best['category'],
-                    'correction_type': 'pos_mismatch',
-                })
-
-            else:
-                # ── UNKNOWN word path ─────────────────────────────────────
-                #
-                # Confidence gate:
-                #   distance <= 1  AND  rank >= 50  AND  POS compatible
-                #   → CORRECTED (word replaced in corrected_query, used
-                #     for search)
-                #
-                # Otherwise:
-                #   → UNKNOWN_SUGGEST (original kept, "did you mean?" only)
-                #
-
+            if best_match:
+                distance = best_match['distance']
                 is_confident = (
-                    best.get('compatible', False)
-                    and best['distance'] <= 1
-                    and best['rank'] >= 50
+                    distance <= 1
+                    and best_match['rank'] >= 50
+                    and best_match['pos_compatible']
                 )
 
                 if is_confident:
                     # ── HIGH CONFIDENCE — commit the correction ───────────
                     if self.verbose:
-                        print(f"  [{position}] '{word}' → CORRECTED to "
-                              f"'{best['term']}' (distance={best['distance']}, "
-                              f"rank={best['rank']}, pos={best['pos']})")
+                        print(f"    ✅ RAM CORRECTED → '{best_match['term']}' "
+                              f"(distance={distance}, rank={best_match['rank']}, "
+                              f"pos={best_match['pos']}, category={best_match['category']})")
 
-                    wd['status']            = 'corrected'
-                    wd['corrected']         = best['term']
+                    wd['status'] = 'corrected'
+                    wd['corrected'] = best_match['term']
+                    wd['corrected_display'] = best_match['display']
+                    wd['pos'] = best_match['pos']
+                    wd['distance'] = distance
+                    wd['selected_match'] = {
+                        'term':        best_match['term'],
+                        'display':     best_match['display'],
+                        'category':    best_match['category'],
+                        'description': best_match.get('description', ''),
+                        'pos':         best_match['pos'],
+                        'entity_type': best_match.get('entity_type', 'unigram'),
+                        'rank':        best_match['rank'],
+                    }
+                    wd['all_matches'] = best_match.get('all_cache_matches', [])
+
+                    corrections.append({
+                        'position':        position,
+                        'original':        word,
+                        'corrected':       best_match['term'],
+                        'distance':        distance,
+                        'pos':             best_match['pos'],
+                        'category':        best_match['category'],
+                        'correction_type': 'corrected',
+                        'source':          'ram',
+                    })
+                    ram_resolved.add(position)
+
+                else:
+                    # ── LOW CONFIDENCE — suggest only ─────────────────────
+                    if self.verbose:
+                        reason = []
+                        if distance > 1:
+                            reason.append(f"distance={distance}")
+                        if best_match['rank'] < 50:
+                            reason.append(f"rank={best_match['rank']}")
+                        if not best_match['pos_compatible']:
+                            reason.append("POS incompatible")
+                        print(f"    ⚠️ RAM SUGGEST ONLY → '{best_match['term']}' "
+                              f"({', '.join(reason)})")
+
+                    wd['status'] = 'unknown_suggest'
+                    wd['suggestion'] = best_match['term']
+                    wd['suggestion_display'] = best_match['display']
+                    wd['suggestion_distance'] = distance
+
+                    corrections.append({
+                        'position':        position,
+                        'original':        word,
+                        'corrected':       best_match['term'],
+                        'distance':        distance,
+                        'pos':             best_match['pos'],
+                        'category':        best_match['category'],
+                        'correction_type': 'suggestion',
+                        'source':          'ram',
+                    })
+                    ram_resolved.add(position)
+
+            else:
+                if self.verbose:
+                    print(f"    ❌ No RAM match found")
+
+        # ══════════════════════════════════════════════════════════════════
+        # PHASE 2: REDIS FALLBACK — only for words RAM couldn't resolve
+        # ══════════════════════════════════════════════════════════════════
+
+        redis_unknowns = [wd for wd in unknowns if wd['position'] not in ram_resolved]
+
+        all_redis_candidates = redis_unknowns + [
+            wd for wd in pos_mismatches
+        ]
+
+        if all_redis_candidates:
+            if self.verbose:
+                print(f"\n  Redis fallback for {len(all_redis_candidates)} words: "
+                      f"{[wd['word'] for wd in all_redis_candidates]}")
+
+            all_words_to_correct = [
+                {
+                    'wd': wd,
+                    'word': wd['word'],
+                    'predicted_pos': wd.get('predicted_pos') or 'noun',
+                    'correction_type': 'unknown' if wd in redis_unknowns else 'pos_mismatch',
+                    'word_rank': wd.get('selected_match', {}).get('rank', 0) or 0,
+                }
+                for wd in all_redis_candidates
+            ]
+
+            words_to_fetch = [item['word'] for item in all_words_to_correct]
+
+            if self.verbose:
+                print(f"  Sending to Redis pipeline: {words_to_fetch}")
+
+            batch_suggestions = get_fuzzy_suggestions_batch(
+                words_to_fetch, limit=10, max_distance=2
+            )
+
+            for item in all_words_to_correct:
+                wd = item['wd']
+                word = item['word']
+                position = wd['position']
+                predicted_pos = item['predicted_pos']
+                correction_type = item['correction_type']
+
+                suggestions = batch_suggestions.get(word.lower().strip(), [])
+
+                for s in suggestions:
+                    s['compatible'] = is_pos_compatible(s['pos'], predicted_pos)
+
+                wd['redis_suggestions'] = suggestions
+
+                if not suggestions:
+                    if self.verbose:
+                        print(f"  [{position}] '{word}' → No Redis suggestions found")
+                    continue
+
+                compatible = [s for s in suggestions if s['compatible']]
+
+                if correction_type == 'pos_mismatch':
+                    word_rank = item.get('word_rank', 0)
+                    compatible = [
+                        s for s in compatible
+                        if s['term'] != word
+                        and s['distance'] <= 1
+                        and s['rank'] > word_rank * 3
+                    ]
+
+                if compatible:
+                    compatible.sort(key=lambda x: (
+                        x['distance'],
+                        self._pos_match_score(x['pos'], predicted_pos),
+                        -x['rank'],
+                    ))
+                    best = compatible[0]
+                else:
+                    best = suggestions[0]
+
+                if correction_type == 'pos_mismatch':
+                    if not compatible:
+                        if self.verbose:
+                            print(f"  [{position}] '{word}' → POS mismatch but no "
+                                  f"viable replacement")
+                        continue
+
+                    if self.verbose:
+                        print(f"  [{position}] '{word}' → REPLACED with "
+                              f"'{best['term']}' (pos_mismatch, "
+                              f"distance={best['distance']})")
+
+                    wd['status'] = 'pos_corrected'
+                    wd['corrected'] = best['term']
                     wd['corrected_display'] = best['display']
-                    wd['pos']               = best['pos']
-                    wd['distance']          = best['distance']
-                    wd['selected_match']    = {
+                    wd['pos'] = best['pos']
+                    wd['distance'] = best['distance']
+                    wd['selected_match'] = {
                         'term':        best['term'],
                         'display':     best['display'],
                         'category':    best['category'],
@@ -17866,39 +18169,346 @@ class WordDiscovery:
                         'distance':        best['distance'],
                         'pos':             best['pos'],
                         'category':        best['category'],
-                        'correction_type': 'corrected',
+                        'correction_type': 'pos_mismatch',
+                        'source':          'redis',
                     })
 
                 else:
-                    # ── LOW CONFIDENCE — suggest only, keep original ──────
-                    if self.verbose:
-                        reason = []
-                        if best['distance'] > 1:
-                            reason.append(f"distance={best['distance']}")
-                        if best['rank'] < 50:
-                            reason.append(f"rank={best['rank']}")
-                        if not best.get('compatible', False):
-                            reason.append("POS incompatible")
-                        print(f"  [{position}] '{word}' → KEPT for search "
-                              f"(low confidence: {', '.join(reason)}). "
-                              f"Suggestion: '{best['term']}'")
+                    # Unknown word — Redis path
+                    is_confident = (
+                        best.get('compatible', False)
+                        and best['distance'] <= 1
+                        and best['rank'] >= 50
+                    )
 
-                    wd['status']              = 'unknown_suggest'
-                    wd['suggestion']          = best['term']
-                    wd['suggestion_display']  = best['display']
-                    wd['suggestion_distance'] = best['distance']
+                    if is_confident:
+                        if self.verbose:
+                            print(f"  [{position}] '{word}' → REDIS CORRECTED to "
+                                  f"'{best['term']}' (distance={best['distance']}, "
+                                  f"rank={best['rank']})")
 
-                    corrections.append({
-                        'position':        position,
-                        'original':        word,
-                        'corrected':       best['term'],
-                        'distance':        best['distance'],
-                        'pos':             best['pos'],
-                        'category':        best['category'],
-                        'correction_type': 'suggestion',
-                    })
+                        wd['status'] = 'corrected'
+                        wd['corrected'] = best['term']
+                        wd['corrected_display'] = best['display']
+                        wd['pos'] = best['pos']
+                        wd['distance'] = best['distance']
+                        wd['selected_match'] = {
+                            'term':        best['term'],
+                            'display':     best['display'],
+                            'category':    best['category'],
+                            'description': best['description'],
+                            'pos':         best['pos'],
+                            'entity_type': best['entity_type'],
+                            'rank':        best['rank'],
+                        }
+
+                        corrections.append({
+                            'position':        position,
+                            'original':        word,
+                            'corrected':       best['term'],
+                            'distance':        best['distance'],
+                            'pos':             best['pos'],
+                            'category':        best['category'],
+                            'correction_type': 'corrected',
+                            'source':          'redis',
+                        })
+
+                    else:
+                        if self.verbose:
+                            reason = []
+                            if best['distance'] > 1:
+                                reason.append(f"distance={best['distance']}")
+                            if best['rank'] < 50:
+                                reason.append(f"rank={best['rank']}")
+                            if not best.get('compatible', False):
+                                reason.append("POS incompatible")
+                            print(f"  [{position}] '{word}' → REDIS SUGGEST ONLY "
+                                  f"({', '.join(reason)}). Suggestion: '{best['term']}'")
+
+                        wd['status'] = 'unknown_suggest'
+                        wd['suggestion'] = best['term']
+                        wd['suggestion_display'] = best['display']
+                        wd['suggestion_distance'] = best['distance']
+
+                        corrections.append({
+                            'position':        position,
+                            'original':        word,
+                            'corrected':       best['term'],
+                            'distance':        best['distance'],
+                            'pos':             best['pos'],
+                            'category':        best['category'],
+                            'correction_type': 'suggestion',
+                            'source':          'redis',
+                        })
+        elif self.verbose:
+            print(f"\n  (no words need Redis fallback)")
 
         return corrections
+
+    # =========================================================================
+    # RAM FUZZY MATCHING HELPERS
+    # =========================================================================
+
+    def _build_ram_word_bank(self) -> Dict[str, Dict[str, Any]]:
+        """
+        Build a word bank from the known sets for fuzzy matching.
+        Each entry maps a word to its POS and category so we can
+        check distance + POS compatibility in one pass.
+
+        This runs once per query — the sets are already in memory
+        so this is just building a lookup dict.
+        """
+        bank = {}
+
+        # Nouns from known sets
+        for word in self.FOOD_DINING:
+            if ' ' not in word:  # skip multi-word entries
+                bank[word] = {'pos': 'noun', 'category': 'Food', 'rank': 800}
+
+        for word in self.SERVICES:
+            if ' ' not in word:
+                bank[word] = {'pos': 'noun', 'category': 'Service', 'rank': 800}
+
+        for word in self.APPAREL_PRODUCTS:
+            if ' ' not in word:
+                bank[word] = {'pos': 'noun', 'category': 'Apparel', 'rank': 800}
+
+        for word in self.BEAUTY:
+            if ' ' not in word:
+                bank[word] = {'pos': 'noun', 'category': 'Beauty', 'rank': 800}
+
+        for word in self.CULTURE_COMMUNITY:
+            if ' ' not in word:
+                bank[word] = {'pos': 'noun', 'category': 'Culture', 'rank': 800}
+
+        for word in self.MUSIC_ENTERTAINMENT:
+            if ' ' not in word:
+                bank[word] = {'pos': 'noun', 'category': 'Entertainment', 'rank': 800}
+
+        for word in self.KNOWN_ACRONYMS:
+            bank[word] = {'pos': 'noun', 'category': 'Acronym', 'rank': 900}
+
+        # Adjectives from known sets
+        for word in self.COLORS:
+            bank[word] = {'pos': 'adjective', 'category': 'Color', 'rank': 500}
+
+        for word in self.SUPERLATIVES:
+            bank[word] = {'pos': 'adjective', 'category': 'Superlative', 'rank': 500}
+
+        for word in self.SIZES:
+            bank[word] = {'pos': 'adjective', 'category': 'Size', 'rank': 500}
+
+        for word in self.COMMON_ADJECTIVES:
+            bank[word] = {'pos': 'adjective', 'category': 'Modifier', 'rank': 500}
+
+        # Also add words from the RAM cache itself
+        # This catches words like "restaurant" that are in the vocabulary
+        # but not in the hardcoded known sets
+        if self.cache._ram and self.cache._ram.loaded:
+            try:
+                # Get all terms from the RAM cache
+                all_terms = getattr(self.cache._ram, 'terms', None)
+                if all_terms and isinstance(all_terms, dict):
+                    for term_key, term_data in all_terms.items():
+                        if ' ' in term_key or '_' in term_key:
+                            continue  # skip n-grams
+                        if term_key in bank:
+                            continue  # known set already has it
+
+                        if isinstance(term_data, dict):
+                            bank[term_key] = {
+                                'pos': self.cache._normalize_pos(
+                                    term_data.get('pos', 'noun')
+                                ),
+                                'category': term_data.get('category', ''),
+                                'rank': self.cache._parse_rank(
+                                    term_data.get('rank', 0)
+                                ),
+                            }
+                        elif isinstance(term_data, list):
+                            # Multiple matches — use highest rank
+                            best = max(term_data,
+                                       key=lambda x: self.cache._parse_rank(
+                                           x.get('rank', 0)
+                                       ))
+                            bank[term_key] = {
+                                'pos': self.cache._normalize_pos(
+                                    best.get('pos', 'noun')
+                                ),
+                                'category': best.get('category', ''),
+                                'rank': self.cache._parse_rank(
+                                    best.get('rank', 0)
+                                ),
+                            }
+            except Exception as e:
+                if self.verbose:
+                    print(f"    ⚠️ Could not scan RAM cache terms: {e}")
+
+        return bank
+
+    def _fuzzy_match_ram(
+        self,
+        misspelled: str,
+        predicted_pos: str,
+        word_bank: Dict[str, Dict[str, Any]],
+        max_distance: int = 2,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Find the best fuzzy match for a misspelled word in the RAM word bank.
+
+        Returns the best match dict or None.
+
+        Strategy:
+          1. Only check words within ±2 characters of the same length
+             (a word of length 10 can't match a word of length 6)
+          2. Calculate Damerau-Levenshtein distance
+          3. Filter by max_distance
+          4. Prefer: distance 1 > distance 2, POS compatible > not, higher rank
+        """
+        misspelled_lower = misspelled.lower()
+        misspelled_len = len(misspelled_lower)
+
+        candidates = []
+
+        for word, meta in word_bank.items():
+            # Length pre-filter — skip words that are too different in length
+            if abs(len(word) - misspelled_len) > max_distance:
+                continue
+
+            # Quick first-char check — if first char doesn't match,
+            # distance is likely > 2 for longer words
+            if misspelled_len > 4 and word[0] != misspelled_lower[0]:
+                continue
+
+            distance = damerau_levenshtein_distance(misspelled_lower, word)
+
+            if distance > 0 and distance <= max_distance:
+                pos_compatible = is_pos_compatible(meta['pos'], predicted_pos)
+
+                candidates.append({
+                    'term':           word,
+                    'display':        word,
+                    'category':       meta['category'],
+                    'pos':            meta['pos'],
+                    'rank':           meta['rank'],
+                    'distance':       distance,
+                    'pos_compatible': pos_compatible,
+                    'entity_type':    'unigram',
+                })
+
+        if not candidates:
+            # Also try the full RAM cache lookup for words not in the bank
+            # (e.g., proper nouns, cities, people)
+            candidates = self._fuzzy_match_ram_cache_direct(
+                misspelled_lower, predicted_pos, max_distance
+            )
+
+        if not candidates:
+            return None
+
+        # Sort: distance ASC, POS compatible first, rank DESC
+        candidates.sort(key=lambda x: (
+            x['distance'],
+            0 if x['pos_compatible'] else 1,
+            -x['rank'],
+        ))
+
+        best = candidates[0]
+
+        # Now get the FULL matches from RAM cache for the corrected word
+        # so the corrected word has proper metadata
+        full_matches = self.cache.get_term_matches(best['term'])
+        if full_matches:
+            # Use the best full match
+            best_full = full_matches[0]
+            best['term'] = best_full.get('term', best['term'])
+            best['display'] = best_full.get('display', best['display'])
+            best['category'] = best_full.get('category', best['category'])
+            best['pos'] = best_full.get('pos', best['pos'])
+            best['rank'] = best_full.get('rank', best['rank'])
+            best['entity_type'] = best_full.get('entity_type', 'unigram')
+            best['description'] = best_full.get('description', '')
+            best['all_cache_matches'] = full_matches
+
+            # Re-check POS compatibility with actual cache data
+            best['pos_compatible'] = is_pos_compatible(
+                best['pos'], predicted_pos
+            )
+
+        if self.verbose:
+            print(f"    RAM candidates found: {len(candidates)}")
+            for c in candidates[:5]:
+                compat = "✅" if c['pos_compatible'] else "❌"
+                print(f"      {compat} '{c['term']}' (d={c['distance']}, "
+                      f"rank={c['rank']}, pos={c['pos']}, cat={c['category']})")
+
+        return best
+
+    def _fuzzy_match_ram_cache_direct(
+        self,
+        misspelled: str,
+        predicted_pos: str,
+        max_distance: int = 2,
+    ) -> List[Dict[str, Any]]:
+        """
+        Scan the RAM cache directly for fuzzy matches.
+        This catches words not in the known sets (cities, people, etc.).
+        """
+        if not (self.cache._ram and self.cache._ram.loaded):
+            return []
+
+        candidates = []
+        misspelled_len = len(misspelled)
+
+        try:
+            all_terms = getattr(self.cache._ram, 'terms', None)
+            if not all_terms or not isinstance(all_terms, dict):
+                return []
+
+            for term_key, term_data in all_terms.items():
+                if ' ' in term_key or '_' in term_key:
+                    continue
+
+                if abs(len(term_key) - misspelled_len) > max_distance:
+                    continue
+
+                if misspelled_len > 4 and term_key[0] != misspelled[0]:
+                    continue
+
+                distance = damerau_levenshtein_distance(misspelled, term_key)
+
+                if distance > 0 and distance <= max_distance:
+                    if isinstance(term_data, dict):
+                        pos = self.cache._normalize_pos(term_data.get('pos', 'noun'))
+                        rank = self.cache._parse_rank(term_data.get('rank', 0))
+                        category = term_data.get('category', '')
+                    elif isinstance(term_data, list) and term_data:
+                        best_entry = max(
+                            term_data,
+                            key=lambda x: self.cache._parse_rank(x.get('rank', 0))
+                        )
+                        pos = self.cache._normalize_pos(best_entry.get('pos', 'noun'))
+                        rank = self.cache._parse_rank(best_entry.get('rank', 0))
+                        category = best_entry.get('category', '')
+                    else:
+                        continue
+
+                    candidates.append({
+                        'term':           term_key,
+                        'display':        term_key,
+                        'category':       category,
+                        'pos':            pos,
+                        'rank':           rank,
+                        'distance':       distance,
+                        'pos_compatible': is_pos_compatible(pos, predicted_pos),
+                        'entity_type':    'unigram',
+                    })
+
+        except Exception as e:
+            if self.verbose:
+                print(f"    ⚠️ RAM cache direct scan error: {e}")
+
+        return candidates
     # =========================================================================
     # STEP 5: Re-check N-grams After Correction
     # =========================================================================
