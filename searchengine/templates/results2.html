@@ -101,7 +101,7 @@
         .result-map-number { width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; color: white; flex-shrink: 0; line-height: 1; margin-right: var(--space-sm); }
         .result-item.map-linked { cursor: pointer; }
         .result-item.map-linked:hover { border-color: var(--green); box-shadow: 0 4px 16px rgba(45,106,79,0.12); }
-        .result-item.map-highlighted { border-color: var(--green); box-shadow: 0 4px 16px rgba(45,106,79,0.15); background: rgba(45,106,79,0.02); }
+        .result-item.map-highlighted { border-color: var(--green); box-shadow: 0 4px 16px rgba(45,106,79,0.15); background: rgba(45,106,79,0.02); padding: var(--space-lg)}
         @media (max-width: 768px) { .multi-map-frame { height: 240px; } .multi-map-header { padding: var(--space-sm) var(--space-md); } .multi-map-list { padding: var(--space-sm) var(--space-md); } }
         @media (max-width: 480px) { .multi-map-frame { height: 200px; } .result-map-number { width: 20px; height: 20px; font-size: 10px; } .multi-map-chip-num { width: 18px; height: 18px; font-size: 10px; } }
 
@@ -495,98 +495,102 @@
                 {% endif %}
 
             {% elif has_results %}
-                {% for item in results %}
-                <article class="result-item{% if address_map and item.id == address_map.id %} has-map-card{% endif %}" data-position="{{ forloop.counter }}" data-result-id="{{ item.id|default:'' }}" data-url="{{ item.url|default:'#' }}" data-title="{{ item.title|default:'Untitled' }}" data-source="{{ item.source|default:item.site_name|default:'' }}" data-data-type="{{ item.data_type|default:'' }}" data-schema="{{ item.schema|default:'' }}">
+    {% for item in results %}
+    <article class="result-item{% if address_map and item.id == address_map.id and map_location_count < 2 %} has-map-card{% endif %}" data-position="{{ forloop.counter }}" data-result-id="{{ item.id|default:'' }}" data-url="{{ item.url|default:'#' }}" data-title="{{ item.title|default:'Untitled' }}" data-source="{{ item.source|default:item.site_name|default:'' }}" data-data-type="{{ item.data_type|default:'' }}" data-schema="{{ item.schema|default:'' }}">
 
-                    {# ── INLINE MAP: rendered inside result card when single address_map match and no multi-map ── #}
-                    {% if address_map and item.id == address_map.id and map_location_count < 2 %}
-                    <div class="result-map-frame" id="address-map">
-                        <a href="{{ address_map.full_map_url }}" class="result-map-expand">⛶ Expand</a>
+        {# ── INLINE MAP: rendered inside result card when single address_map match and no multi-map ── #}
+        {% if address_map and item.id == address_map.id and map_location_count < 2 %}
+        <div class="result-map-frame" id="address-map">
+            <a href="{{ address_map.full_map_url }}" class="result-map-expand">⛶ Expand</a>
+        </div>
+        <div class="result-map-details">
+            <div class="result-map-details-row">
+                <div class="result-map-info">
+                    <div class="result-map-text">
+                        <div class="result-map-address">{{ address_map.location_line }}</div>
+                        {% if address_map.phone %}<div class="result-map-phone"><a href="tel:{{ address_map.phone }}">{{ address_map.phone }}</a></div>{% endif %}
+                        {% if address_map.website %}<div class="result-map-website"><a href="{{ address_map.website }}" target="_blank">{{ address_map.website|truncatechars:40 }}</a></div>{% endif %}
                     </div>
-                    <div class="result-map-details">
-                        <div class="result-map-details-row">
-                            <div class="result-map-info">
-                                <div class="result-map-text">
-                                    <div class="result-map-address">{{ address_map.location_line }}</div>
-                                    {% if address_map.phone %}<div class="result-map-phone"><a href="tel:{{ address_map.phone }}">{{ address_map.phone }}</a></div>{% endif %}
-                                    {% if address_map.website %}<div class="result-map-website"><a href="{{ address_map.website }}" target="_blank">{{ address_map.website|truncatechars:40 }}</a></div>{% endif %}
-                                </div>
-                            </div>
-                            <div class="result-map-actions">
-                                <a href="{{ address_map.directions_url }}" target="_blank" class="result-map-btn result-map-btn-directions">Directions</a>
-                                <a href="{{ address_map.share_url }}" target="_blank" class="result-map-btn result-map-btn-secondary">Share</a>
-                                <a href="{{ address_map.streetview_url }}" target="_blank" class="result-map-btn result-map-btn-secondary">Street View</a>
-                            </div>
-                        </div>
-                    </div>
-                    {% endif %}
-
-                    {# ── STANDARD RESULT CONTENT ── #}
-                    <div class="{% if address_map and item.id == address_map.id and map_location_count < 2 %}result-item-content{% endif %}">
-                        {# Header: favicon + site name row1, url row2 #}
-                        <div class="result-header">
-                            <div class="result-map-number" data-map-badge-for="{{ item.id }}" style="display:none;"></div>
-                            <div class="result-site-info">
-                                <div class="result-site-row1">
-                                    <div class="result-favicon" data-fallback="{{ item.site_name|default:item.source|default:'W'|slice:':1'|upper }}">
-                                        <img src="https://www.google.com/s2/favicons?domain={{ item.url }}&sz=32"
-                                             alt=""
-                                             onerror="this.style.display='none';this.parentElement.textContent=this.parentElement.dataset.fallback;">
-                                    </div>
-                                    <span class="result-site-name">{{ item.site_name|default:item.source|default:"Website" }}</span>
-                                </div>
-                                <div class="result-url">{{ item.url|default:"#"|truncatechars:70 }}</div>
-                            </div>
-                        </div>
-                        {# Title #}
-                        <h3 class="result-title"><a href="{{ item.url|default:'#' }}" class="result-link">{{ item.title|default:"Untitled" }}</a></h3>
-                        {# Inline images — max 2, only shown if item has them #}
-                        {% if item.image_url %}
-                        <div class="result-images">
-                            {% for img in item.image_url|slice:":2" %}
-                            <img class="result-thumb" src="{{ img }}" alt="{{ item.title }}" loading="lazy" onerror="this.style.display='none'">
-                            {% endfor %}
-                        </div>
-                        {% elif item.image %}
-                        <div class="result-images">
-                            <img class="result-thumb" src="{{ item.image }}" alt="{{ item.title }}" loading="lazy" onerror="this.style.display='none'">
-                        </div>
-                        {% endif %}
-                        {# Snippet #}
-                        <p class="result-snippet">{% if item.date %}<span class="result-date">{{ item.date }} — </span>{% endif %}{{ item.summary_highlighted|default:item.summary|default:"No description available."|safe|truncatewords:40 }}</p>
-                        {# Meta tags #}
-                        <div class="result-meta">
-                            {% if item.category %}<a href="{% url 'searchengine:search' %}?query={{ query|urlencode }}&category={{ item.category|urlencode }}&session_id={{ session_id }}" class="result-tag clickable">{{ item.category|cut:"_"|title }}</a>{% endif %}
-                            {% if item.has_map and not address_map or item.id != address_map.id %}<a href="{{ item.map_url }}" class="result-map-link">Map</a>{% endif %}
-                            {% if item.black_owned == False %}<span class="result-tag nboc">NBOC</span>{% endif %}
-                        </div>
-                    </div>
-                </article>
-
-                {# ═══════════ KEY FACTS / WITHIN THIS ARTICLE — shown only for question-answer results, after the first result ═══════════ #}
-                {% if forloop.first %}
-                {% if is_question_path or results.0.schema == "history" %}
-                {% if results.0.humanized_summary and map_location_count < 2 and not show_images and not active_data_type and not active_category and not active_schema %}
-                <div class="featured-snippet" style="background: var(--warm-white); border: 1px solid var(--gray-200); border-radius: 12px; padding: var(--space-lg); margin-bottom: var(--space-md); box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
-                    {% if results.0.key_facts %}
-                    <div style="padding-top: var(--space-md); ">
-                        <span style="font-size: 13px; font-weight: 600; color: var(--gray-500); text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: var(--space-sm);">Within this article</span>
-                        {% for fact in results.0.key_facts %}
-                        <div style="display: flex; align-items: flex-start; gap: 8px; padding: 8px 0;{% if not forloop.last %} border-bottom: 1px solid var(--gray-100);{% endif %}">
-                            <svg width="6" height="6" viewBox="0 0 6 6" style="flex-shrink: 0; margin-top: 7px;">
-                                <circle cx="3" cy="3" r="3" fill="var(--green)"/>
-                            </svg>
-                            <span style="font-size: 14px; color: var(--gray-700); line-height: 1.6;">{{ fact }}</span>
-                        </div>
-                        {% endfor %}
-                    </div>
-                    {% endif %}
                 </div>
-                {% endif %}
-                {% endif %}
-                {% endif %}
+                <div class="result-map-actions">
+                    <a href="{{ address_map.directions_url }}" target="_blank" class="result-map-btn result-map-btn-directions">Directions</a>
+                    <a href="{{ address_map.share_url }}" target="_blank" class="result-map-btn result-map-btn-secondary">Share</a>
+                    <a href="{{ address_map.streetview_url }}" target="_blank" class="result-map-btn result-map-btn-secondary">Street View</a>
+                </div>
+            </div>
+        </div>
+        {% endif %}
 
+        {# ── STANDARD RESULT CONTENT ── #}
+        <div class="{% if address_map and item.id == address_map.id and map_location_count < 2 %}result-item-content{% endif %}">
+            <div class="result-header">
+                <div class="result-map-number" data-map-badge-for="{{ item.id }}" style="display:none;"></div>
+                <div class="result-site-info">
+            
+<div class="result-site-row1">
+    {% if item.data_type != "business" %}
+    <div class="result-favicon" data-fallback="{{ item.site_name|default:item.source|default:'W'|slice:':1'|upper }}">
+        <img src="https://www.google.com/s2/favicons?domain={{ item.url }}&sz=32"
+             alt=""
+             onerror="this.style.display='none';this.parentElement.textContent=this.parentElement.dataset.fallback;">
+    </div>
+    {% else %}
+    <div class="result-favicon" style="visibility:hidden;"></div>
+    {% endif %}
+                        <span class="result-site-name">{{ item.site_name|default:item.source|default:"Website" }}</span>
+                    </div>
+                    <div class="result-url">{{ item.url|default:"#"|truncatechars:70 }}</div>
+                </div>
+            </div>
+            <h3 class="result-title"><a href="{{ item.url|default:'#' }}" class="result-link">{{ item.title|default:"Untitled" }}</a></h3>
+            {% if item.image_url and item.image_url|length > 0 %}
+            <div class="result-images">
+                {% for img in item.image_url|slice:":2" %}
+                <img class="result-thumb" src="{{ img }}" alt="{{ item.title }}" loading="lazy" onerror="this.style.display='none'">
                 {% endfor %}
+            </div>
+            {% elif item.image and item.image|length > 0 %}
+            <div class="result-images">
+                <img class="result-thumb" src="{{ item.image }}" alt="{{ item.title }}" loading="lazy" onerror="this.style.display='none'">
+            </div>
+            {% endif %}
+            <p class="result-snippet">{% if item.date %}<span class="result-date">{{ item.date }} — </span>{% endif %}{{ item.summary_highlighted|default:item.summary|default:"No description available."|safe|truncatewords:40 }}</p>
+            <div class="result-meta">
+                {% if item.category %}<a href="{% url 'searchengine:search' %}?query={{ query|urlencode }}&category={{ item.category|urlencode }}&session_id={{ session_id }}" class="result-tag clickable">{{ item.category|cut:"_"|title }}</a>{% endif %}
+                {% if item.has_map and not address_map or item.id != address_map.id %}<a href="{{ item.map_url }}" class="result-map-link">Map</a>{% endif %}
+                {% if item.black_owned == False %}<span class="result-tag nboc">NBOC</span>{% endif %}
+            </div>
+        </div>
+    </article>
+
+    {# ═══════════ KEY FACTS / WITHIN THIS ARTICLE ═══════════ #}
+    {% if forloop.first %}
+    {% if is_question_path or results.0.schema == "history" %}
+    {% if results.0.humanized_summary and map_location_count < 2 and not show_images and not active_data_type and not active_category and not active_schema %}
+    <div class="featured-snippet" style="background: var(--warm-white); border: 1px solid var(--gray-200); border-radius: 12px; padding: var(--space-lg); margin-bottom: var(--space-md); box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
+        {% if results.0.key_facts %}
+        <div style="padding-top: var(--space-md);">
+            <span style="font-size: 13px; font-weight: 600; color: var(--gray-500); text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: var(--space-sm);">Within this article</span>
+            {% for fact in results.0.key_facts %}
+            <div style="display: flex; align-items: flex-start; gap: 8px; padding: 8px 0;{% if not forloop.last %} border-bottom: 1px solid var(--gray-100);{% endif %}">
+                <svg width="6" height="6" viewBox="0 0 6 6" style="flex-shrink: 0; margin-top: 7px;">
+                    <circle cx="3" cy="3" r="3" fill="var(--green)"/>
+                </svg>
+                <span style="font-size: 14px; color: var(--gray-700); line-height: 1.6;">{{ fact }}</span>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+    {% endif %}
+    {% endif %}
+
+    {% endfor %}
+
+
+
+
                 {% if related_searches %}<div class="related-searches-inline"><h3 class="related-searches-inline-title">Related Searches</h3><div class="related-searches-inline-list">{% for s in related_searches|slice:":5" %}<a href="{% url 'searchengine:search' %}?query={{ s.query|urlencode }}&session_id={{ session_id }}&alt_mode=y" class="related-searches-inline-item">{{ s.query }}</a>{% endfor %}</div></div>{% endif %}
                 {% if pagination.total_pages > 1 %}<nav class="pagination"><div class="pagination-info">Showing {{ pagination.start_result }}-{{ pagination.end_result }} of {{ total_results|default:pagination.total_results }}</div><div class="pagination-controls">{% if pagination.has_previous %}<a href="?query={{ query|urlencode }}&page={{ pagination.previous_page }}&per_page={{ per_page }}{% if active_data_type %}&data_type={{ active_data_type }}{% endif %}&session_id={{ session_id }}" class="pagination-btn">← Prev</a>{% else %}<span class="pagination-btn disabled">← Prev</span>{% endif %}<div class="pagination-pages">{% for p in pagination.page_range %}{% if p == pagination.current_page %}<span class="pagination-page active">{{ p }}</span>{% else %}<a href="?query={{ query|urlencode }}&page={{ p }}&per_page={{ per_page }}{% if active_data_type %}&data_type={{ active_data_type }}{% endif %}&session_id={{ session_id }}" class="pagination-page">{{ p }}</a>{% endif %}{% endfor %}</div>{% if pagination.has_next %}<a href="?query={{ query|urlencode }}&page={{ pagination.next_page }}&per_page={{ per_page }}{% if active_data_type %}&data_type={{ active_data_type }}{% endif %}&session_id={{ session_id }}" class="pagination-btn">Next →</a>{% else %}<span class="pagination-btn disabled">Next →</span>{% endif %}</div></nav>{% endif %}
             {% else %}
