@@ -555,11 +555,22 @@
             </div>
             {% endif %}
             <p class="result-snippet">{% if item.date %}<span class="result-date">{{ item.date }} — </span>{% endif %}{{ item.summary_highlighted|default:item.summary|default:"No description available."|safe|truncatewords:40 }}</p>
+      
             <div class="result-meta">
                 {% if item.category %}<a href="{% url 'searchengine:search' %}?query={{ query|urlencode }}&category={{ item.category|urlencode }}&session_id={{ session_id }}" class="result-tag clickable">{{ item.category|cut:"_"|title }}</a>{% endif %}
-                {% if item.has_map and not address_map or item.id != address_map.id %}<a href="{{ item.map_url }}" class="result-map-link">Map</a>{% endif %}
+                {% if item.has_map and item.location.address %}<a href="https://www.google.com/maps/search/?api=1&query={{ item.location.address|urlencode }}" target="_blank" class="result-map-link">Map</a>{% endif %}
                 {% if item.black_owned == False %}<span class="result-tag nboc">NBOC</span>{% endif %}
             </div>
+
+            <div style="font-size:10px;color:red;word-break:break-all;">
+    has_map: {{ item.has_map }} |
+    map_url: {{ item.map_url }} |
+    geopoint: {{ item.location_geopoint }} |
+    coords: {{ item.location_coordinates }} |
+    location: {{ item.location }} |
+    lat: {{ item.lat }} |
+    lng: {{ item.lng }}
+</div>
         </div>
     </article>
 
