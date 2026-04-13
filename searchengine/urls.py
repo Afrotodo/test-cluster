@@ -79,7 +79,7 @@ urlpatterns = [
     path('privacy',views.privacy,name="privacy"),
     path('terms',views.term,name="term"),
     path('contact-us',views.contact,name="contact"),
-    path('search/images-load/', views.load_images, name='load_images'),
+    # path('search/images-load/', views.load_images, name='load_images'),
 
 
  

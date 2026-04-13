@@ -8573,6 +8573,7 @@ def format_result(hit: Dict, query: str = '') -> Dict:
         'key_facts_highlighted': highlight_map.get('key_facts', ''),
         'semantic_score':        semantic_score,
         'black_owned':           doc.get('black_owned', False),
+        'women_owned':           doc.get('women_owned', False),
         'service_rating':        doc.get('service_rating'),
         'service_review_count':  doc.get('service_review_count'),
         'service_type':          doc.get('service_type', []),

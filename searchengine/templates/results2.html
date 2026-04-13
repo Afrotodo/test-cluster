@@ -134,7 +134,13 @@
         .result-tag { font-size: 12px; font-weight: 500; padding: 4px 10px; border-radius: 20px; background: var(--gray-100); color: var(--gray-600); }
         .result-tag.clickable { cursor: pointer; transition: all var(--transition-fast); } .result-tag.clickable:hover { background: var(--gray-200); }
         /* NBOC tag — shown when black_owned is false */
+
         .result-tag.nboc { background: rgba(180,83,9,0.08); color: #92400e; font-weight: 600; border: 1px solid rgba(180,83,9,0.15); }
+        .result-map-link { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 500; padding: 4px 10px; border-radius: 20px; background: rgba(188,71,73,0.08); color: var(--red); transition: all var(--transition-fast); }
+        .result-map-link:hover { background: rgba(188,71,73,0.15); }
+        
+        /* WOB tag — shown when women_owned is true */
+        .result-tag.wob { background: rgba(124,58,237,0.08); color: #ff8ada; font-weight: 600; border: 1px solid rgba(124,58,237,0.15); }
         .result-map-link { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 500; padding: 4px 10px; border-radius: 20px; background: rgba(188,71,73,0.08); color: var(--red); transition: all var(--transition-fast); }
         .result-map-link:hover { background: rgba(188,71,73,0.15); }
 
@@ -563,6 +569,7 @@
                 {% if item.category %}<a href="{% url 'searchengine:search' %}?query={{ query|urlencode }}&category={{ item.category|urlencode }}&session_id={{ session_id }}" class="result-tag clickable">{{ item.category|cut:"_"|title }}</a>{% endif %}
                 {% if item.has_map and item.location.address %}<a href="https://www.google.com/maps/search/?api=1&query={{ item.location.address|urlencode }}" target="_blank" class="result-map-link">Map</a>{% endif %}
                 {% if item.black_owned == False %}<span class="result-tag nboc">NBOC</span>{% endif %}
+                {% if item.women_owned %}<span class="result-tag wob">WOB</span>{% endif %}
             </div>
 
 
