@@ -310,7 +310,7 @@
             .result-map-frame { height: 160px; } .result-map-btn { font-size: 11px; padding: 6px 10px; }
             .address-map-frame { height: 180px; } .address-map-title { font-size: 15px; } .address-map-btn { font-size: 12px; padding: 8px var(--space-sm); }
         }
-        @media (max-width: 360px) { .logo a { font-size: 18px; } .result-title { font-size: 15px; } .result-map-frame { height: 140px; } .address-map-frame { height: 160px; } .multi-map-frame { height: 170px; } .multi-map-chip { padding: 5px 8px; font-size: 11px; } .multi-map-chip-num { width: 16px; height: 16px; font-size: 9px; } .result-map-number { width: 18px; height: 18px; font-size: 9px; margin-right: 4px; } }
+        @media (max-width: 360px) { .logo a { font-size: 18px; } .result-title { font-size: 15px; } .result-map-frame { height: 140px; } .address-map-frame { height: 160px; } .multi-map-frame { height: 170px; } .multi-map-chip { padding: 5px 8px; font-size: 11px; } .multi-map-chip-num { width: 16px; height: 16px; font-size: 10px; } .result-map-number { width: 18px; height: 18px; font-size: 9px; margin-right: 4px; } }
         @media print { .header, .sidebar, .footer, .pagination, .nav-tabs, .address-map-card, .result-map-frame, .result-map-details, .multi-map-section { display: none !important; } }
         @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration: 0.01ms !important; } }
     </style>
@@ -505,7 +505,7 @@
 
             {% elif has_results %}
     {% for item in results %}
-    <article class="result-item{% if address_map and item.id == address_map.id and map_location_count < 2 %} has-map-card{% endif %}" data-position="{{ forloop.counter }}" data-result-id="{{ item.id|default:'' }}" data-url="{{ item.url|default:'#' }}" data-title="{{ item.title|default:'Untitled' }}" data-source="{{ item.source|default:item.site_name|default:'' }}" data-data-type="{{ item.data_type|default:'' }}" data-schema="{{ item.schema|default:'' }}">
+    <article class="result-item{% if address_map and item.id == address_map.id and map_location_count < 2 %} has-map-card{% endif %}" data-position="{{ forloop.counter }}" data-result-id="{{ item.id|default:'' }}" data-url="{{ item.url|default:'#' }}" data-title="{{ item.title|default:'Untitled' }}" data-source="{{ item.source|default:item.site_name|default:'' }}" data-data-type="{{ item.data_type|default:'' }}" data-schema="{{ item.schema|default:'' }}" data-summary="{{ item.summary|default:''|truncatewords:30 }}" data-image="{{ item.image|default:'' }}" data-brand="{{ item.source|default:item.site_name|default:'' }}">
 
         {# ── INLINE MAP: rendered inside result card when single address_map match and no multi-map ── #}
         {% if address_map and item.id == address_map.id and map_location_count < 2 %}
@@ -623,7 +623,7 @@
 
 <script>
         const AC={sessionId:'{{ session_id|escapejs }}',query:'{{ query|escapejs }}',totalResults:{{ total_results|default:0 }},trackUrl:'/api/track-click/',t0:Date.now()};
-        function trackClick(r,l){if(navigator.sendBeacon)navigator.sendBeacon(AC.trackUrl,new Blob([JSON.stringify({session_id:AC.sessionId,query:AC.query,url:r.dataset.url||l.href,position:+r.dataset.position,title:r.dataset.title,data_type:r.dataset.dataType,result_id:r.dataset.resultId,schema:r.dataset.schema,time_to_click_ms:Date.now()-AC.t0})],{type:'application/json'}));}
+        function trackClick(r,l){if(navigator.sendBeacon)navigator.sendBeacon(AC.trackUrl,new Blob([JSON.stringify({session_id:AC.sessionId,query:AC.query,url:r.dataset.url||l.href,position:+r.dataset.position,title:r.dataset.title,data_type:r.dataset.dataType,result_id:r.dataset.resultId,schema:r.dataset.schema,summary:r.dataset.summary||'',image:r.dataset.image||'',brand:r.dataset.brand||'',time_to_click_ms:Date.now()-AC.t0})],{type:'application/json'}));}
         function trackEvent(t,e){if(navigator.sendBeacon)navigator.sendBeacon(AC.trackUrl,new Blob([JSON.stringify({session_id:AC.sessionId,event_type:t,query:AC.query,...e})],{type:'application/json'}));}
         document.addEventListener('DOMContentLoaded',function(){document.querySelectorAll('.result-item').forEach(r=>{r.querySelectorAll('.result-link,.result-title a').forEach(l=>{l.addEventListener('click',()=>trackClick(r,l));});});});
         function clearSearch(){var i=document.querySelector('.search-input');i.value='';i.focus();}

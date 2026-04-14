@@ -9252,6 +9252,184 @@ def get_category_stats(category: str, city: str) -> Dict[str, str]:
     return redis_manager.safe_hgetall(cache_key)
 
 
+# # =============================================================================
+# # VIEW: TRACK CLICK (Analytics)
+# # =============================================================================
+
+# @csrf_exempt
+# @require_http_methods(["POST", "GET"])
+# def track_click(request):
+#     """Track when a user clicks on a search result or other events."""
+    
+#     if request.method == 'POST':
+#         try:
+#             content_length = request.META.get('CONTENT_LENGTH', 0)
+#             try:
+#                 content_length = int(content_length)
+#             except (TypeError, ValueError):
+#                 content_length = 0
+            
+#             if content_length > TRACK_CLICK_CONFIG['max_event_data_size']:
+#                 return JsonResponse(
+#                     {'success': False, 'error': 'Request body too large'},
+#                     status=413
+#                 )
+            
+#             data = json.loads(request.body)
+#         except (json.JSONDecodeError, ValueError):
+#             data = request.POST.dict()
+#     else:
+#         data = request.GET.dict()
+    
+#     client_ip = get_client_ip(request)
+    
+#     session_id = sanitize_string(
+#         data.get('session_id', ''),
+#         max_length=TRACK_CLICK_CONFIG['max_session_id_length']
+#     )
+    
+#     is_allowed, rate_error = TrackClickRateLimiter.check_rate_limit(session_id, client_ip)
+#     if not is_allowed:
+#         return JsonResponse(
+#             {'success': False, 'error': rate_error},
+#             status=429
+#         )
+    
+#     event_type = sanitize_string(data.get('event_type', ''), max_length=50)
+    
+#     if event_type and event_type != 'click':
+#         analytics = get_analytics()
+#         if analytics:
+#             try:
+#                 if session_id:
+#                     location = get_location_from_request(request)
+                    
+#                     user_id = None
+#                     if hasattr(request, 'user') and request.user.is_authenticated:
+#                         user_id = str(request.user.id)
+                    
+#                     sanitized_data = {}
+#                     for key, value in data.items():
+#                         if isinstance(value, str):
+#                             sanitized_data[key] = value[:500]
+#                         elif isinstance(value, (int, float, bool)):
+#                             sanitized_data[key] = value
+#                         elif isinstance(value, dict):
+#                             sanitized_data[key] = {
+#                                 k[:100]: str(v)[:500] 
+#                                 for k, v in list(value.items())[:20]
+#                             }
+                    
+#                     analytics.track_event(
+#                         session_id=session_id,
+#                         event_type=event_type,
+#                         event_data=sanitized_data,
+#                         user_id=user_id,
+#                         location=location
+#                     )
+#                 return JsonResponse({'success': True})
+#             except Exception as e:
+#                 logger.error(f"Event tracking error: {e}")
+#                 return JsonResponse(
+#                     {'success': False, 'error': 'Event tracking failed'},
+#                     status=500
+#                 )
+#         return JsonResponse({'success': True})
+    
+#     clicked_url = sanitize_url(
+#         data.get('url', ''),
+#         max_length=TRACK_CLICK_CONFIG['max_url_length']
+#     )
+#     query = sanitize_string(
+#         data.get('query', ''),
+#         max_length=TRACK_CLICK_CONFIG['max_query_length']
+#     )
+    
+#     if not session_id:
+#         return JsonResponse(
+#             {'success': False, 'error': 'Missing session_id'},
+#             status=400
+#         )
+    
+#     if not clicked_url:
+#         return JsonResponse(
+#             {'success': False, 'error': 'Missing or invalid URL'},
+#             status=400
+#         )
+    
+#     clicked_position = sanitize_int(data.get('position', 0), default=0, min_val=0, max_val=1000)
+#     result_id = sanitize_string(
+#         data.get('result_id', ''),
+#         max_length=TRACK_CLICK_CONFIG['max_result_id_length']
+#     )
+#     result_title = sanitize_string(
+#         data.get('title', ''),
+#         max_length=TRACK_CLICK_CONFIG['max_title_length']
+#     )
+#     result_source = sanitize_string(
+#         data.get('source', ''),
+#         max_length=TRACK_CLICK_CONFIG['max_source_length']
+#     )
+#     search_request_id = sanitize_string(
+#         data.get('request_id', ''),
+#         max_length=TRACK_CLICK_CONFIG['max_request_id_length']
+#     )
+    
+#     results_count = sanitize_int(data.get('results_count', 0), default=0, min_val=0, max_val=10000)
+    
+#     was_corrected = str(data.get('was_corrected', 'false')).lower() == 'true'
+#     corrected_query = sanitize_string(
+#         data.get('corrected_query', ''),
+#         max_length=TRACK_CLICK_CONFIG['max_corrected_query_length']
+#     )
+    
+#     time_to_click_ms = None
+#     raw_time = data.get('time_to_click_ms')
+#     if raw_time is not None:
+#         time_to_click_ms = sanitize_int(raw_time, default=0, min_val=0, max_val=3600000)
+#         if time_to_click_ms == 0:
+#             time_to_click_ms = None
+    
+#     user_id = None
+#     if hasattr(request, 'user') and request.user.is_authenticated:
+#         user_id = str(request.user.id)
+    
+#     location = get_location_from_request(request)
+    
+#     analytics = get_analytics()
+#     if analytics:
+#         try:
+#             analytics.track_click(
+#                 session_id=session_id,
+#                 query=query,
+#                 clicked_url=clicked_url,
+#                 clicked_position=clicked_position,
+#                 result_id=result_id,
+#                 result_title=result_title,
+#                 result_source=result_source,
+#                 user_id=user_id,
+#                 time_to_click_ms=time_to_click_ms,
+#                 location=location,
+#                 search_request_id=search_request_id,
+#                 results_count=results_count,
+#                 was_corrected=was_corrected,
+#                 corrected_query=corrected_query
+#             )
+            
+#             return JsonResponse({'success': True})
+#         except Exception as e:
+#             logger.error(f"Click tracking error: {e}")
+#             return JsonResponse(
+#                 {'success': False, 'error': 'Tracking failed'},
+#                 status=500
+#             )
+    
+#     return JsonResponse(
+#         {'success': False, 'error': 'Analytics not available'},
+#         status=503
+#     )
+
+
 # =============================================================================
 # VIEW: TRACK CLICK (Analytics)
 # =============================================================================
@@ -9396,6 +9574,13 @@ def track_click(request):
     
     location = get_location_from_request(request)
     
+    # Extract extra fields sent by the beacon for trending
+    result_data_type = sanitize_string(data.get('data_type', ''), max_length=100)
+    result_schema = sanitize_string(data.get('schema', ''), max_length=100)
+    result_summary = sanitize_string(data.get('summary', ''), max_length=500)
+    result_image = sanitize_string(data.get('image', ''), max_length=2000)
+    result_brand = sanitize_string(data.get('brand', data.get('source', '')), max_length=200)
+    
     analytics = get_analytics()
     if analytics:
         try:
@@ -9415,20 +9600,41 @@ def track_click(request):
                 was_corrected=was_corrected,
                 corrected_query=corrected_query
             )
-            
-            return JsonResponse({'success': True})
         except Exception as e:
             logger.error(f"Click tracking error: {e}")
             return JsonResponse(
                 {'success': False, 'error': 'Tracking failed'},
                 status=500
             )
+        
+        # === Feed trending cache (deduplicated per session) ===
+        if query:
+            try:
+                from .trending import cache_trending_result
+                cache_trending_result(
+                    query=query,
+                    top_result={
+                        'title': result_title,
+                        'url': clicked_url,
+                        'result_id': result_id,
+                        'source': result_brand,
+                        'category': result_data_type,
+                        'schema': result_schema,
+                        'summary': result_summary,
+                        'image': result_image,
+                    },
+                    city=location.get('city', '') if location else None,
+                    session_id=session_id,
+                )
+            except Exception as e:
+                logger.warning(f"Trending cache error in track_click: {e}")
+        
+        return JsonResponse({'success': True})
     
     return JsonResponse(
         {'success': False, 'error': 'Analytics not available'},
         status=503
     )
-
 
 # @require_GET
 # def click_redirect(request):
