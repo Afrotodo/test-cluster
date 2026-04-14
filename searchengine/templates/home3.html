@@ -1393,7 +1393,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
             // If clicking Local and no location yet, request it
             if (newScope === 'local' && !LocationManager.lat) {
-                LocationManager.requestLocation();
+                LocationManager.showToast('Location not available. Showing global results.');
+                return;
             }
 
             // Update active state
@@ -1774,8 +1775,8 @@ LocationManager.init();
         }
     });
 
-    // ==================== QUESTION CARD CLICKS ====================
-    document.querySelectorAll('.question-card').forEach(card => {
+  // ==================== QUESTION CARD CLICKS ====================
+    document.querySelectorAll('.question-card:not(.trending-card)').forEach(card => {
         card.addEventListener('click', function(e) {
             e.preventDefault();
             const query = this.dataset.query;
@@ -1790,7 +1791,6 @@ LocationManager.init();
             }
         });
     });
-
     // ==================== CYLINDER PLACEHOLDER ====================
     const rollerPhrases = [
         'Black genealogy and history',
