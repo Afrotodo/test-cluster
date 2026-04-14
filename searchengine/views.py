@@ -6796,6 +6796,616 @@ def _run_async(coro):
 # VIEW: SEARCH (IMAGE TAB REMOVED)
 # =============================================================================
 
+# def search(request):
+#     """
+#     Main search endpoint with dynamic tab filtering.
+    
+#     Supports filtering by:
+#     - data_type: content, service, product, person, media, location (tabs)
+#     - category: document_category values (secondary filter)
+#     - schema: document_schema values (tertiary filter)
+    
+#     Related searches are now handled inside execute_full_search().
+    
+#     ASYNC BRIDGE COMPATIBILITY:
+#       The bridge functions (execute_full_search, fetch_full_documents)
+#       are now async. This view stays synchronous and wraps those calls
+#       with _run_async() to avoid Django's SynchronousOnlyOperation error.
+#     """
+    
+#     # === 1. EXTRACT & VALIDATE PARAMETERS ===
+#     params = SearchParams(request)
+
+#     # === 0. PREVENT FORM RESUBMISSION ON TAB CLICKS ===
+#     if params.query and not request.GET.get('_rd'):
+#         from urllib.parse import urlparse
+#         from django.shortcuts import redirect
+#         referer = request.META.get('HTTP_REFERER', '')
+#         if referer:
+#             referer_path = urlparse(referer).path
+#             current_path = request.path
+#             if referer_path != current_path:
+#                 return redirect(request.get_full_path() + '&_rd=1')
+
+#     page = validate_page(request.GET.get('page', 1))
+#     per_page = validate_per_page(request.GET.get('per_page', 10))
+
+#     # === 1B. EXTRACT QUESTION PATH FIELDS ===
+#     document_uuid = request.GET.get('document_uuid', '').strip()
+#     search_source = request.GET.get('search_source', '').strip()
+#     answer = request.GET.get('answer', '').strip()
+#     answer_type = request.GET.get('answer_type', '').strip()
+#     is_question_path = (search_source == 'question' and bool(document_uuid))
+    
+#     request_id = params.request_id or f"{params.session_id}:{time.time()}"
+    
+#     user_id = None
+#     if hasattr(request, 'user') and request.user.is_authenticated:
+#         user_id = str(request.user.id)
+    
+#     client_info = get_full_client_info(request)
+#     client_ip = client_info.get('ip', '')
+#     location = client_info.get('location') or {}
+#     device = client_info.get('device') or {}
+#     user_agent = client_info.get('user_agent', '')
+    
+#     device_type = device.get('device_type', params.device_type or 'unknown')
+#     browser = device.get('browser', 'Unknown')
+#     browser_version = device.get('browser_version', '')
+#     os_name = device.get('os', 'Unknown')
+#     os_version = device.get('os_version', '')
+#     is_mobile = device.get('is_mobile', False)
+#     is_bot = device.get('is_bot', False)
+    
+#     # === 2. START/UPDATE SESSION (Analytics) ===
+#     analytics = get_analytics()
+#     if analytics:
+#         try:
+#             analytics.start_session(
+#                 session_id=params.session_id,
+#                 user_id=user_id,
+#                 device_type=device_type,
+#                 user_agent=user_agent,
+#                 ip_address=client_ip,
+#                 location=location,
+#                 referrer=request.META.get('HTTP_REFERER'),
+#                 browser=browser,
+#                 browser_version=browser_version,
+#                 os_name=os_name,
+#                 os_version=os_version,
+#                 is_mobile=is_mobile,
+#                 is_bot=is_bot
+#             )
+#         except Exception as e:
+#             logger.warning(f"Analytics start_session error: {e}")
+    
+#     # === 3. EXTRACT FILTERS (INCLUDING DYNAMIC TAB FILTERS) ===
+#     source_filter = request.GET.get('source')
+#     if source_filter in ('home', 'results_page', 'header', None, ''):
+#         source_filter = None
+    
+#     # Dynamic tab filters
+#     active_data_type = validate_data_type(request.GET.get('data_type', ''))
+#     active_category = sanitize_filter_value(request.GET.get('category', ''))
+#     active_schema = validate_schema(request.GET.get('schema', ''))
+    
+#     # Build filters dict
+#     filters = {
+#         'data_type': active_data_type,
+#         'category': active_category,
+#         'schema': active_schema,
+#         'source': sanitize_filter_value(source_filter) if source_filter else None,
+#         'time_range': sanitize_filter_value(request.GET.get('time', '')),
+#         'location': sanitize_filter_value(request.GET.get('location', '')),
+#         'sort': validate_sort(request.GET.get('sort', ''), ['relevance', 'recent', 'authority'], 'relevance'),
+#     }
+#     # Remove empty filters
+#     filters = {k: v for k, v in filters.items() if v}
+    
+#     safe_search = request.GET.get('safe', 'on') == 'on'
+    
+#     # User location coordinates
+#     user_location = None
+#     try:
+#         user_lat = request.GET.get('lat')
+#         user_lng = request.GET.get('lng')
+#         if user_lat and user_lng:
+#             lat = float(user_lat)
+#             lng = float(user_lng)
+#             if -90 <= lat <= 90 and -180 <= lng <= 180:
+#                 user_location = (lat, lng)
+#     except (TypeError, ValueError):
+#         pass
+    
+#     if not user_location and location:
+#         loc_lat = location.get('lat')
+#         loc_lng = location.get('lng')
+#         if loc_lat and loc_lng:
+#             try:
+#                 lat = float(loc_lat)
+#                 lng = float(loc_lng)
+#                 if lat != 0.0 and lng != 0.0 and -90 <= lat <= 90 and -180 <= lng <= 180:
+#                     user_location = (lat, lng)
+#             except (TypeError, ValueError):
+#                 pass
+    
+#     # === 4. SECURITY VALIDATION ===
+#     validator = SearchSecurityValidator()
+#     is_suspicious = False
+    
+#     is_valid, error = validator.validate_timestamp(params.timestamp)
+#     if not is_valid:
+#         logger.warning(f"Timestamp validation failed: {error}")
+    
+#     is_allowed, error = validator.check_rate_limit(params.session_id, params.client_fp)
+#     if not is_allowed:
+#         logger.warning(f"Rate limit exceeded: {params.session_id}")
+#         return render(request, 'results2.html', {
+#             'query': params.query,
+#             'results': [],
+#             'has_results': False,
+#             'error': 'Too many requests. Please wait a moment and try again.',
+#             'session_id': params.session_id,
+#             'display_total': 0,
+#             'total_results': 0,
+#             'facet_total': 0,
+#             'data_type_facets': [],
+#             'category_facets': [],
+#             'schema_facets': [],
+#             'active_data_type': active_data_type,
+#             'active_category': active_category,
+#             'active_schema': active_schema,
+#             'filters': filters,
+#             'facets': {},
+#             'safe_search': safe_search,
+#             'was_corrected': False,
+#             'corrected_query': params.query,
+#             'word_corrections': [],
+#             'corrections': {},
+#             'intent': {},
+#             'search_type': 'keyword' if params.is_keyword_search else 'semantic',
+#             'alt_mode': params.alt_mode,
+#             'related_searches': [],
+#             'suggestions': [],
+#             'featured': None,
+#             'answer': '',
+#             'answer_type': '',
+#             'pagination': None,
+#             'page': page,
+#             'per_page': per_page,
+#             'search_time': 0,
+#             'search_time_ms': 0,
+#             'from_cache': False,
+#             'from_semantic_cache': False,
+#             'search_strategy': 'keyword' if params.is_keyword_search else 'semantic',
+#             'device_type': device_type,
+#             'source': params.source,
+#             'user_city': location.get('city', '') if location else '',
+#             'user_country': location.get('country', '') if location else '',
+#             'data_type_labels': DATA_TYPE_LABELS,
+#             'category_labels': CATEGORY_LABELS,
+#             'search_source': search_source,
+#             'document_uuid': document_uuid,
+#             'is_question_path': is_question_path,
+#             'request_id': request_id,
+#         })
+    
+#     is_suspicious, reason = validator.detect_bot(params.typing_time_ms, params.request_sequence)
+#     if is_suspicious:
+#         logger.info(f"Suspicious request detected: {reason}")
+    
+#     if is_bot:
+#         is_suspicious = True
+#         logger.info(f"Bot detected via User-Agent: {user_agent[:100]}")
+    
+#     # === 5. EMPTY QUERY ===
+#     if not params.query:
+#         return render(request, 'results2.html', {
+#             'query': '',
+#             'results': [],
+#             'has_results': False,
+#             'session_id': params.session_id,
+#             'show_trending': True,
+#             'data_type_facets': [],
+#             'category_facets': [],
+#             'schema_facets': [],
+#             'active_data_type': '',
+#             'active_category': '',
+#             'active_schema': '',
+#             'display_total': 0,
+#             'total_results': 0,
+#             'facet_total': 0,
+#             'filters': filters,
+#             'facets': {},
+#             'safe_search': safe_search,
+#             'was_corrected': False,
+#             'corrected_query': '',
+#             'word_corrections': [],
+#             'corrections': {},
+#             'intent': {},
+#             'search_type': 'keyword' if params.is_keyword_search else 'semantic',
+#             'alt_mode': params.alt_mode,
+#             'related_searches': [],
+#             'suggestions': [],
+#             'featured': None,
+#             'answer': '',
+#             'answer_type': '',
+#             'categorized_results': {},
+#             'pagination': None,
+#             'page': page,
+#             'per_page': per_page,
+#             'search_time': 0,
+#             'search_time_ms': 0,
+#             'from_cache': False,
+#             'from_semantic_cache': False,
+#             'search_strategy': 'keyword' if params.is_keyword_search else 'semantic',
+#             'device_type': device_type,
+#             'source': params.source,
+#             'user_city': location.get('city', '') if location else '',
+#             'user_country': location.get('country', '') if location else '',
+#             'data_type_labels': DATA_TYPE_LABELS,
+#             'category_labels': CATEGORY_LABELS,
+#             'search_source': search_source,
+#             'document_uuid': document_uuid,
+#             'is_question_path': is_question_path,
+#             'request_id': request_id,
+#         })
+    
+#     # === 6. INITIALIZE ALL VARIABLES ===
+    
+#     result = {}
+#     results = []
+#     total_results = 0
+#     search_time = 0
+#     search_time_ms = 0
+#     search_strategy = 'keyword' if params.is_keyword_search else 'semantic'
+#     search_type = 'keyword' if params.is_keyword_search else 'semantic'
+#     was_corrected = False
+#     corrected_query = params.query
+#     word_corrections = []
+#     corrections = {}
+#     tuple_array = []
+#     intent = {}
+    
+#     data_type_facets = []
+#     category_facets = []
+#     schema_facets = []
+#     facet_total = 0
+    
+#     related_searches = []
+    
+#     has_filters = bool(active_data_type or active_category or active_schema)
+    
+#     # === 6A. GENERATE CACHE KEY ===
+#     cache_key = get_cache_key(
+#         'search', params.query, page, params.alt_mode,
+#         active_data_type, active_category, active_schema,
+#         json.dumps(filters, sort_keys=True)
+#     )
+    
+#     # === 6B. CHECK EXISTING RESULT CACHE ===
+#     cached_result = safe_cache_get(cache_key)
+    
+#     if cached_result and not filters:
+#         cached_result['from_cache'] = True
+#         cached_result['from_semantic_cache'] = False
+        
+#         if analytics:
+#             try:
+#                 cached_intent = cached_result.get('intent')
+#                 intent_type = None
+#                 if isinstance(cached_intent, dict):
+#                     intent_type = cached_intent.get('type')
+#                 elif isinstance(cached_intent, str):
+#                     intent_type = cached_intent
+                
+#                 analytics.track_search(
+#                     session_id=params.session_id,
+#                     query=params.query,
+#                     results_count=cached_result.get('total_results', 0),
+#                     alt_mode=params.alt_mode,
+#                     user_id=user_id,
+#                     location=location,
+#                     device_type=device_type,
+#                     search_time_ms=0,
+#                     search_strategy='cached',
+#                     corrected_query=cached_result.get('corrected_query'),
+#                     filters_applied=filters,
+#                     page=page,
+#                     intent=intent_type,
+#                     request_id=request_id,
+#                     browser=browser,
+#                     os_name=os_name,
+#                     is_mobile=is_mobile,
+#                     is_bot=is_bot
+#                 )
+#             except Exception as e:
+#                 logger.warning(f"Analytics track_search error (cached): {e}")
+        
+#         return render(request, 'results2.html', cached_result)
+    
+#     # === 7. ROUTE BASED ON ALT_MODE ===
+#     search_start_time = time.time()
+    
+#     if params.is_keyword_search:
+#         search_type = 'keyword'
+#         corrected_query = params.query
+#         was_corrected = False
+#         word_corrections = []
+#         corrections = {}
+#         tuple_array = []
+#         intent = {}
+        
+#         if detect_query_intent:
+#             try:
+#                 intent = detect_query_intent(corrected_query, tuple_array)
+#             except Exception as e:
+#                 logger.warning(f"Intent detection error: {e}")
+#                 intent = {}
+#     else:
+#         search_type = 'semantic'
+        
+#         if word_discovery_multi:
+#             try:
+#                 corrections, tuple_array, corrected_query = word_discovery_multi(params.query)
+#                 was_corrected = params.query.lower() != corrected_query.lower()
+#                 word_corrections = build_word_corrections(params.query, corrected_query)
+#             except Exception as e:
+#                 logger.error(f"Word discovery error: {e}")
+#                 corrected_query = params.query
+#                 was_corrected = False
+#                 word_corrections = []
+#                 corrections = {}
+#                 tuple_array = []
+#         else:
+#             corrected_query = params.query
+#             was_corrected = False
+#             word_corrections = []
+#             corrections = {}
+#             tuple_array = []
+        
+#         intent = {}
+#         if detect_query_intent:
+#             try:
+#                 intent = detect_query_intent(corrected_query, tuple_array)
+#             except Exception as e:
+#                 logger.warning(f"Intent detection error: {e}")
+#                 intent = {}
+    
+#     # === 8. EXECUTE SEARCH ===
+#     if execute_full_search:
+#         try:
+#             # _run_async wraps the async bridge call for sync context
+#             result = _run_async(execute_full_search(
+#                 query=params.query,
+#                 session_id=params.session_id,
+#                 filters=filters,
+#                 page=page,
+#                 per_page=per_page,
+#                 alt_mode=params.alt_mode,
+#                 user_location=user_location,
+#                 pos_tags=tuple_array if params.is_semantic_search else [],
+#                 safe_search=safe_search,
+#                 search_source=search_source,
+#                 answer=answer if is_question_path else None,
+#                 answer_type=answer_type if is_question_path else None,
+#                 document_uuid=document_uuid if is_question_path else None,
+#             ))
+            
+#             results = result.get('results', [])
+#             total_results = result.get('total', 0)
+#             search_time = result.get('search_time', 0)
+#             search_strategy = result.get('search_strategy', search_type)
+            
+#             # === Get correction info from bridge ===
+#             bridge_corrected = result.get('corrected_query', params.query)
+#             if bridge_corrected and bridge_corrected.lower() != params.query.lower():
+#                 corrected_query = bridge_corrected
+#                 was_corrected = True
+#                 word_corrections = result.get('word_discovery', {}).get('corrections', [])
+            
+#             # Get facets from the search result
+#             data_type_facets = result.get('data_type_facets', [])
+#             category_facets = result.get('category_facets', [])
+#             schema_facets = result.get('schema_facets', [])
+#             facet_total = result.get('facet_total', 0)
+            
+#             # Get related searches from the search result
+#             related_searches = result.get('related_searches', [])
+
+#         except Exception as e:
+#             logger.error(f"Search execution error: {e}", exc_info=True)
+    
+#     # === 9. TRACK SEARCH (Analytics) ===
+#     if analytics:
+#         try:
+#             intent_type = None
+#             if isinstance(intent, dict):
+#                 intent_type = intent.get('type')
+#             elif isinstance(intent, str):
+#                 intent_type = intent
+            
+#             analytics.track_search(
+#                 session_id=params.session_id,
+#                 query=params.query,
+#                 results_count=total_results,
+#                 alt_mode=params.alt_mode,
+#                 user_id=user_id,
+#                 location=location,
+#                 device_type=device_type,
+#                 search_time_ms=search_time_ms,
+#                 search_strategy=search_strategy,
+#                 corrected_query=corrected_query if was_corrected else None,
+#                 filters_applied=filters if filters else None,
+#                 page=page,
+#                 intent=intent_type,
+#                 request_id=request_id,
+#                 browser=browser,
+#                 os_name=os_name,
+#                 is_mobile=is_mobile,
+#                 is_bot=is_bot
+#             )
+#         except Exception as e:
+#             logger.warning(f"Analytics track_search error: {e}")
+    
+#     # === 10. ZERO RESULTS HANDLING ===
+#     suggestions = []
+#     if not results:
+#         try:
+#             suggestions = handle_zero_results(params.query, corrected_query, filters)
+#         except Exception as e:
+#             logger.warning(f"Zero results handling error: {e}")
+#             suggestions = []
+    
+#     # === 11. USE FACETS FROM SEARCH RESULT ===
+#     if facet_total == 0:
+#         facet_total = sum(f.get('count', 0) for f in data_type_facets)
+    
+#     display_total = facet_total if facet_total > 0 else total_results
+#     pagination_total = total_results
+    
+#     # === 12. GET SUPPLEMENTARY DATA ===
+#     facets = {}
+#     featured = None
+    
+#     if results:
+#         if get_facets:
+#             try:
+#                 facets = get_facets(corrected_query)
+#             except Exception:
+#                 pass
+        
+#         if not related_searches and get_related_searches:
+#             try:
+#                 related_searches = get_related_searches(corrected_query, intent)
+#             except Exception:
+#                 pass
+        
+#         if page == 1 and get_featured_result:
+#             try:
+#                 featured = get_featured_result(corrected_query, intent, results)
+#             except Exception:
+#                 pass
+    
+#     # === 13. CATEGORIZE & PAGINATE ===
+#     categorized_results = categorize_results(results)
+#     pagination = build_pagination(page, per_page, pagination_total)
+    
+#     # === 14. LOG EVENTS ===
+#     if log_search_event:
+#         try:
+#             log_search_event(
+#                 query=params.query,
+#                 corrected_query=corrected_query,
+#                 session_id=params.session_id,
+#                 intent=intent,
+#                 total_results=total_results,
+#                 filters=filters,
+#                 page=page
+#             )
+#         except Exception as e:
+#             logger.warning(f"Search event logging error: {e}")
+    
+#     log_search_analytics(params, search_type, total_results, is_suspicious)
+    
+#     map_data = process_address_maps(request, results)
+    
+#     # === 15. BUILD CONTEXT ===
+#     context = {
+#         # Core search
+#         'query': params.query,
+#         **map_data,
+#         'corrected_query': corrected_query,
+#         'was_corrected': was_corrected,
+#         'word_corrections': word_corrections,
+#         'corrections': corrections,
+#         'intent': intent,
+#         'search_type': search_type,
+#         'alt_mode': params.alt_mode,
+#         'facet_total': facet_total,
+#         'display_total': display_total,
+        
+#         # Results
+#         'results': results,
+#         'categorized_results': categorized_results,
+#         'total_results': total_results,
+#         'has_results': len(results) > 0,
+#         'featured': featured,
+#         'related_searches': related_searches,
+#         'answer': result.get('answer', ''),
+#         'answer_type': result.get('answer_type', ''),
+        
+#         # Filters
+#         'filters': filters,
+#         'facets': facets,
+#         'safe_search': safe_search,
+        
+#         # Dynamic tab facets
+#         'data_type_facets': data_type_facets,
+#         'category_facets': category_facets,
+#         'schema_facets': schema_facets,
+        
+#         # Active filters
+#         'active_data_type': active_data_type,
+#         'active_category': active_category,
+#         'active_schema': active_schema,
+        
+#         # Pagination
+#         'pagination': pagination,
+#         'page': page,
+#         'per_page': per_page,
+        
+#         # Suggestions
+#         'suggestions': suggestions,
+        
+#         # Session & tracking
+#         'session_id': params.session_id,
+#         'request_id': request_id,
+#         'search_time': search_time,
+#         'search_time_ms': search_time_ms,
+#         'from_cache': False,
+#         'from_semantic_cache': False,
+#         'search_strategy': search_strategy,
+        
+#         # Device & location
+#         'device_type': device_type,
+#         'source': params.source,
+#         'user_city': location.get('city', '') if location else '',
+#         'user_country': location.get('country', '') if location else '',
+        
+#         # Label mappings
+#         'data_type_labels': DATA_TYPE_LABELS,
+#         'category_labels': CATEGORY_LABELS,
+
+#         # Question path tracking
+#         'search_source': search_source,
+#         'document_uuid': document_uuid,
+#         'is_question_path': is_question_path,
+#     }
+    
+#     # === 16. CACHE RESULTS ===
+#     if not filters and total_results > 0:
+#         safe_cache_set(cache_key, context, SEARCH_CONFIG['cache_timeout'])
+
+#     if results and len(results) > 0:
+#         trending_city = location.get('city', '') if location else ''
+#         cache_trending_result(query=params.query, top_result=results[0], city=trending_city)
+
+#     if results and len(results) > 0:
+#         top_result = results[0]
+        
+#         loc_city = location.get('city', '') if location else ''
+#         loc_region = location.get('region', '') if location else ''
+#         loc_country = location.get('country', '') if location else ''
+        
+#         for loc_value in [loc_city, loc_region, loc_country]:
+#             if loc_value:
+#                 cache_trending_result(query=params.query, top_result=top_result, city=loc_value)
+        
+#         cache_trending_result(query=params.query, top_result=top_result, city=None)
+    
+#     return render(request, 'results2.html', context)
+
 def search(request):
     """
     Main search endpoint with dynamic tab filtering.
@@ -7387,25 +7997,10 @@ def search(request):
     if not filters and total_results > 0:
         safe_cache_set(cache_key, context, SEARCH_CONFIG['cache_timeout'])
 
-    if results and len(results) > 0:
-        trending_city = location.get('city', '') if location else ''
-        cache_trending_result(query=params.query, top_result=results[0], city=trending_city)
+    # NOTE: Trending is now driven by clicks only — see click_redirect view.
+    # No cache_trending_result() calls here.
 
-    if results and len(results) > 0:
-        top_result = results[0]
-        
-        loc_city = location.get('city', '') if location else ''
-        loc_region = location.get('region', '') if location else ''
-        loc_country = location.get('country', '') if location else ''
-        
-        for loc_value in [loc_city, loc_region, loc_country]:
-            if loc_value:
-                cache_trending_result(query=params.query, top_result=top_result, city=loc_value)
-        
-        cache_trending_result(query=params.query, top_result=top_result, city=None)
-    
     return render(request, 'results2.html', context)
-
 
 # =============================================================================
 # VIEW: CATEGORY ROUTER
@@ -8835,6 +9430,87 @@ def track_click(request):
     )
 
 
+# @require_GET
+# def click_redirect(request):
+#     """Redirect-based click tracking."""
+    
+#     destination_url = sanitize_url(
+#         request.GET.get('url', ''),
+#         max_length=TRACK_CLICK_CONFIG['max_url_length']
+#     )
+    
+#     if not destination_url:
+#         return HttpResponseBadRequest('Missing or invalid URL parameter')
+    
+#     client_ip = get_client_ip(request)
+    
+#     session_id = sanitize_string(
+#         request.GET.get('session_id', ''),
+#         max_length=TRACK_CLICK_CONFIG['max_session_id_length']
+#     )
+    
+#     is_allowed, _ = TrackClickRateLimiter.check_rate_limit(session_id, client_ip)
+    
+#     if is_allowed:
+#         query = sanitize_string(
+#             request.GET.get('query', ''),
+#             max_length=TRACK_CLICK_CONFIG['max_query_length']
+#         )
+#         clicked_position = sanitize_int(request.GET.get('position', 0), default=0, min_val=0, max_val=1000)
+#         result_id = sanitize_string(
+#             request.GET.get('result_id', ''),
+#             max_length=TRACK_CLICK_CONFIG['max_result_id_length']
+#         )
+#         result_title = sanitize_string(
+#             request.GET.get('title', ''),
+#             max_length=TRACK_CLICK_CONFIG['max_title_length']
+#         )
+#         result_source = sanitize_string(
+#             request.GET.get('source', ''),
+#             max_length=TRACK_CLICK_CONFIG['max_source_length']
+#         )
+#         search_request_id = sanitize_string(
+#             request.GET.get('request_id', ''),
+#             max_length=TRACK_CLICK_CONFIG['max_request_id_length']
+#         )
+        
+#         results_count = sanitize_int(request.GET.get('results_count', 0), default=0, min_val=0, max_val=10000)
+#         was_corrected = request.GET.get('was_corrected', 'false').lower() == 'true'
+#         corrected_query = sanitize_string(
+#             request.GET.get('corrected_query', ''),
+#             max_length=TRACK_CLICK_CONFIG['max_corrected_query_length']
+#         )
+        
+#         user_id = None
+#         if hasattr(request, 'user') and request.user.is_authenticated:
+#             user_id = str(request.user.id)
+        
+#         location = get_location_from_request(request)
+        
+#         analytics = get_analytics()
+#         if analytics and session_id:
+#             try:
+#                 analytics.track_click(
+#                     session_id=session_id,
+#                     query=query,
+#                     clicked_url=destination_url,
+#                     clicked_position=clicked_position,
+#                     result_id=result_id,
+#                     result_title=result_title,
+#                     result_source=result_source,
+#                     user_id=user_id,
+#                     time_to_click_ms=None,
+#                     location=location,
+#                     search_request_id=search_request_id,
+#                     results_count=results_count,
+#                     was_corrected=was_corrected,
+#                     corrected_query=corrected_query
+#                 )
+#             except Exception as e:
+#                 logger.warning(f"Click redirect tracking error: {e}")
+    
+#     return redirect(destination_url)
+
 @require_GET
 def click_redirect(request):
     """Redirect-based click tracking."""
@@ -8913,6 +9589,24 @@ def click_redirect(request):
                 )
             except Exception as e:
                 logger.warning(f"Click redirect tracking error: {e}")
+        
+        # === Feed trending cache (deduplicated per session) ===
+        if session_id and query:
+            try:
+                from .trending import cache_trending_result
+                cache_trending_result(
+                    query=query,
+                    top_result={
+                        'title': result_title,
+                        'url': destination_url,
+                        'result_id': result_id,
+                        'source': result_source,
+                    },
+                    city=location.get('city', '') if location else None,
+                    session_id=session_id,
+                )
+            except Exception as e:
+                logger.warning(f"Trending cache error in click_redirect: {e}")
     
     return redirect(destination_url)
 
