@@ -458,6 +458,56 @@
             line-height: 1.4;
         }
 
+        /* ==================== SCOPE BUTTONS ==================== */
+        .scope-buttons {
+            display: flex;
+            justify-content: center;
+            gap: var(--space-sm);
+            margin-top: var(--space-md);
+        }
+
+        .scope-btn {
+            padding: 7px 22px;
+            border: 1.5px solid var(--gray-200);
+            border-radius: 100px;
+            background: var(--warm-white);
+            font-family: var(--font-body);
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--gray-500);
+            cursor: pointer;
+            transition: all var(--transition-fast);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .scope-btn:hover {
+            border-color: var(--gray-300);
+            color: var(--gray-700);
+            background: var(--gray-100);
+        }
+
+        .scope-btn.active {
+            border-color: var(--green);
+            color: var(--green);
+            background: rgba(45, 106, 79, 0.06);
+            font-weight: 600;
+        }
+
+        .scope-btn svg {
+            width: 15px;
+            height: 15px;
+            flex-shrink: 0;
+        }
+
+        @media (max-width: 480px) {
+            .scope-btn {
+                padding: 6px 16px;
+                font-size: 13px;
+            }
+        }
+
         /* ==================== COMMUNITY QUESTIONS ==================== */
         .community-section {
             width: 100%;
@@ -549,54 +599,6 @@
             border-radius: 20px;
             font-weight: 500;
         }
-
-        /* ==================== CATEGORY PILLS ==================== */
-        .categories-section {
-            width: 100%;
-            max-width: 720px;
-            margin-top: var(--space-2xl);
-        }
-
-        .category-pills {
-            display: flex;
-            flex-wrap: wrap;
-            justify-content: center;
-            gap: var(--space-sm);
-        }
-
-        .category-pill {
-            display: flex;
-            align-items: center;
-            gap: var(--space-sm);
-            padding: var(--space-sm) var(--space-md);
-            background: var(--warm-white);
-            border: 1px solid var(--gray-200);
-            border-radius: 100px;
-            font-size: 14px;
-            font-weight: 500;
-            color: var(--gray-700);
-            text-decoration: none;
-            transition: all var(--transition-fast);
-            cursor: pointer;
-        }
-
-        .category-pill:hover {
-            border-color: var(--gray-300);
-            background: var(--gray-100);
-            transform: translateY(-1px);
-        }
-
-        .category-pill .pill-icon {
-            width: 18px;
-            height: 18px;
-        }
-
-        .category-pill.business .pill-icon { color: var(--green); }
-        .category-pill.culture .pill-icon { color: var(--gold); }
-        .category-pill.health .pill-icon { color: var(--red); }
-        .category-pill.news .pill-icon { color: #4a90d9; }
-        .category-pill.community .pill-icon { color: #9b59b6; }
-        .category-pill.advocacy .pill-icon { color: var(--red-deep); }
 
         /* ==================== FOOTER ==================== */
         .footer {
@@ -796,15 +798,6 @@
                 margin-left: 0;
             }
 
-            .category-pills {
-                gap: var(--space-xs);
-            }
-
-            .category-pill {
-                padding: var(--space-xs) var(--space-sm);
-                font-size: 13px;
-            }
-
             .footer-content {
                 flex-direction: column;
                 text-align: center;
@@ -895,53 +888,40 @@
     text-decoration-color: var(--gray-500);
 }
 
-/* Enable location banner (shown when no location) */
-.location-enable-banner {
+/* Location notification toast */
+.location-toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: var(--gray-700);
+    color: var(--warm-white);
+    font-family: var(--font-body);
+    font-size: 13px;
+    font-weight: 500;
+    padding: 10px 20px;
+    border-radius: 10px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    z-index: 300;
+    opacity: 0;
+    transition: opacity 0.3s ease, transform 0.3s ease;
+    pointer-events: none;
     display: flex;
     align-items: center;
-    gap: var(--space-sm);
-    max-width: 640px;
-    width: 100%;
-    margin-top: var(--space-md);
-    padding: var(--space-sm) var(--space-md);
-    background: var(--warm-white);
-    border: 1px solid var(--gray-200);
-    border-radius: 10px;
-    font-size: 13px;
-    color: var(--gray-500);
-    cursor: pointer;
-    transition: all var(--transition-fast);
-    opacity: 0;
-    transform: translateY(4px);
+    gap: 8px;
+    max-width: 360px;
+    text-align: center;
 }
 
-.location-enable-banner.visible {
+.location-toast.show {
     opacity: 1;
-    transform: translateY(0);
-    transition: opacity 0.4s ease 0.2s, transform 0.4s ease 0.2s;
+    transform: translateX(-50%) translateY(0);
 }
 
-.location-enable-banner:hover {
-    border-color: var(--green);
-    background: rgba(45, 106, 79, 0.03);
-}
-
-.location-enable-banner svg {
+.location-toast svg {
     width: 16px;
     height: 16px;
-    color: var(--gray-500);
     flex-shrink: 0;
-}
-
-.location-enable-banner .loc-enable-text {
-    flex: 1;
-}
-
-.location-enable-banner .loc-enable-btn {
-    color: var(--green);
-    font-weight: 600;
-    font-size: 13px;
-    white-space: nowrap;
 }
 
 /* Trending section label with location */
@@ -974,28 +954,6 @@
 body.has-location .loc-only {
     display: flex;
 }
-
-body.has-location .no-loc-only {
-    display: none;
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -1105,30 +1063,6 @@ body.has-location .no-loc-only {
                 </svg>
                 <span>Home</span>
             </a>
-            <!-- <a href="" class="mobile-nav-item">
-                <svg viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M12 7V3H2v18h20V7H12zM6 19H4v-2h2v2zm0-4H4v-2h2v2zm0-4H4V9h2v2zm0-4H4V5h2v2zm4 12H8v-2h2v2zm0-4H8v-2h2v2zm0-4H8V9h2v2zm0-4H8V5h2v2zm10 12h-8v-2h2v-2h-2v-2h2v-2h-2V9h8v10zm-2-8h-2v2h2v-2zm0 4h-2v2h2v-2z"/>
-                </svg>
-                <span>Business</span>
-            </a> -->
-            <!-- <a href="" class="mobile-nav-item">
-                <svg viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9c0-.46-.04-.92-.1-1.36-.98 1.37-2.58 2.26-4.4 2.26-3.03 0-5.5-2.47-5.5-5.5 0-1.82.89-3.42 2.26-4.4-.44-.06-.9-.1-1.36-.1z"/>
-                </svg>
-                <span>Culture</span>
-            </a> -->
-            <!-- <a href="" class="mobile-nav-item">
-                <svg viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
-                </svg>
-                <span>Health</span>
-            </a> -->
-            <!-- <a href="" class="mobile-nav-item">
-                <svg viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z"/>
-                </svg>
-                <span>News</span>
-            </a> -->
             <div class="mobile-nav-divider"></div>
             {% if user.is_authenticated %}
             <a href="" class="mobile-nav-item">
@@ -1168,11 +1102,6 @@ body.has-location .no-loc-only {
         </div>
         
         <nav class="header-nav">
-            <!-- <a href="" class="nav-link">Business</a>
-            <a href="" class="nav-link">Culture</a>
-            <a href="" class="nav-link">Health</a>
-            <a href="" class="nav-link">News</a>
-            <a href="" class="nav-link">Community</a> -->
         </nav>
 
         <div class="header-right">
@@ -1196,15 +1125,11 @@ body.has-location .no-loc-only {
                     <span class="beta-badge">Beta</span>
                 </h1>
                 <p class="hero-tagline">
-               
-
                     The knowledge engine built for our culture.<br>
-    
                     <em>Ask anything. Find everything.</em>
                 </p>
                 <p class="hero-subtitle">
                     Discover businesses, explore history, find trusted information within our global community.
-                    <!-- Discover Black-owned businesses, find resources, and connect with your global community. -->
                 </p>
             </section>
 
@@ -1227,6 +1152,7 @@ body.has-location .no-loc-only {
                                     autocomplete="off"
                                 >
                                 <input type="hidden" id="session-id-field" name="session_id" value="">
+                                <input type="hidden" id="scope-field" name="scope" value="global">
                                 <button type="submit" class="search-button" id="search-button">
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                                         <path d="M5 12h14M12 5l7 7-7 7"/>
@@ -1236,6 +1162,24 @@ body.has-location .no-loc-only {
                         </div>
                         <div class="search-results" id="search-results"></div>
                     </form>
+
+                    <!-- Scope Buttons -->
+                    <div class="scope-buttons" id="scope-buttons">
+                        <button type="button" class="scope-btn" data-scope="local" id="scope-local">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/>
+                                <circle cx="12" cy="10" r="3"/>
+                            </svg>
+                            Local
+                        </button>
+                        <button type="button" class="scope-btn active" data-scope="global" id="scope-global">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"/>
+                                <path d="M2 12h20M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10A15.3 15.3 0 0112 2z"/>
+                            </svg>
+                            Global
+                        </button>
+                    </div>
                 </div>
             </section>
 
@@ -1250,14 +1194,13 @@ body.has-location .no-loc-only {
     <span class="loc-change" id="location-change">change</span>
 </div>
 
-<!-- Enable location banner (shown when no location) -->
-<div class="location-enable-banner no-loc-only" id="location-enable-banner">
+<!-- Location notification toast -->
+<div class="location-toast" id="location-toast">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/>
         <circle cx="12" cy="10" r="3"/>
     </svg>
-    <span class="loc-enable-text">Enable location for nearby results</span>
-    <span class="loc-enable-btn">Enable</span>
+    <span id="location-toast-msg">Unable to detect your location. Results shown globally.</span>
 </div>
 
 
@@ -1270,8 +1213,6 @@ body.has-location .no-loc-only {
                     <svg class="section-icon" viewBox="0 0 24 24" fill="currentColor" style="color: var(--red);">
                         <path d="M13.5.67s.74 2.65.74 4.8c0 2.06-1.35 3.73-3.41 3.73-2.07 0-3.63-1.67-3.63-3.73l.03-.36C5.21 7.51 4 10.62 4 14c0 4.42 3.58 8 8 8s8-3.58 8-8C20 8.61 17.41 3.8 13.5.67zM11.71 19c-1.78 0-3.22-1.4-3.22-3.14 0-1.62 1.05-2.76 2.81-3.12 1.77-.36 3.6-1.21 4.62-2.58.39 1.29.59 2.65.59 4.04 0 2.65-2.15 4.8-4.8 4.8z"/>
                     </svg>
-
-                    <!-- <span class="section-title">Trending in {{ trending_label }}</span> -->
 
                     <span class="section-title">
                     Trending
@@ -1302,45 +1243,6 @@ body.has-location .no-loc-only {
 {% endif %}
 
 
-
-
-
-            <!-- Category Pills -->
-            <section class="categories-section">
-                <div class="category-pills">
-                    <!-- <a href="" class="category-pill business">
-                        <svg class="pill-icon" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M12 7V3H2v18h20V7H12zM6 19H4v-2h2v2zm0-4H4v-2h2v2zm0-4H4V9h2v2zm0-4H4V5h2v2zm4 12H8v-2h2v2zm0-4H8v-2h2v2zm0-4H8V9h2v2zm0-4H8V5h2v2zm10 12h-8v-2h2v-2h-2v-2h2v-2h-2V9h8v10zm-2-8h-2v2h2v-2zm0 4h-2v2h2v-2z"/>
-                        </svg>
-                        Business
-                    </a> -->
-                    <!-- <a href="" class="category-pill culture">
-                        <svg class="pill-icon" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9c0-.46-.04-.92-.1-1.36-.98 1.37-2.58 2.26-4.4 2.26-3.03 0-5.5-2.47-5.5-5.5 0-1.82.89-3.42 2.26-4.4-.44-.06-.9-.1-1.36-.1z"/>
-                        </svg>
-                        Culture
-                    </a> -->
-                    <!-- <a href="" class="category-pill health">
-                        <svg class="pill-icon" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
-                        </svg>
-                        Health
-                    </a> -->
-                    <!-- <a href="" class="category-pill news">
-                        <svg class="pill-icon" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z"/>
-                        </svg>
-                        News
-                    </a> -->
-                    <!-- <a href="" class="category-pill community">
-                        <svg class="pill-icon" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/>
-                        </svg>
-                        Community
-                    </a> -->
-        
-                </div>
-            </section>
         </div>
 
         <!-- Footer -->
@@ -1443,8 +1345,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
         questionUUID: null,
         isQuestion: false,
-        questionAnswer: null,       // ← NEW
-        questionAnswerType: null,   // ← NEW
+        questionAnswer: null,
+        questionAnswerType: null,
 
         reset: function() {
             this.typingStartTime = null;
@@ -1452,8 +1354,8 @@ document.addEventListener('DOMContentLoaded', function() {
             this.resultCount = 0;
             this.questionUUID = null;
             this.isQuestion = false;
-            this.questionAnswer = null;       // ← NEW
-            this.questionAnswerType = null;   // ← NEW
+            this.questionAnswer = null;
+            this.questionAnswerType = null;
         },
 
         getTypingTime: function() {
@@ -1494,6 +1396,31 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
 
+    // ==================== SCOPE BUTTONS ====================
+    const scopeButtons = document.querySelectorAll('.scope-btn');
+    const scopeField = document.getElementById('scope-field');
+    let currentScope = 'global';
+
+    scopeButtons.forEach(btn => {
+        btn.addEventListener('click', function() {
+            const newScope = this.dataset.scope;
+
+            // If clicking Local and no location yet, request it
+            if (newScope === 'local' && !LocationManager.lat) {
+                LocationManager.requestLocation();
+            }
+
+            // Update active state
+            scopeButtons.forEach(b => b.classList.remove('active'));
+            this.classList.add('active');
+            currentScope = newScope;
+
+            // Update hidden field
+            if (scopeField) {
+                scopeField.value = currentScope;
+            }
+        });
+    });
 
 
 // ==================== LOCATION ====================
@@ -1509,9 +1436,6 @@ const LocationManager = {
     cityName: null,
     state: null,
 
-    /**
-     * Initialize — check cookie first, otherwise show enable banner.
-     */
     init: function() {
         const saved = this.getCookie();
         if (saved) {
@@ -1521,14 +1445,11 @@ const LocationManager = {
             this.state = saved.state;
             this.applyLocation();
         } else {
-            this.showEnableBanner();
+            // Auto-request location silently
+            this.requestLocation();
         }
     },
 
-    /**
-     * Request location from browser Geolocation API.
-     * Only call this from a user gesture (click).
-     */
     requestLocation: function() {
         if (!navigator.geolocation) {
             console.warn('Geolocation not supported');
@@ -1543,21 +1464,16 @@ const LocationManager = {
             },
             (error) => {
                 console.warn('Location denied:', error.message);
-                // Optionally try IP-based fallback here
-                this.showEnableBanner();
+                this.showToast('Unable to detect your location. Results shown globally.');
             },
             {
                 enableHighAccuracy: false,
                 timeout: 8000,
-                maximumAge: 300000 // cache for 5 min
+                maximumAge: 300000
             }
         );
     },
 
-    /**
-     * Convert lat/lng to city name using free Nominatim API.
-     * For production, consider caching or using your own endpoint.
-     */
     reverseGeocode: async function() {
         try {
             const url = `${this.GEOCODE_API}?lat=${this.lat}&lon=${this.lng}&format=json`;
@@ -1579,15 +1495,9 @@ const LocationManager = {
         }
     },
 
-    /**
-     * Apply location to the UI — update indicator, body class,
-     * trending label, and make coords available for search.
-     */
     applyLocation: function() {
-        // Add body class to toggle loc-only / no-loc-only elements
         document.body.classList.add('has-location');
 
-        // Update location indicator text
         const nameEl = document.getElementById('location-name');
         if (nameEl) {
             const display = this.state
@@ -1596,26 +1506,29 @@ const LocationManager = {
             nameEl.textContent = display;
         }
 
-        // Animate in the indicator
         const indicator = document.getElementById('location-indicator');
         if (indicator) {
             setTimeout(() => indicator.classList.add('visible'), 100);
         }
 
-        // Update trending label
         const trendLabel = document.getElementById('trending-location-label');
         if (trendLabel) {
             trendLabel.textContent = `in ${this.cityName}`;
         }
 
-        // Store coords in hidden fields for search form
         this.addSearchCoords();
+
+        // Auto-activate Local button when location becomes available
+        const localBtn = document.getElementById('scope-local');
+        const globalBtn = document.getElementById('scope-global');
+        if (localBtn && globalBtn) {
+            scopeButtons.forEach(b => b.classList.remove('active'));
+            localBtn.classList.add('active');
+            currentScope = 'local';
+            if (scopeField) scopeField.value = 'local';
+        }
     },
 
-    /**
-     * Add lat/lng as hidden fields in the search form
-     * so they're sent with every search request.
-     */
     addSearchCoords: function() {
         const form = document.getElementById('search-form');
         if (!form) return;
@@ -1640,17 +1553,17 @@ const LocationManager = {
         lngField.value = this.lng;
     },
 
-    /**
-     * Show the "Enable location" banner with animation.
-     */
-    showEnableBanner: function() {
-        const banner = document.getElementById('location-enable-banner');
-        if (banner) {
-            setTimeout(() => banner.classList.add('visible'), 300);
-        }
+    showToast: function(message, duration) {
+        duration = duration || 4000;
+        const toast = document.getElementById('location-toast');
+        const msgEl = document.getElementById('location-toast-msg');
+        if (!toast || !msgEl) return;
+        msgEl.textContent = message;
+        toast.classList.add('show');
+        setTimeout(function() {
+            toast.classList.remove('show');
+        }, duration);
     },
-
-    // ── Cookie helpers ──
 
     saveCookie: function() {
         const data = JSON.stringify({
@@ -1680,8 +1593,6 @@ const LocationManager = {
         document.cookie = `${this.COOKIE_NAME}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`;
     },
 
-    // ── US state abbreviation helper ──
-
     getStateAbbr: function(state) {
         const abbrs = {
             'Alabama':'AL','Alaska':'AK','Arizona':'AZ','Arkansas':'AR',
@@ -1706,19 +1617,7 @@ const LocationManager = {
     }
 };
 
-// ── Wire up location UI ──
-
-// Enable banner click → request permission
-const enableBanner = document.getElementById('location-enable-banner');
-if (enableBanner) {
-    enableBanner.addEventListener('click', function() {
-        this.style.opacity = '0.5';
-        this.style.pointerEvents = 'none';
-        LocationManager.requestLocation();
-    });
-}
-
-// "change" link → re-request
+// Wire up location UI
 const changeBtn = document.getElementById('location-change');
 if (changeBtn) {
     changeBtn.addEventListener('click', function() {
@@ -1727,22 +1626,7 @@ if (changeBtn) {
     });
 }
 
-// Initialize on load
 LocationManager.init();
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
     // ==================== SEARCH AUTOCOMPLETE ====================
@@ -1774,8 +1658,8 @@ LocationManager.init();
         SearchState.selectedFromDropdown = false;
         SearchState.questionUUID = null;
         SearchState.isQuestion = false;
-        SearchState.questionAnswer = null;       // ← NEW
-        SearchState.questionAnswerType = null;   // ← NEW
+        SearchState.questionAnswer = null;
+        SearchState.questionAnswerType = null;
 
         if (query.length < 2) {
             hideDropdown();
@@ -1800,7 +1684,6 @@ LocationManager.init();
         }
     }
 
-    // ==================== RENDER DROPDOWN ====================
     function renderDropdown(suggestions) {
         if (!suggestions.length) {
             searchResults.innerHTML = '<div class="suggestion-item no-results">No results found</div>';
@@ -1834,7 +1717,6 @@ LocationManager.init();
         });
     }
 
-    // ==================== SELECT SUGGESTION ====================
     function selectSuggestion(index) {
         if (index >= 0 && index < currentSuggestions.length) {
             isSelectingSuggestion = true;
@@ -1846,13 +1728,13 @@ LocationManager.init();
             if (suggestion.entity_type === 'question' && suggestion.document_uuid) {
                 SearchState.questionUUID = suggestion.document_uuid;
                 SearchState.isQuestion = true;
-                SearchState.questionAnswer = suggestion.answer || '';           // ← NEW
-                SearchState.questionAnswerType = suggestion.answer_type || 'UNKNOWN'; // ← NEW
+                SearchState.questionAnswer = suggestion.answer || '';
+                SearchState.questionAnswerType = suggestion.answer_type || 'UNKNOWN';
             } else {
                 SearchState.questionUUID = null;
                 SearchState.isQuestion = false;
-                SearchState.questionAnswer = null;       // ← NEW
-                SearchState.questionAnswerType = null;   // ← NEW
+                SearchState.questionAnswer = null;
+                SearchState.questionAnswerType = null;
             }
 
             hideDropdown();
@@ -1928,6 +1810,11 @@ LocationManager.init();
         const query = searchInput.value.trim();
         if (!query) return;
 
+        // Always update scope hidden field before submit
+        if (scopeField) {
+            scopeField.value = currentScope;
+        }
+
         const params = {
             session_id: SearchState.sessionId,
             request_id: SearchSecurity.generateUUID(),
@@ -1939,19 +1826,20 @@ LocationManager.init();
             typing_time_ms: SearchState.getTypingTime(),
             client_fp: SearchState.clientFingerprint,
             req_seq: SearchState.incrementSequence(),
+            scope: currentScope,
         };
 
         if (SearchState.isQuestion && SearchState.questionUUID) {
             params.search_source = 'question';
             params.document_uuid = SearchState.questionUUID;
-            params.answer = SearchState.questionAnswer || '';                    // ← NEW
-            params.answer_type = SearchState.questionAnswerType || 'UNKNOWN';   // ← NEW
+            params.answer = SearchState.questionAnswer || '';
+            params.answer_type = SearchState.questionAnswerType || 'UNKNOWN';
             params.alt_mode = 'n';
         } else {
             params.search_source = SearchState.source;
             addHiddenField('document_uuid', '');
-            addHiddenField('answer', '');           // ← NEW: clear on non-question path
-            addHiddenField('answer_type', '');      // ← NEW: clear on non-question path
+            addHiddenField('answer', '');
+            addHiddenField('answer_type', '');
         }
 
         Object.entries(params).forEach(([name, value]) => {
@@ -1998,8 +1886,8 @@ LocationManager.init();
                 SearchState.selectedFromDropdown = false;
                 SearchState.questionUUID = null;
                 SearchState.isQuestion = false;
-                SearchState.questionAnswer = null;       // ← NEW
-                SearchState.questionAnswerType = null;   // ← NEW
+                SearchState.questionAnswer = null;
+                SearchState.questionAnswerType = null;
                 submitSearch();
             }
         });

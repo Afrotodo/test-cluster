@@ -1868,3 +1868,2162 @@ document.addEventListener('DOMContentLoaded', function() {
 
 </body>
 </html>
+
+
+
+
+<!DOCTYPE html>
+<html>
+<head>
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-75PTNSEVFH"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-75PTNSEVFH');
+</script>
+
+    <title>AfroTodo - Discover Black Business, Culture & Community</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="description" content="Ask the community anything about Black business, culture & wellness. Discover Black-owned businesses, HBCU resources, health providers, and more.">
+    
+    <!-- Google Fonts - Distinctive Typography -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700;800&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+
+        .hero-descriptor {
+    font-family: var(--font-body);
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--gray-500);
+    margin: 0 0 var(--space-lg) 0;
+}
+        :root {
+            /* Pan-African inspired palette with warmth */
+            --black: #1a1a1a;
+            --green: #2d6a4f;
+            --green-light: #40916c;
+            --gold: #d4a03a;
+            --gold-light: #e9c46a;
+            --red: #bc4749;
+            --red-deep: #9b2226;
+            --cream: #faf8f5;
+            --warm-white: #fffef9;
+            --gray-100: #f5f3f0;
+            --gray-200: #e8e4df;
+            --gray-300: #d4cfc8;
+            --gray-500: #8a8279;
+            --gray-700: #4a4640;
+            
+            /* Typography */
+            --font-display: 'Playfair Display', Georgia, serif;
+            --font-body: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+            
+            /* Spacing */
+            --space-xs: 4px;
+            --space-sm: 8px;
+            --space-md: 16px;
+            --space-lg: 24px;
+            --space-xl: 32px;
+            --space-2xl: 48px;
+            --space-3xl: 64px;
+            
+            /* Transitions */
+            --transition-fast: 150ms ease;
+            --transition-base: 250ms ease;
+            --transition-slow: 400ms ease;
+        }
+
+        @viewport {
+            width: device-width;
+            zoom: 1.0;
+            user-zoom: fixed;
+        }
+
+        *, *::before, *::after {
+            box-sizing: border-box;
+        }
+
+        body, html {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            font-family: var(--font-body);
+            color: var(--black);
+            background-color: var(--cream);
+            overflow-x: hidden;
+            width: 100%;
+            position: relative;
+            -webkit-text-size-adjust: 100%;
+            line-height: 1.6;
+        }
+
+        /* Subtle background texture */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: 
+                radial-gradient(circle at 20% 80%, rgba(45, 106, 79, 0.03) 0%, transparent 50%),
+                radial-gradient(circle at 80% 20%, rgba(212, 160, 58, 0.03) 0%, transparent 50%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* ==================== LAYOUT ==================== */
+        .page-wrapper {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            z-index: 1;
+        }
+
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: var(--space-xl) var(--space-lg);
+            padding-top: 80px;
+            min-height: calc(100vh - 120px);
+        }
+
+        /* ==================== HEADER ==================== */
+        .header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: var(--space-md) var(--space-lg);
+            background: rgba(250, 248, 245, 0.9);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--gray-200);
+            z-index: 100;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: var(--space-md);
+        }
+
+        .menu-toggle {
+            display: none;
+            width: 40px;
+            height: 40px;
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            padding: var(--space-sm);
+            border-radius: 8px;
+            color: var(--gray-700);
+            transition: background var(--transition-fast);
+        }
+
+        .menu-toggle:hover {
+            background: var(--gray-100);
+        }
+
+        .header-logo {
+            font-family: var(--font-display);
+            font-size: 24px;
+            font-weight: 700;
+            text-decoration: none;
+            display: flex;
+            align-items: baseline;
+            gap: 2px;
+        }
+
+        .header-logo .logo-a { color: var(--black); }
+        .header-logo .logo-f { color: var(--green); }
+        .header-logo .logo-r { color: var(--gold); }
+        .header-logo .logo-o { color: var(--red); }
+        .header-logo .logo-text { color: var(--black); }
+
+        .header-nav {
+            display: flex;
+            gap: var(--space-xs);
+        }
+
+        .nav-link {
+            padding: var(--space-sm) var(--space-md);
+            text-decoration: none;
+            color: var(--gray-700);
+            font-size: 14px;
+            font-weight: 500;
+            border-radius: 8px;
+            transition: all var(--transition-fast);
+        }
+
+        .nav-link:hover {
+            background: var(--gray-100);
+            color: var(--black);
+        }
+
+        .nav-link.active {
+            background: var(--black);
+            color: var(--warm-white);
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: var(--space-sm);
+        }
+
+        .auth-link {
+            padding: var(--space-sm) var(--space-md);
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
+            border-radius: 8px;
+            transition: all var(--transition-fast);
+        }
+
+        .auth-link.login {
+            color: var(--gray-700);
+        }
+
+        .auth-link.login:hover {
+            color: var(--black);
+            background: var(--gray-100);
+        }
+
+        .auth-link.signup {
+            background: var(--black);
+            color: var(--warm-white);
+        }
+
+        .auth-link.signup:hover {
+            background: var(--gray-700);
+        }
+
+        .user-greeting {
+            font-size: 14px;
+            color: var(--gray-700);
+            padding: var(--space-sm) var(--space-md);
+            background: var(--gray-100);
+            border-radius: 20px;
+        }
+
+        /* ==================== HERO SECTION ==================== */
+        .hero {
+            text-align: center;
+            max-width: 720px;
+            width: 100%;
+            margin-bottom: var(--space-2xl);
+        }
+
+        .hero-logo {
+            font-family: var(--font-display);
+            font-size: 56px;
+            font-weight: 800;
+            margin-bottom: var(--space-md);
+            letter-spacing: -1px;
+        }
+
+        .hero-logo .logo-a { color: var(--black); }
+        .hero-logo .logo-f { color: var(--green); }
+        .hero-logo .logo-r { color: var(--gold); }
+        .hero-logo .logo-o { color: var(--red); }
+        .hero-logo .logo-text { color: var(--black); }
+
+        .beta-badge {
+            display: inline-block;
+            font-family: var(--font-body);
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--green);
+            background: rgba(45, 106, 79, 0.1);
+            padding: 3px 8px;
+            border-radius: 4px;
+            vertical-align: super;
+            margin-left: 8px;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+
+        .hero-tagline {
+            font-family: var(--font-display);
+            font-size: 22px;
+            font-weight: 600;
+            color: var(--gray-700);
+            margin-bottom: var(--space-lg);
+            line-height: 1.4;
+        }
+
+        .hero-tagline em {
+            font-style: normal;
+            color: var(--green);
+        }
+
+        .hero-subtitle {
+            font-size: 16px;
+            color: var(--gray-500);
+            max-width: 480px;
+            margin: 0 auto;
+        }
+
+        /* ==================== SEARCH SECTION ==================== */
+        .search-section {
+            width: 100%;
+            max-width: 640px;
+            margin-bottom: var(--space-2xl);
+        }
+
+        .search-container {
+            position: relative;
+        }
+
+        .search-box-wrapper {
+            position: relative;
+            background: var(--warm-white);
+            border: 2px solid var(--gray-200);
+            border-radius: 16px;
+            box-shadow: 
+                0 4px 6px -1px rgba(0, 0, 0, 0.05),
+                0 10px 20px -5px rgba(0, 0, 0, 0.05);
+            transition: all var(--transition-base);
+            overflow: hidden;
+        }
+
+        .search-box-wrapper:hover {
+            border-color: var(--gray-300);
+            box-shadow: 
+                0 4px 6px -1px rgba(0, 0, 0, 0.08),
+                0 10px 25px -5px rgba(0, 0, 0, 0.08);
+        }
+
+        .search-box-wrapper:focus-within {
+            border-color: var(--green);
+            box-shadow: 
+                0 0 0 3px rgba(45, 106, 79, 0.1),
+                0 10px 25px -5px rgba(0, 0, 0, 0.1);
+        }
+
+        .search-inner {
+            display: flex;
+            align-items: center;
+            padding: var(--space-sm) var(--space-md);
+        }
+
+        .search-icon {
+            width: 24px;
+            height: 24px;
+            color: var(--gray-500);
+            flex-shrink: 0;
+            margin-right: var(--space-sm);
+        }
+
+        .search-box {
+            flex: 1;
+            height: 52px;
+            border: none;
+            outline: none;
+            font-family: var(--font-body);
+            font-size: 17px;
+            color: var(--black);
+            background: transparent;
+            padding: 0 var(--space-sm);
+            -webkit-appearance: none;
+        }
+
+        .search-box::placeholder {
+            color: var(--gray-500);
+            font-style: italic;
+        }
+
+        .search-button {
+            width: 44px;
+            height: 44px;
+            border: none;
+            background: var(--black);
+            border-radius: 10px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--warm-white);
+            flex-shrink: 0;
+            transition: all var(--transition-fast);
+        }
+
+        .search-button:hover {
+            background: var(--gray-700);
+            transform: scale(1.02);
+        }
+
+        .search-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .search-button svg {
+            width: 20px;
+            height: 20px;
+        }
+
+        /* Search Results Dropdown */
+        .search-results {
+            position: absolute;
+            width: 100%;
+            background: var(--warm-white);
+            border-radius: 12px;
+            border: 1px solid var(--gray-200);
+            box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.15);
+            margin-top: var(--space-sm);
+            display: none;
+            z-index: 100;
+            max-height: 320px;
+            overflow-y: auto;
+            text-align: left;
+        }
+
+        .search-results .suggestion-item {
+            padding: var(--space-md);
+            cursor: pointer;
+            border-bottom: 1px solid var(--gray-100);
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            transition: background var(--transition-fast);
+        }
+
+        .search-results .suggestion-item:last-child {
+            border-bottom: none;
+        }
+
+        .search-results .suggestion-item:hover,
+        .search-results .suggestion-item.selected {
+            background: var(--gray-100);
+        }
+
+        .search-results .suggestion-item.no-results {
+            color: var(--gray-500);
+            cursor: default;
+            text-align: center;
+            padding: var(--space-lg);
+        }
+
+        .search-results .suggestion-display {
+            font-weight: 600;
+            color: var(--black);
+        }
+
+        .search-results .suggestion-desc {
+            font-size: 13px;
+            color: var(--gray-500);
+            line-height: 1.4;
+        }
+
+        /* ==================== COMMUNITY QUESTIONS ==================== */
+        .community-section {
+            width: 100%;
+            max-width: 640px;
+        }
+
+        .section-header {
+            display: flex;
+            align-items: center;
+            gap: var(--space-sm);
+            margin-bottom: var(--space-md);
+        }
+
+        .section-icon {
+            width: 20px;
+            height: 20px;
+            color: var(--gold);
+        }
+
+        .section-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--gray-500);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .question-list {
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-sm);
+        }
+
+        .question-card {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: var(--space-md) var(--space-lg);
+            background: var(--warm-white);
+            border: 1px solid var(--gray-200);
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all var(--transition-fast);
+            text-decoration: none;
+            color: inherit;
+        }
+
+        .question-card:hover {
+            border-color: var(--gray-300);
+            box-shadow: 0 4px 12px -4px rgba(0, 0, 0, 0.08);
+            transform: translateY(-1px);
+        }
+
+        .question-text {
+            font-size: 15px;
+            color: var(--black);
+            font-weight: 500;
+        }
+
+        .question-text::before {
+            content: '"';
+            color: var(--green);
+            font-family: var(--font-display);
+            font-size: 18px;
+            margin-right: 2px;
+        }
+
+        .question-text::after {
+            content: '"';
+            color: var(--green);
+            font-family: var(--font-display);
+            font-size: 18px;
+            margin-left: 2px;
+        }
+
+        .question-meta {
+            display: flex;
+            align-items: center;
+            gap: var(--space-xs);
+            font-size: 13px;
+            color: var(--gray-500);
+            flex-shrink: 0;
+            margin-left: var(--space-md);
+        }
+
+        .answer-count {
+            background: var(--gray-100);
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-weight: 500;
+        }
+
+        /* ==================== CATEGORY PILLS ==================== */
+        .categories-section {
+            width: 100%;
+            max-width: 720px;
+            margin-top: var(--space-2xl);
+        }
+
+        .category-pills {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: var(--space-sm);
+        }
+
+        .category-pill {
+            display: flex;
+            align-items: center;
+            gap: var(--space-sm);
+            padding: var(--space-sm) var(--space-md);
+            background: var(--warm-white);
+            border: 1px solid var(--gray-200);
+            border-radius: 100px;
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--gray-700);
+            text-decoration: none;
+            transition: all var(--transition-fast);
+            cursor: pointer;
+        }
+
+        .category-pill:hover {
+            border-color: var(--gray-300);
+            background: var(--gray-100);
+            transform: translateY(-1px);
+        }
+
+        .category-pill .pill-icon {
+            width: 18px;
+            height: 18px;
+        }
+
+        .category-pill.business .pill-icon { color: var(--green); }
+        .category-pill.culture .pill-icon { color: var(--gold); }
+        .category-pill.health .pill-icon { color: var(--red); }
+        .category-pill.news .pill-icon { color: #4a90d9; }
+        .category-pill.community .pill-icon { color: #9b59b6; }
+        .category-pill.advocacy .pill-icon { color: var(--red-deep); }
+
+        /* ==================== FOOTER ==================== */
+        .footer {
+            padding: var(--space-xl) var(--space-lg);
+            border-top: 1px solid var(--gray-200);
+            background: var(--warm-white);
+        }
+
+        .footer-content {
+            max-width: 900px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: var(--space-md);
+        }
+
+        .footer-brand {
+            font-family: var(--font-display);
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--black);
+        }
+
+        .footer-links {
+            display: flex;
+            gap: var(--space-lg);
+            flex-wrap: wrap;
+        }
+
+        .footer-link {
+            font-size: 14px;
+            color: var(--gray-500);
+            text-decoration: none;
+            transition: color var(--transition-fast);
+        }
+
+        .footer-link:hover {
+            color: var(--black);
+        }
+
+        .footer-tagline {
+            font-size: 13px;
+            color: var(--gray-500);
+            text-align: center;
+            width: 100%;
+            margin-top: var(--space-md);
+            padding-top: var(--space-md);
+            border-top: 1px solid var(--gray-100);
+        }
+
+        /* ==================== MOBILE SIDEBAR ==================== */
+        .mobile-sidebar-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.4);
+            z-index: 200;
+            opacity: 0;
+            transition: opacity var(--transition-base);
+        }
+
+        .mobile-sidebar-overlay.show {
+            display: block;
+            opacity: 1;
+        }
+
+        .mobile-sidebar {
+            position: fixed;
+            top: 0;
+            left: -300px;
+            width: 300px;
+            height: 100%;
+            background: var(--warm-white);
+            z-index: 201;
+            transition: left var(--transition-base);
+            overflow-y: auto;
+            box-shadow: 4px 0 20px rgba(0, 0, 0, 0.1);
+        }
+
+        .mobile-sidebar.open {
+            left: 0;
+        }
+
+        .mobile-sidebar-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: var(--space-lg);
+            border-bottom: 1px solid var(--gray-200);
+        }
+
+        .mobile-sidebar-title {
+            font-family: var(--font-display);
+            font-size: 20px;
+            font-weight: 700;
+        }
+
+        .mobile-sidebar-close {
+            width: 36px;
+            height: 36px;
+            border: none;
+            background: var(--gray-100);
+            border-radius: 8px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--gray-700);
+            transition: background var(--transition-fast);
+        }
+
+        .mobile-sidebar-close:hover {
+            background: var(--gray-200);
+        }
+
+        .mobile-sidebar-nav {
+            padding: var(--space-md) 0;
+        }
+
+        .mobile-nav-item {
+            display: flex;
+            align-items: center;
+            gap: var(--space-md);
+            padding: var(--space-md) var(--space-lg);
+            text-decoration: none;
+            color: var(--gray-700);
+            font-weight: 500;
+            transition: all var(--transition-fast);
+        }
+
+        .mobile-nav-item:hover {
+            background: var(--gray-100);
+            color: var(--black);
+        }
+
+        .mobile-nav-item svg {
+            width: 22px;
+            height: 22px;
+            color: var(--gray-500);
+        }
+
+        .mobile-nav-divider {
+            height: 1px;
+            background: var(--gray-200);
+            margin: var(--space-sm) var(--space-lg);
+        }
+
+        /* ==================== RESPONSIVE ==================== */
+        @media (max-width: 768px) {
+            input, select, textarea {
+                font-size: 16px !important;
+            }
+
+            .header-nav {
+                display: none;
+            }
+
+            .menu-toggle {
+                display: flex;
+            }
+
+            .main-content {
+                padding: var(--space-lg) var(--space-md);
+                padding-top: 100px;
+                justify-content: flex-start;
+            }
+
+            .hero-logo {
+                font-size: 42px;
+            }
+
+            .hero-tagline {
+                font-size: 18px;
+            }
+
+            .hero-subtitle {
+                font-size: 14px;
+            }
+
+            .search-box {
+                height: 48px;
+                font-size: 16px !important;
+            }
+
+            .question-card {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: var(--space-sm);
+            }
+
+            .question-meta {
+                margin-left: 0;
+            }
+
+            .category-pills {
+                gap: var(--space-xs);
+            }
+
+            .category-pill {
+                padding: var(--space-xs) var(--space-sm);
+                font-size: 13px;
+            }
+
+            .footer-content {
+                flex-direction: column;
+                text-align: center;
+            }
+
+            .footer-links {
+                justify-content: center;
+            }
+
+            .auth-link {
+                padding: var(--space-xs) var(--space-sm);
+                font-size: 13px;
+            }
+
+            .user-greeting {
+                font-size: 12px;
+                padding: var(--space-xs) var(--space-sm);
+            }
+        }
+
+        @media (max-width: 480px) {
+            .hero-logo {
+                font-size: 36px;
+            }
+
+            .beta-badge {
+                font-size: 9px;
+            }
+
+            .hero-tagline {
+                font-size: 16px;
+            }
+
+            .question-text {
+                font-size: 14px;
+            }
+
+            .search-inner {
+                padding: var(--space-xs) var(--space-sm);
+            }
+
+            .search-button {
+                width: 40px;
+                height: 40px;
+            }
+        }
+
+
+
+/* ==================== LOCATION ==================== */
+.location-indicator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--green);
+    font-weight: 500;
+    margin-top: var(--space-md);
+    opacity: 0;
+    transform: translateY(4px);
+    transition: opacity 0.4s ease, transform 0.4s ease;
+}
+
+.location-indicator.visible {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.location-indicator svg {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+}
+
+.location-indicator .loc-change {
+    color: var(--gray-500);
+    font-size: 12px;
+    font-weight: 400;
+    cursor: pointer;
+    margin-left: 4px;
+    text-decoration: underline;
+    text-decoration-color: transparent;
+    transition: text-decoration-color var(--transition-fast);
+}
+
+.location-indicator .loc-change:hover {
+    text-decoration-color: var(--gray-500);
+}
+
+/* Enable location banner (shown when no location) */
+.location-enable-banner {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    max-width: 640px;
+    width: 100%;
+    margin-top: var(--space-md);
+    padding: var(--space-sm) var(--space-md);
+    background: var(--warm-white);
+    border: 1px solid var(--gray-200);
+    border-radius: 10px;
+    font-size: 13px;
+    color: var(--gray-500);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    opacity: 0;
+    transform: translateY(4px);
+}
+
+.location-enable-banner.visible {
+    opacity: 1;
+    transform: translateY(0);
+    transition: opacity 0.4s ease 0.2s, transform 0.4s ease 0.2s;
+}
+
+.location-enable-banner:hover {
+    border-color: var(--green);
+    background: rgba(45, 106, 79, 0.03);
+}
+
+.location-enable-banner svg {
+    width: 16px;
+    height: 16px;
+    color: var(--gray-500);
+    flex-shrink: 0;
+}
+
+.location-enable-banner .loc-enable-text {
+    flex: 1;
+}
+
+.location-enable-banner .loc-enable-btn {
+    color: var(--green);
+    font-weight: 600;
+    font-size: 13px;
+    white-space: nowrap;
+}
+
+/* Trending section label with location */
+.trending-location-label {
+    color: var(--green);
+    font-weight: 600;
+}
+
+/* Distance badge on result cards */
+.distance-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 11px;
+    color: var(--gray-500);
+    flex-shrink: 0;
+    margin-left: auto;
+}
+
+.distance-badge svg {
+    width: 10px;
+    height: 10px;
+}
+
+/* Hide elements based on location state */
+.loc-only {
+    display: none;
+}
+
+body.has-location .loc-only {
+    display: flex;
+}
+
+body.has-location .no-loc-only {
+    display: none;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        
+.question-card.trending-card {
+    flex-direction: row;
+    align-items: center;
+    gap: var(--space-md);
+    padding: var(--space-sm) var(--space-md);
+}
+
+.trending-thumb {
+    width: 64px;
+    height: 64px;
+    border-radius: 8px;
+    object-fit: cover;
+    flex-shrink: 0;
+}
+
+.trending-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.trending-brand {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--green);
+}
+
+.trending-card .question-text {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--black);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.trending-card .question-text::before,
+.trending-card .question-text::after {
+    content: none;
+}
+
+.trending-summary {
+    font-size: 13px;
+    color: var(--gray-500);
+    line-height: 1.4;
+    display: -webkit-box;
+    -webkit-line-clamp: 1;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.trending-category {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--gold);
+    background: rgba(212, 160, 58, 0.1);
+    padding: 2px 8px;
+    border-radius: 4px;
+    text-transform: capitalize;
+    flex-shrink: 0;
+}
+
+@media (max-width: 480px) {
+    .trending-thumb {
+        width: 52px;
+        height: 52px;
+    }
+
+    .trending-card .question-text {
+        font-size: 13px;
+    }
+
+    .trending-category {
+        display: none;
+    }
+}
+    </style>
+</head>
+<body>
+    <!-- Mobile Sidebar Overlay -->
+    <div class="mobile-sidebar-overlay" id="mobile-sidebar-overlay"></div>
+    
+    <!-- Mobile Sidebar -->
+    <div class="mobile-sidebar" id="mobile-sidebar">
+        <div class="mobile-sidebar-header">
+            <span class="mobile-sidebar-title">
+                <span style="color: var(--black);">A</span><span style="color: var(--green);">f</span><span style="color: var(--gold);">r</span><span style="color: var(--red);">o</span>Todo
+            </span>
+            <button class="mobile-sidebar-close" id="mobile-sidebar-close">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M18 6L6 18M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+        <nav class="mobile-sidebar-nav">
+            <a href="/" class="mobile-nav-item">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/>
+                </svg>
+                <span>Home</span>
+            </a>
+            <!-- <a href="" class="mobile-nav-item">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 7V3H2v18h20V7H12zM6 19H4v-2h2v2zm0-4H4v-2h2v2zm0-4H4V9h2v2zm0-4H4V5h2v2zm4 12H8v-2h2v2zm0-4H8v-2h2v2zm0-4H8V9h2v2zm0-4H8V5h2v2zm10 12h-8v-2h2v-2h-2v-2h2v-2h-2V9h8v10zm-2-8h-2v2h2v-2zm0 4h-2v2h2v-2z"/>
+                </svg>
+                <span>Business</span>
+            </a> -->
+            <!-- <a href="" class="mobile-nav-item">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9c0-.46-.04-.92-.1-1.36-.98 1.37-2.58 2.26-4.4 2.26-3.03 0-5.5-2.47-5.5-5.5 0-1.82.89-3.42 2.26-4.4-.44-.06-.9-.1-1.36-.1z"/>
+                </svg>
+                <span>Culture</span>
+            </a> -->
+            <!-- <a href="" class="mobile-nav-item">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                </svg>
+                <span>Health</span>
+            </a> -->
+            <!-- <a href="" class="mobile-nav-item">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z"/>
+                </svg>
+                <span>News</span>
+            </a> -->
+            <div class="mobile-nav-divider"></div>
+            {% if user.is_authenticated %}
+            <a href="" class="mobile-nav-item">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/>
+                </svg>
+                <span>Logout</span>
+            </a>
+            {% else %}
+            <a href="" class="mobile-nav-item">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+                </svg>
+                <span>Login</span>
+            </a>
+            <a href="" class="mobile-nav-item">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M15 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-9-2V7H4v3H1v2h3v3h2v-3h3v-2H6zm9 4c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+                </svg>
+                <span>Sign Up</span>
+            </a>
+            {% endif %}
+        </nav>
+    </div>
+
+    <!-- Header -->
+    <header class="header">
+        <div class="header-left">
+            <button class="menu-toggle" id="mobile-menu-toggle">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M3 6h18M3 12h18M3 18h18"/>
+                </svg>
+            </button>
+            <a href="/" class="header-logo">
+                <span class="logo-a">A</span><span class="logo-f">f</span><span class="logo-r">r</span><span class="logo-o">o</span><span class="logo-text">Todo</span>
+            </a>
+        </div>
+        
+        <nav class="header-nav">
+            <!-- <a href="" class="nav-link">Business</a>
+            <a href="" class="nav-link">Culture</a>
+            <a href="" class="nav-link">Health</a>
+            <a href="" class="nav-link">News</a>
+            <a href="" class="nav-link">Community</a> -->
+        </nav>
+
+        <div class="header-right">
+            {% if user.is_authenticated %}
+            <span class="user-greeting">Welcome, {{ user.username }}</span>
+            <a href="{% url 'accounts:logout' %}" class="auth-link login">Logout</a>
+            {% else %}
+            <a href="{% url 'accounts:login' %}" class="auth-link login">Login</a>
+            <a href="{% url 'accounts:register' %}" class="auth-link signup">Sign Up</a>
+            {% endif %}
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="page-wrapper">
+        <div class="main-content">
+            <!-- Hero Section -->
+            <section class="hero">
+                <h1 class="hero-logo">
+                    <span class="logo-a">A</span><span class="logo-f">f</span><span class="logo-r">r</span><span class="logo-o">o</span><span class="logo-text">Todo</span>
+                    <span class="beta-badge">Beta</span>
+                </h1>
+                <p class="hero-tagline">
+               
+
+                    The knowledge engine built for our culture.<br>
+    
+                    <em>Ask anything. Find everything.</em>
+                </p>
+                <p class="hero-subtitle">
+                    Discover businesses, explore history, find trusted information within our global community.
+                    <!-- Discover Black-owned businesses, find resources, and connect with your global community. -->
+                </p>
+            </section>
+
+            <!-- Search Section -->
+            <section class="search-section">
+                <div class="search-container">
+                    <form action="{% url 'searchengine:search' %}" method="get" id="search-form">
+                        <div class="search-box-wrapper">
+                            <div class="search-inner">
+                                <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="11" cy="11" r="8"/>
+                                    <path d="M21 21l-4.35-4.35"/>
+                                </svg>
+                                <input 
+                                    type="text" 
+                                    class="search-box" 
+                                    id="search-input" 
+                                    name="query" 
+                                    placeholder=""
+                                    autocomplete="off"
+                                >
+                                <input type="hidden" id="session-id-field" name="session_id" value="">
+                                <button type="submit" class="search-button" id="search-button">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                        <path d="M5 12h14M12 5l7 7-7 7"/>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="search-results" id="search-results"></div>
+                    </form>
+                </div>
+            </section>
+
+
+            <!-- Location indicator (shown when location is available) -->
+<div class="location-indicator loc-only" id="location-indicator">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/>
+        <circle cx="12" cy="10" r="3"/>
+    </svg>
+    <span id="location-name">Locating...</span>
+    <span class="loc-change" id="location-change">change</span>
+</div>
+
+<!-- Enable location banner (shown when no location) -->
+<div class="location-enable-banner no-loc-only" id="location-enable-banner">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/>
+        <circle cx="12" cy="10" r="3"/>
+    </svg>
+    <span class="loc-enable-text">Enable location for nearby results</span>
+    <span class="loc-enable-btn">Enable</span>
+</div>
+
+
+
+
+  {% if trending_results %}
+            <!-- Trending Section -->
+            <section class="community-section">
+                <div class="section-header">
+                    <svg class="section-icon" viewBox="0 0 24 24" fill="currentColor" style="color: var(--red);">
+                        <path d="M13.5.67s.74 2.65.74 4.8c0 2.06-1.35 3.73-3.41 3.73-2.07 0-3.63-1.67-3.63-3.73l.03-.36C5.21 7.51 4 10.62 4 14c0 4.42 3.58 8 8 8s8-3.58 8-8C20 8.61 17.41 3.8 13.5.67zM11.71 19c-1.78 0-3.22-1.4-3.22-3.14 0-1.62 1.05-2.76 2.81-3.12 1.77-.36 3.6-1.21 4.62-2.58.39 1.29.59 2.65.59 4.04 0 2.65-2.15 4.8-4.8 4.8z"/>
+                    </svg>
+
+                    <!-- <span class="section-title">Trending in {{ trending_label }}</span> -->
+
+                    <span class="section-title">
+                    Trending
+                    <span id="trending-location-label">
+                        {% if trending_label %}in {{ trending_label }}{% else %}today{% endif %}
+                    </span>
+                    </span>
+
+                </div>
+
+                <div class="question-list">
+                {% for item in trending_results %}
+                <a href="{{ item.url }}" class="question-card trending-card">
+                   
+                    {% if item.image_url %}
+                    <img src="{{ item.image_url }}" alt="{{ item.title }}" class="trending-thumb" loading="lazy" onerror="this.style.display='none'">
+                    {% endif %}
+                    <div class="trending-info">
+                        {% if item.brand %}<span class="trending-brand">{{ item.brand }}</span>{% endif %}
+                        <span class="question-text">{{ item.title }}</span>
+                        <span class="trending-summary">{{ item.summary|truncatewords:18 }}</span>
+                    </div>
+               
+                </a>
+                {% endfor %}
+                </div>
+            </section>
+{% endif %}
+
+
+
+
+
+            <!-- Category Pills -->
+            <section class="categories-section">
+                <div class="category-pills">
+                    <!-- <a href="" class="category-pill business">
+                        <svg class="pill-icon" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 7V3H2v18h20V7H12zM6 19H4v-2h2v2zm0-4H4v-2h2v2zm0-4H4V9h2v2zm0-4H4V5h2v2zm4 12H8v-2h2v2zm0-4H8v-2h2v2zm0-4H8V9h2v2zm0-4H8V5h2v2zm10 12h-8v-2h2v-2h-2v-2h2v-2h-2V9h8v10zm-2-8h-2v2h2v-2zm0 4h-2v2h2v-2z"/>
+                        </svg>
+                        Business
+                    </a> -->
+                    <!-- <a href="" class="category-pill culture">
+                        <svg class="pill-icon" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9c0-.46-.04-.92-.1-1.36-.98 1.37-2.58 2.26-4.4 2.26-3.03 0-5.5-2.47-5.5-5.5 0-1.82.89-3.42 2.26-4.4-.44-.06-.9-.1-1.36-.1z"/>
+                        </svg>
+                        Culture
+                    </a> -->
+                    <!-- <a href="" class="category-pill health">
+                        <svg class="pill-icon" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                        </svg>
+                        Health
+                    </a> -->
+                    <!-- <a href="" class="category-pill news">
+                        <svg class="pill-icon" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z"/>
+                        </svg>
+                        News
+                    </a> -->
+                    <!-- <a href="" class="category-pill community">
+                        <svg class="pill-icon" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/>
+                        </svg>
+                        Community
+                    </a> -->
+        
+                </div>
+            </section>
+        </div>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <div class="footer-content">
+                <span class="footer-brand">AfroTodo</span>
+                <div class="footer-links">
+                    <a href="{% url 'searchengine:about' %}" class="footer-link">About</a>
+                    <a href="{% url 'accounts:register' %}" class="footer-link">Add Business</a>
+                    <a href="{% url 'searchengine:privacy' %}" class="footer-link">Privacy</a>
+                    <a href="{% url 'searchengine:term' %}" class="footer-link">Terms</a>
+                    <a href="{% url 'searchengine:contact' %}" class="footer-link">Contact</a>
+                </div>
+                <p class="footer-tagline">Shop Black. Learn Black. Own the future.</p>
+            </div>
+        </footer>
+    </main>
+
+
+<!-- ==================== SEARCH & UI SCRIPT ==================== -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+
+    // ==================== SECURITY & TRACKING UTILITIES ====================
+    const SearchSecurity = {
+        generateUUID: function() {
+            if (crypto && crypto.randomUUID) {
+                return crypto.randomUUID();
+            }
+            return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+                const r = Math.random() * 16 | 0;
+                const v = c === 'x' ? r : (r & 0x3 | 0x8);
+                return v.toString(16);
+            });
+        },
+
+        generateNonce: function(length = 16) {
+            const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+            let result = '';
+            const randomValues = new Uint32Array(length);
+            crypto.getRandomValues(randomValues);
+            for (let i = 0; i < length; i++) {
+                result += chars[randomValues[i] % chars.length];
+            }
+            return result;
+        },
+
+        getSessionId: function() {
+            let sessionId = sessionStorage.getItem('search_session_id');
+            if (!sessionId) {
+                sessionId = this.generateUUID();
+                sessionStorage.setItem('search_session_id', sessionId);
+            }
+            return sessionId;
+        },
+
+        getTimestamp: function() {
+            return Date.now();
+        },
+
+        getDeviceType: function() {
+            const ua = navigator.userAgent;
+            if (/tablet|ipad|playbook|silk/i.test(ua)) return 'tablet';
+            if (/mobile|android|iphone|ipod|blackberry|opera mini|iemobile/i.test(ua)) return 'mobile';
+            return 'desktop';
+        },
+
+        getClientFingerprint: function() {
+            const components = [
+                navigator.userAgent,
+                navigator.language,
+                screen.width + 'x' + screen.height,
+                screen.colorDepth,
+                new Date().getTimezoneOffset(),
+                !!window.sessionStorage,
+                !!window.localStorage,
+                navigator.hardwareConcurrency || 'unknown'
+            ];
+            const str = components.join('|');
+            let hash = 0;
+            for (let i = 0; i < str.length; i++) {
+                const char = str.charCodeAt(i);
+                hash = ((hash << 5) - hash) + char;
+                hash = hash & hash;
+            }
+            return Math.abs(hash).toString(16);
+        }
+    };
+
+    // ==================== SEARCH STATE TRACKING ====================
+    const SearchState = {
+        sessionId: SearchSecurity.getSessionId(),
+        requestSequence: 0,
+        typingStartTime: null,
+        selectedFromDropdown: false,
+        resultCount: 0,
+        source: 'home',
+        deviceType: SearchSecurity.getDeviceType(),
+        clientFingerprint: SearchSecurity.getClientFingerprint(),
+
+        questionUUID: null,
+        isQuestion: false,
+        questionAnswer: null,       // ← NEW
+        questionAnswerType: null,   // ← NEW
+
+        reset: function() {
+            this.typingStartTime = null;
+            this.selectedFromDropdown = false;
+            this.resultCount = 0;
+            this.questionUUID = null;
+            this.isQuestion = false;
+            this.questionAnswer = null;       // ← NEW
+            this.questionAnswerType = null;   // ← NEW
+        },
+
+        getTypingTime: function() {
+            if (!this.typingStartTime) return 0;
+            return Date.now() - this.typingStartTime;
+        },
+
+        incrementSequence: function() {
+            this.requestSequence++;
+            return this.requestSequence;
+        }
+    };
+
+    // ==================== MOBILE SIDEBAR ====================
+    const mobileMenuToggle = document.getElementById('mobile-menu-toggle');
+    const mobileSidebar = document.getElementById('mobile-sidebar');
+    const mobileSidebarOverlay = document.getElementById('mobile-sidebar-overlay');
+    const mobileSidebarClose = document.getElementById('mobile-sidebar-close');
+
+    function openMobileSidebar() {
+        if (mobileSidebar) mobileSidebar.classList.add('open');
+        if (mobileSidebarOverlay) mobileSidebarOverlay.classList.add('show');
+        document.body.style.overflow = 'hidden';
+    }
+
+    function closeMobileSidebar() {
+        if (mobileSidebar) mobileSidebar.classList.remove('open');
+        if (mobileSidebarOverlay) mobileSidebarOverlay.classList.remove('show');
+        document.body.style.overflow = '';
+    }
+
+    if (mobileMenuToggle) mobileMenuToggle.addEventListener('click', openMobileSidebar);
+    if (mobileSidebarClose) mobileSidebarClose.addEventListener('click', closeMobileSidebar);
+    if (mobileSidebarOverlay) mobileSidebarOverlay.addEventListener('click', closeMobileSidebar);
+
+    document.querySelectorAll('.mobile-nav-item').forEach(item => {
+        item.addEventListener('click', closeMobileSidebar);
+    });
+
+
+
+
+// ==================== LOCATION ====================
+const LocationManager = {
+    // Config
+    COOKIE_NAME: 'afrotodo_location',
+    COOKIE_DAYS: 30,
+    GEOCODE_API: 'https://nominatim.openstreetmap.org/reverse',
+
+    // State
+    lat: null,
+    lng: null,
+    cityName: null,
+    state: null,
+
+    /**
+     * Initialize — check cookie first, otherwise show enable banner.
+     */
+    init: function() {
+        const saved = this.getCookie();
+        if (saved) {
+            this.lat = saved.lat;
+            this.lng = saved.lng;
+            this.cityName = saved.city;
+            this.state = saved.state;
+            this.applyLocation();
+        } else {
+            this.showEnableBanner();
+        }
+    },
+
+    /**
+     * Request location from browser Geolocation API.
+     * Only call this from a user gesture (click).
+     */
+    requestLocation: function() {
+        if (!navigator.geolocation) {
+            console.warn('Geolocation not supported');
+            return;
+        }
+
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                this.lat = position.coords.latitude;
+                this.lng = position.coords.longitude;
+                this.reverseGeocode();
+            },
+            (error) => {
+                console.warn('Location denied:', error.message);
+                // Optionally try IP-based fallback here
+                this.showEnableBanner();
+            },
+            {
+                enableHighAccuracy: false,
+                timeout: 8000,
+                maximumAge: 300000 // cache for 5 min
+            }
+        );
+    },
+
+    /**
+     * Convert lat/lng to city name using free Nominatim API.
+     * For production, consider caching or using your own endpoint.
+     */
+    reverseGeocode: async function() {
+        try {
+            const url = `${this.GEOCODE_API}?lat=${this.lat}&lon=${this.lng}&format=json`;
+            const resp = await fetch(url, {
+                headers: { 'Accept-Language': 'en' }
+            });
+            const data = await resp.json();
+
+            const addr = data.address || {};
+            this.cityName = addr.city || addr.town || addr.village || addr.county || 'Your area';
+            this.state = addr.state || '';
+
+            this.saveCookie();
+            this.applyLocation();
+        } catch (err) {
+            console.error('Reverse geocode failed:', err);
+            this.cityName = 'Your area';
+            this.applyLocation();
+        }
+    },
+
+    /**
+     * Apply location to the UI — update indicator, body class,
+     * trending label, and make coords available for search.
+     */
+    applyLocation: function() {
+        // Add body class to toggle loc-only / no-loc-only elements
+        document.body.classList.add('has-location');
+
+        // Update location indicator text
+        const nameEl = document.getElementById('location-name');
+        if (nameEl) {
+            const display = this.state
+                ? `${this.cityName}, ${this.getStateAbbr(this.state)}`
+                : this.cityName;
+            nameEl.textContent = display;
+        }
+
+        // Animate in the indicator
+        const indicator = document.getElementById('location-indicator');
+        if (indicator) {
+            setTimeout(() => indicator.classList.add('visible'), 100);
+        }
+
+        // Update trending label
+        const trendLabel = document.getElementById('trending-location-label');
+        if (trendLabel) {
+            trendLabel.textContent = `in ${this.cityName}`;
+        }
+
+        // Store coords in hidden fields for search form
+        this.addSearchCoords();
+    },
+
+    /**
+     * Add lat/lng as hidden fields in the search form
+     * so they're sent with every search request.
+     */
+    addSearchCoords: function() {
+        const form = document.getElementById('search-form');
+        if (!form) return;
+
+        let latField = form.querySelector('input[name="lat"]');
+        let lngField = form.querySelector('input[name="lng"]');
+
+        if (!latField) {
+            latField = document.createElement('input');
+            latField.type = 'hidden';
+            latField.name = 'lat';
+            form.appendChild(latField);
+        }
+        if (!lngField) {
+            lngField = document.createElement('input');
+            lngField.type = 'hidden';
+            lngField.name = 'lng';
+            form.appendChild(lngField);
+        }
+
+        latField.value = this.lat;
+        lngField.value = this.lng;
+    },
+
+    /**
+     * Show the "Enable location" banner with animation.
+     */
+    showEnableBanner: function() {
+        const banner = document.getElementById('location-enable-banner');
+        if (banner) {
+            setTimeout(() => banner.classList.add('visible'), 300);
+        }
+    },
+
+    // ── Cookie helpers ──
+
+    saveCookie: function() {
+        const data = JSON.stringify({
+            lat: this.lat,
+            lng: this.lng,
+            city: this.cityName,
+            state: this.state
+        });
+        const expires = new Date();
+        expires.setDate(expires.getDate() + this.COOKIE_DAYS);
+        document.cookie = `${this.COOKIE_NAME}=${encodeURIComponent(data)};expires=${expires.toUTCString()};path=/;SameSite=Lax`;
+    },
+
+    getCookie: function() {
+        const match = document.cookie.match(
+            new RegExp('(?:^|; )' + this.COOKIE_NAME + '=([^;]*)')
+        );
+        if (!match) return null;
+        try {
+            return JSON.parse(decodeURIComponent(match[1]));
+        } catch {
+            return null;
+        }
+    },
+
+    clearCookie: function() {
+        document.cookie = `${this.COOKIE_NAME}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`;
+    },
+
+    // ── US state abbreviation helper ──
+
+    getStateAbbr: function(state) {
+        const abbrs = {
+            'Alabama':'AL','Alaska':'AK','Arizona':'AZ','Arkansas':'AR',
+            'California':'CA','Colorado':'CO','Connecticut':'CT',
+            'Delaware':'DE','Florida':'FL','Georgia':'GA',
+            'Hawaii':'HI','Idaho':'ID','Illinois':'IL',
+            'Indiana':'IN','Iowa':'IA','Kansas':'KS',
+            'Kentucky':'KY','Louisiana':'LA','Maine':'ME',
+            'Maryland':'MD','Massachusetts':'MA','Michigan':'MI',
+            'Minnesota':'MN','Mississippi':'MS','Missouri':'MO',
+            'Montana':'MT','Nebraska':'NE','Nevada':'NV',
+            'New Hampshire':'NH','New Jersey':'NJ','New Mexico':'NM',
+            'New York':'NY','North Carolina':'NC','North Dakota':'ND',
+            'Ohio':'OH','Oklahoma':'OK','Oregon':'OR',
+            'Pennsylvania':'PA','Rhode Island':'RI','South Carolina':'SC',
+            'South Dakota':'SD','Tennessee':'TN','Texas':'TX',
+            'Utah':'UT','Vermont':'VT','Virginia':'VA',
+            'Washington':'WA','West Virginia':'WV','Wisconsin':'WI',
+            'Wyoming':'WY','District of Columbia':'DC'
+        };
+        return abbrs[state] || state;
+    }
+};
+
+// ── Wire up location UI ──
+
+// Enable banner click → request permission
+const enableBanner = document.getElementById('location-enable-banner');
+if (enableBanner) {
+    enableBanner.addEventListener('click', function() {
+        this.style.opacity = '0.5';
+        this.style.pointerEvents = 'none';
+        LocationManager.requestLocation();
+    });
+}
+
+// "change" link → re-request
+const changeBtn = document.getElementById('location-change');
+if (changeBtn) {
+    changeBtn.addEventListener('click', function() {
+        LocationManager.clearCookie();
+        LocationManager.requestLocation();
+    });
+}
+
+// Initialize on load
+LocationManager.init();
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    // ==================== SEARCH AUTOCOMPLETE ====================
+    const searchInput = document.getElementById('search-input');
+    const searchResults = document.getElementById('search-results');
+    const searchForm = document.getElementById('search-form');
+
+    if (!searchInput || !searchResults || !searchForm) return;
+
+    let debounceTimer = null;
+    let selectedIndex = -1;
+    let currentSuggestions = [];
+    let isSelectingSuggestion = false;
+
+    searchInput.addEventListener('keydown', function(e) {
+        if (!SearchState.typingStartTime && e.key.length === 1) {
+            SearchState.typingStartTime = Date.now();
+        }
+    });
+
+    searchInput.addEventListener('input', function() {
+        clearTimeout(debounceTimer);
+
+        if (isSelectingSuggestion) {
+            return;
+        }
+
+        const query = this.value.trim();
+        SearchState.selectedFromDropdown = false;
+        SearchState.questionUUID = null;
+        SearchState.isQuestion = false;
+        SearchState.questionAnswer = null;       // ← NEW
+        SearchState.questionAnswerType = null;   // ← NEW
+
+        if (query.length < 2) {
+            hideDropdown();
+            return;
+        }
+
+        debounceTimer = setTimeout(() => fetchSuggestions(query), 150);
+    });
+
+    async function fetchSuggestions(query) {
+        try {
+            const response = await fetch(`/api/search/?q=${encodeURIComponent(query)}`);
+            if (!response.ok) throw new Error('Search failed');
+
+            const data = await response.json();
+            currentSuggestions = data.suggestions || [];
+            SearchState.resultCount = currentSuggestions.length;
+            renderDropdown(currentSuggestions);
+        } catch (error) {
+            console.error('Search error:', error);
+            hideDropdown();
+        }
+    }
+
+    // ==================== RENDER DROPDOWN ====================
+    function renderDropdown(suggestions) {
+        if (!suggestions.length) {
+            searchResults.innerHTML = '<div class="suggestion-item no-results">No results found</div>';
+            searchResults.style.display = 'block';
+            selectedIndex = -1;
+            SearchState.resultCount = 0;
+            return;
+        }
+
+        searchResults.innerHTML = suggestions.map((s, i) => {
+            const displayText = escapeHtml(s.display || s.term || '');
+            const isQuestion = s.entity_type === 'question';
+            return `
+                <div class="suggestion-item${isQuestion ? ' suggestion-question' : ''}" data-index="${i}">
+                    <span class="suggestion-display">${displayText}</span>
+                    ${s.description ? `<span class="suggestion-desc">${escapeHtml(s.description)}</span>` : ''}
+                </div>
+            `;
+        }).join('');
+
+        searchResults.style.display = 'block';
+        selectedIndex = -1;
+
+        searchResults.querySelectorAll('.suggestion-item[data-index]').forEach(item => {
+            item.addEventListener('click', () => selectSuggestion(parseInt(item.dataset.index)));
+            item.addEventListener('mouseenter', function() {
+                clearSelection();
+                this.classList.add('selected');
+                selectedIndex = parseInt(this.dataset.index);
+            });
+        });
+    }
+
+    // ==================== SELECT SUGGESTION ====================
+    function selectSuggestion(index) {
+        if (index >= 0 && index < currentSuggestions.length) {
+            isSelectingSuggestion = true;
+            SearchState.selectedFromDropdown = true;
+
+            const suggestion = currentSuggestions[index];
+            searchInput.value = suggestion.display || suggestion.term || suggestion.text || '';
+
+            if (suggestion.entity_type === 'question' && suggestion.document_uuid) {
+                SearchState.questionUUID = suggestion.document_uuid;
+                SearchState.isQuestion = true;
+                SearchState.questionAnswer = suggestion.answer || '';           // ← NEW
+                SearchState.questionAnswerType = suggestion.answer_type || 'UNKNOWN'; // ← NEW
+            } else {
+                SearchState.questionUUID = null;
+                SearchState.isQuestion = false;
+                SearchState.questionAnswer = null;       // ← NEW
+                SearchState.questionAnswerType = null;   // ← NEW
+            }
+
+            hideDropdown();
+            submitSearch();
+
+            isSelectingSuggestion = false;
+        }
+    }
+
+    searchInput.addEventListener('keydown', function(e) {
+        const items = searchResults.querySelectorAll('.suggestion-item[data-index]');
+
+        if (e.key === 'ArrowDown' && items.length && searchResults.style.display !== 'none') {
+            e.preventDefault();
+            selectedIndex = (selectedIndex + 1) % items.length;
+            updateSelection(items);
+        } else if (e.key === 'ArrowUp' && items.length && searchResults.style.display !== 'none') {
+            e.preventDefault();
+            selectedIndex = selectedIndex <= 0 ? items.length - 1 : selectedIndex - 1;
+            updateSelection(items);
+        } else if (e.key === 'Enter') {
+            e.preventDefault();
+            if (selectedIndex >= 0 && items.length) {
+                selectSuggestion(selectedIndex);
+            } else if (searchInput.value.trim()) {
+                SearchState.selectedFromDropdown = false;
+                submitSearch();
+            }
+        } else if (e.key === 'Escape') {
+            hideDropdown();
+        }
+    });
+
+    function updateSelection(items) {
+        clearSelection();
+        if (items[selectedIndex]) {
+            items[selectedIndex].classList.add('selected');
+            items[selectedIndex].scrollIntoView({ block: 'nearest' });
+        }
+    }
+
+    function clearSelection() {
+        searchResults.querySelectorAll('.suggestion-item').forEach(el => el.classList.remove('selected'));
+    }
+
+    function hideDropdown() {
+        searchResults.style.display = 'none';
+        selectedIndex = -1;
+        currentSuggestions = [];
+    }
+
+    function escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    // ==================== FORM SUBMISSION ====================
+    function addHiddenField(name, value) {
+        let field = searchForm.querySelector(`input[name="${name}"]`);
+        if (!field) {
+            field = document.createElement('input');
+            field.type = 'hidden';
+            field.name = name;
+            searchForm.appendChild(field);
+        }
+        field.value = value;
+    }
+
+    // ==================== SUBMIT SEARCH ====================
+    function submitSearch() {
+        const query = searchInput.value.trim();
+        if (!query) return;
+
+        const params = {
+            session_id: SearchState.sessionId,
+            request_id: SearchSecurity.generateUUID(),
+            timestamp: SearchSecurity.getTimestamp(),
+            nonce: SearchSecurity.generateNonce(),
+            alt_mode: SearchState.selectedFromDropdown ? 'n' : 'y',
+            device_type: SearchState.deviceType,
+            result_count: SearchState.resultCount,
+            typing_time_ms: SearchState.getTypingTime(),
+            client_fp: SearchState.clientFingerprint,
+            req_seq: SearchState.incrementSequence(),
+        };
+
+        if (SearchState.isQuestion && SearchState.questionUUID) {
+            params.search_source = 'question';
+            params.document_uuid = SearchState.questionUUID;
+            params.answer = SearchState.questionAnswer || '';                    // ← NEW
+            params.answer_type = SearchState.questionAnswerType || 'UNKNOWN';   // ← NEW
+            params.alt_mode = 'n';
+        } else {
+            params.search_source = SearchState.source;
+            addHiddenField('document_uuid', '');
+            addHiddenField('answer', '');           // ← NEW: clear on non-question path
+            addHiddenField('answer_type', '');      // ← NEW: clear on non-question path
+        }
+
+        Object.entries(params).forEach(([name, value]) => {
+            addHiddenField(name, value);
+        });
+
+        hideDropdown();
+        searchForm.submit();
+    }
+
+    searchForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+
+        const query = searchInput.value.trim();
+        if (!query) return false;
+
+        if (!SearchState.selectedFromDropdown) {
+            SearchState.selectedFromDropdown = false;
+        }
+
+        submitSearch();
+    });
+
+    document.addEventListener('click', function(e) {
+        if (!searchResults.contains(e.target) && e.target !== searchInput) {
+            hideDropdown();
+        }
+    });
+
+    searchInput.addEventListener('focus', function() {
+        SearchState.reset();
+        if (this.value.trim().length >= 2) {
+            fetchSuggestions(this.value.trim());
+        }
+    });
+
+    // ==================== QUESTION CARD CLICKS ====================
+    document.querySelectorAll('.question-card').forEach(card => {
+        card.addEventListener('click', function(e) {
+            e.preventDefault();
+            const query = this.dataset.query;
+            if (query) {
+                searchInput.value = query;
+                SearchState.selectedFromDropdown = false;
+                SearchState.questionUUID = null;
+                SearchState.isQuestion = false;
+                SearchState.questionAnswer = null;       // ← NEW
+                SearchState.questionAnswerType = null;   // ← NEW
+                submitSearch();
+            }
+        });
+    });
+
+    // ==================== CYLINDER PLACEHOLDER ====================
+    const rollerPhrases = [
+        'Black genealogy and history',
+        "Top restaurants near me",
+        "Top books, authors & book clubs",
+        "Hiking & running groups near me",
+        "Travel groups for singles"
+    ];
+
+    let rollerIndex = 0;
+    let rollerTimer = null;
+    let rollerRunning = false;
+
+    const inputWrapper = searchInput.parentElement;
+    inputWrapper.style.position = 'relative';
+
+    const roller = document.createElement('div');
+    roller.id = 'placeholder-roller';
+    roller.style.cssText = `
+        position: absolute; left: 60px; top: 0; right: 60px; height: 100%;
+        display: flex; align-items: center; pointer-events: none;
+        z-index: 1; overflow: hidden;
+    `;
+
+    const track = document.createElement('div');
+    track.style.cssText = 'position: relative; height: 1.8em; overflow: hidden; width: 100%;';
+
+    const inner = document.createElement('div');
+    inner.id = 'roller-inner';
+    inner.style.cssText = 'position: relative;';
+
+    const spanA = document.createElement('span');
+    const spanB = document.createElement('span');
+
+    const spanStyle = `
+        display: block; height: 1.8em; line-height: 1.8em;
+        font-family: var(--font-body); font-size: 17px; font-style: italic;
+        color: var(--gray-500); white-space: nowrap;
+        transition: transform 0.7s cubic-bezier(0.23, 1, 0.32, 1),
+                    opacity 0.7s cubic-bezier(0.23, 1, 0.32, 1);
+    `;
+
+    spanA.style.cssText = spanStyle;
+    spanB.style.cssText = spanStyle + 'position: absolute; top: 0; left: 0; width: 100%;';
+
+    spanA.textContent = rollerPhrases[0];
+    spanB.textContent = rollerPhrases[1];
+    spanB.style.transform = 'translateY(100%)';
+    spanB.style.opacity = '0';
+
+    inner.appendChild(spanA);
+    inner.appendChild(spanB);
+    track.appendChild(inner);
+    roller.appendChild(track);
+    inputWrapper.appendChild(roller);
+
+    searchInput.style.position = 'relative';
+    searchInput.style.zIndex = '2';
+    searchInput.style.background = 'transparent';
+
+    let currentSpan = spanA;
+    let nextSpan = spanB;
+
+    function rollToNext() {
+        if (!rollerRunning) return;
+
+        rollerIndex = (rollerIndex + 1) % rollerPhrases.length;
+
+        nextSpan.textContent = rollerPhrases[rollerIndex];
+        nextSpan.style.transition = 'none';
+        nextSpan.style.transform = 'translateY(100%)';
+        nextSpan.style.opacity = '0';
+
+        nextSpan.offsetHeight;
+
+        nextSpan.style.transition = `
+            transform 0.7s cubic-bezier(0.23, 1, 0.32, 1),
+            opacity 0.7s cubic-bezier(0.23, 1, 0.32, 1)
+        `;
+        currentSpan.style.transform = 'translateY(-100%)';
+        currentSpan.style.opacity = '0';
+        nextSpan.style.transform = 'translateY(0)';
+        nextSpan.style.opacity = '1';
+
+        const temp = currentSpan;
+        currentSpan = nextSpan;
+        nextSpan = temp;
+
+        scheduleNextRoll();
+    }
+
+    function scheduleNextRoll() {
+        if (!rollerRunning) return;
+        rollerTimer = setTimeout(rollToNext, 3200);
+    }
+
+    function startRoller() {
+        if (rollerRunning) return;
+        rollerRunning = true;
+        scheduleNextRoll();
+    }
+
+    function stopRoller() {
+        rollerRunning = false;
+        if (rollerTimer) {
+            clearTimeout(rollerTimer);
+            rollerTimer = null;
+        }
+    }
+
+    function updateRollerVisibility() {
+        if (searchInput.value.length > 0) {
+            roller.style.opacity = '0';
+            roller.style.transition = 'opacity 0.15s ease';
+            stopRoller();
+        } else {
+            roller.style.opacity = '1';
+            roller.style.transition = 'opacity 0.15s ease';
+            startRoller();
+        }
+    }
+
+    searchInput.addEventListener('input', updateRollerVisibility);
+    searchInput.addEventListener('focus', updateRollerVisibility);
+    searchInput.addEventListener('blur', function() {
+        if (searchInput.value.length === 0) {
+            roller.style.opacity = '1';
+            startRoller();
+        }
+    });
+
+    startRoller();
+
+    // ==================== CLEANUP ====================
+    window.addEventListener('beforeunload', function() {
+        clearTimeout(debounceTimer);
+        stopRoller();
+    });
+
+    window._searchDebug = {
+        state: SearchState,
+        security: SearchSecurity
+    };
+});
+</script>
+
+</body>
+</html>
