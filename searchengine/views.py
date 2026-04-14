@@ -6660,14 +6660,48 @@ def log_search_analytics(
 from .cached_embedding_related_search import get_popular_queries
 from .trending import get_trending_results, cache_trending_result
 
+# def home(request):
+#     city = get_user_city(request)
+    
+#     # Get location from IP geolocation
+#     client_info = get_full_client_info(request)
+#     location = client_info.get('location') or {}
+    
+#     # Try most specific to least specific
+#     location_levels = [
+#         (location.get('city', ''), 'city'),
+#         (location.get('region', ''), 'region'),
+#         (location.get('country', ''), 'country'),
+#     ]
+    
+#     trending_results = []
+#     trending_label = 'Your Area'
+    
+#     for loc_value, loc_type in location_levels:
+#         if loc_value:
+#             trending_results = get_trending_results(city=loc_value, limit=6)
+#             if trending_results:
+#                 trending_label = loc_value.title()
+#                 break
+    
+#     # Fallback to general
+#     if not trending_results:
+#         trending_results = get_trending_results(city=None, limit=6)
+#         trending_label = 'Your Area'
+    
+#     context = {
+#         'city': city,
+#         'trending_label': trending_label,
+#         'trending_results': trending_results,
+#         'supported_cities': list(SUPPORTED_CITIES),
+#     }
+    
+#     return render(request, 'home3.html', context)
+
 def home(request):
     city = get_user_city(request)
+    location = get_location_from_request(request) or {}
     
-    # Get location from IP geolocation
-    client_info = get_full_client_info(request)
-    location = client_info.get('location') or {}
-    
-    # Try most specific to least specific
     location_levels = [
         (location.get('city', ''), 'city'),
         (location.get('region', ''), 'region'),
@@ -6684,7 +6718,6 @@ def home(request):
                 trending_label = loc_value.title()
                 break
     
-    # Fallback to general
     if not trending_results:
         trending_results = get_trending_results(city=None, limit=6)
         trending_label = 'Your Area'
@@ -6694,6 +6727,7 @@ def home(request):
         'trending_label': trending_label,
         'trending_results': trending_results,
         'supported_cities': list(SUPPORTED_CITIES),
+        'user_location': location,
     }
     
     return render(request, 'home3.html', context)

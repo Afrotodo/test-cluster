@@ -873,20 +873,7 @@
     flex-shrink: 0;
 }
 
-.location-indicator .loc-change {
-    color: var(--gray-500);
-    font-size: 12px;
-    font-weight: 400;
-    cursor: pointer;
-    margin-left: 4px;
-    text-decoration: underline;
-    text-decoration-color: transparent;
-    transition: text-decoration-color var(--transition-fast);
-}
 
-.location-indicator .loc-change:hover {
-    text-decoration-color: var(--gray-500);
-}
 
 /* Location notification toast */
 .location-toast {
@@ -1191,7 +1178,6 @@ body.has-location .loc-only {
         <circle cx="12" cy="10" r="3"/>
     </svg>
     <span id="location-name">Locating...</span>
-    <span class="loc-change" id="location-change">change</span>
 </div>
 
 <!-- Location notification toast -->
@@ -1423,76 +1409,25 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
 
-// ==================== LOCATION ====================
+// ==================== LOCATION (from server-side IP geolocation) ====================
 const LocationManager = {
-    // Config
-    COOKIE_NAME: 'afrotodo_location',
-    COOKIE_DAYS: 30,
-    GEOCODE_API: 'https://nominatim.openstreetmap.org/reverse',
-
-    // State
     lat: null,
     lng: null,
     cityName: null,
     state: null,
 
     init: function() {
-        const saved = this.getCookie();
-        if (saved) {
-            this.lat = saved.lat;
-            this.lng = saved.lng;
-            this.cityName = saved.city;
-            this.state = saved.state;
-            this.applyLocation();
-        } else {
-            // Auto-request location silently
-            this.requestLocation();
-        }
-    },
+        // Read location injected by Django from server-side IP lookup
+        {% if user_location %}
+        this.lat = {{ user_location.lat|default:"null" }};
+        this.lng = {{ user_location.lng|default:"null" }};
+        this.cityName = "{{ user_location.city|default:'' }}";
+        this.state = "{{ user_location.region|default:'' }}";
 
-    requestLocation: function() {
-        if (!navigator.geolocation) {
-            console.warn('Geolocation not supported');
-            return;
-        }
-
-        navigator.geolocation.getCurrentPosition(
-            (position) => {
-                this.lat = position.coords.latitude;
-                this.lng = position.coords.longitude;
-                this.reverseGeocode();
-            },
-            (error) => {
-                console.warn('Location denied:', error.message);
-                this.showToast('Unable to detect your location. Results shown globally.');
-            },
-            {
-                enableHighAccuracy: false,
-                timeout: 8000,
-                maximumAge: 300000
-            }
-        );
-    },
-
-    reverseGeocode: async function() {
-        try {
-            const url = `${this.GEOCODE_API}?lat=${this.lat}&lon=${this.lng}&format=json`;
-            const resp = await fetch(url, {
-                headers: { 'Accept-Language': 'en' }
-            });
-            const data = await resp.json();
-
-            const addr = data.address || {};
-            this.cityName = addr.city || addr.town || addr.village || addr.county || 'Your area';
-            this.state = addr.state || '';
-
-            this.saveCookie();
-            this.applyLocation();
-        } catch (err) {
-            console.error('Reverse geocode failed:', err);
-            this.cityName = 'Your area';
+        if (this.cityName || this.lat) {
             this.applyLocation();
         }
+        {% endif %}
     },
 
     applyLocation: function() {
@@ -1501,7 +1436,7 @@ const LocationManager = {
         const nameEl = document.getElementById('location-name');
         if (nameEl) {
             const display = this.state
-                ? `${this.cityName}, ${this.getStateAbbr(this.state)}`
+                ? `${this.cityName}, ${this.state}`
                 : this.cityName;
             nameEl.textContent = display;
         }
@@ -1512,13 +1447,13 @@ const LocationManager = {
         }
 
         const trendLabel = document.getElementById('trending-location-label');
-        if (trendLabel) {
+        if (trendLabel && this.cityName) {
             trendLabel.textContent = `in ${this.cityName}`;
         }
 
         this.addSearchCoords();
 
-        // Auto-activate Local button when location becomes available
+        // Auto-activate Local button when location is available
         const localBtn = document.getElementById('scope-local');
         const globalBtn = document.getElementById('scope-global');
         if (localBtn && globalBtn) {
@@ -1531,7 +1466,7 @@ const LocationManager = {
 
     addSearchCoords: function() {
         const form = document.getElementById('search-form');
-        if (!form) return;
+        if (!form || !this.lat || !this.lng) return;
 
         let latField = form.querySelector('input[name="lat"]');
         let lngField = form.querySelector('input[name="lng"]');
@@ -1565,34 +1500,6 @@ const LocationManager = {
         }, duration);
     },
 
-    saveCookie: function() {
-        const data = JSON.stringify({
-            lat: this.lat,
-            lng: this.lng,
-            city: this.cityName,
-            state: this.state
-        });
-        const expires = new Date();
-        expires.setDate(expires.getDate() + this.COOKIE_DAYS);
-        document.cookie = `${this.COOKIE_NAME}=${encodeURIComponent(data)};expires=${expires.toUTCString()};path=/;SameSite=Lax`;
-    },
-
-    getCookie: function() {
-        const match = document.cookie.match(
-            new RegExp('(?:^|; )' + this.COOKIE_NAME + '=([^;]*)')
-        );
-        if (!match) return null;
-        try {
-            return JSON.parse(decodeURIComponent(match[1]));
-        } catch {
-            return null;
-        }
-    },
-
-    clearCookie: function() {
-        document.cookie = `${this.COOKIE_NAME}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`;
-    },
-
     getStateAbbr: function(state) {
         const abbrs = {
             'Alabama':'AL','Alaska':'AK','Arizona':'AZ','Arkansas':'AR',
@@ -1616,15 +1523,6 @@ const LocationManager = {
         return abbrs[state] || state;
     }
 };
-
-// Wire up location UI
-const changeBtn = document.getElementById('location-change');
-if (changeBtn) {
-    changeBtn.addEventListener('click', function() {
-        LocationManager.clearCookie();
-        LocationManager.requestLocation();
-    });
-}
 
 LocationManager.init();
 
