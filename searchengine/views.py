@@ -9433,6 +9433,9 @@ def get_category_stats(category: str, city: str) -> Dict[str, str]:
 # =============================================================================
 # VIEW: TRACK CLICK (Analytics)
 # =============================================================================
+# =============================================================================
+# VIEW: TRACK CLICK (Analytics)
+# =============================================================================
 
 @csrf_exempt
 @require_http_methods(["POST", "GET"])
@@ -9608,22 +9611,42 @@ def track_click(request):
             )
         
         # === Feed trending cache (deduplicated per session) ===
+        # Store at city, region, country, and general levels so the home
+        # page finds matching data regardless of how the visitor's IP resolves.
         if query:
             try:
                 from .trending import cache_trending_result
+                
+                loc_city = location.get('city', '') if location else ''
+                loc_region = location.get('region', '') if location else ''
+                loc_country = location.get('country', '') if location else ''
+                
+                clicked_doc = {
+                    'title': result_title,
+                    'url': clicked_url,
+                    'result_id': result_id,
+                    'source': result_brand,
+                    'category': result_data_type,
+                    'schema': result_schema,
+                    'summary': result_summary,
+                    'image': result_image,
+                }
+                
+                # Store at each location level
+                for loc_value in [loc_city, loc_region, loc_country]:
+                    if loc_value:
+                        cache_trending_result(
+                            query=query,
+                            top_result=clicked_doc,
+                            city=loc_value,
+                            session_id=session_id,
+                        )
+                
+                # Always store to general as the global fallback
                 cache_trending_result(
                     query=query,
-                    top_result={
-                        'title': result_title,
-                        'url': clicked_url,
-                        'result_id': result_id,
-                        'source': result_brand,
-                        'category': result_data_type,
-                        'schema': result_schema,
-                        'summary': result_summary,
-                        'image': result_image,
-                    },
-                    city=location.get('city', '') if location else None,
+                    top_result=clicked_doc,
+                    city=None,
                     session_id=session_id,
                 )
             except Exception as e:
