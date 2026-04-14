@@ -6660,43 +6660,7 @@ def log_search_analytics(
 from .cached_embedding_related_search import get_popular_queries
 from .trending import get_trending_results, cache_trending_result
 
-# def home(request):
-#     city = get_user_city(request)
-    
-#     # Get location from IP geolocation
-#     client_info = get_full_client_info(request)
-#     location = client_info.get('location') or {}
-    
-#     # Try most specific to least specific
-#     location_levels = [
-#         (location.get('city', ''), 'city'),
-#         (location.get('region', ''), 'region'),
-#         (location.get('country', ''), 'country'),
-#     ]
-    
-#     trending_results = []
-#     trending_label = 'Your Area'
-    
-#     for loc_value, loc_type in location_levels:
-#         if loc_value:
-#             trending_results = get_trending_results(city=loc_value, limit=6)
-#             if trending_results:
-#                 trending_label = loc_value.title()
-#                 break
-    
-#     # Fallback to general
-#     if not trending_results:
-#         trending_results = get_trending_results(city=None, limit=6)
-#         trending_label = 'Your Area'
-    
-#     context = {
-#         'city': city,
-#         'trending_label': trending_label,
-#         'trending_results': trending_results,
-#         'supported_cities': list(SUPPORTED_CITIES),
-#     }
-    
-#     return render(request, 'home3.html', context)
+
 
 def home(request):
     city = get_user_city(request)
@@ -6791,10 +6755,7 @@ def _run_async(coro):
     except RuntimeError:
         return asyncio.run(coro)
 
-
-# =============================================================================
-# VIEW: SEARCH (IMAGE TAB REMOVED)
-# =============================================================================
+# View for Searching 
 
 # def search(request):
 #     """
@@ -7387,40 +7348,14 @@ def _run_async(coro):
 #     if not filters and total_results > 0:
 #         safe_cache_set(cache_key, context, SEARCH_CONFIG['cache_timeout'])
 
-#     if results and len(results) > 0:
-#         trending_city = location.get('city', '') if location else ''
-#         cache_trending_result(query=params.query, top_result=results[0], city=trending_city)
+#     # NOTE: Trending is now driven by clicks only — see click_redirect view.
+#     # No cache_trending_result() calls here.
 
-#     if results and len(results) > 0:
-#         top_result = results[0]
-        
-#         loc_city = location.get('city', '') if location else ''
-#         loc_region = location.get('region', '') if location else ''
-#         loc_country = location.get('country', '') if location else ''
-        
-#         for loc_value in [loc_city, loc_region, loc_country]:
-#             if loc_value:
-#                 cache_trending_result(query=params.query, top_result=top_result, city=loc_value)
-        
-#         cache_trending_result(query=params.query, top_result=top_result, city=None)
-    
 #     return render(request, 'results2.html', context)
 
 def search(request):
     """
     Main search endpoint with dynamic tab filtering.
-    
-    Supports filtering by:
-    - data_type: content, service, product, person, media, location (tabs)
-    - category: document_category values (secondary filter)
-    - schema: document_schema values (tertiary filter)
-    
-    Related searches are now handled inside execute_full_search().
-    
-    ASYNC BRIDGE COMPATIBILITY:
-      The bridge functions (execute_full_search, fetch_full_documents)
-      are now async. This view stays synchronous and wraps those calls
-      with _run_async() to avoid Django's SynchronousOnlyOperation error.
     """
     
     # === 1. EXTRACT & VALIDATE PARAMETERS ===
@@ -7429,7 +7364,6 @@ def search(request):
     # === 0. PREVENT FORM RESUBMISSION ON TAB CLICKS ===
     if params.query and not request.GET.get('_rd'):
         from urllib.parse import urlparse
-        from django.shortcuts import redirect
         referer = request.META.get('HTTP_REFERER', '')
         if referer:
             referer_path = urlparse(referer).path
@@ -7446,6 +7380,10 @@ def search(request):
     answer = request.GET.get('answer', '').strip()
     answer_type = request.GET.get('answer_type', '').strip()
     is_question_path = (search_source == 'question' and bool(document_uuid))
+    
+    # Check for images view
+    view_mode = request.GET.get('view', '')
+    show_images = view_mode == 'images'
     
     request_id = params.request_id or f"{params.session_id}:{time.time()}"
     
@@ -7494,12 +7432,10 @@ def search(request):
     if source_filter in ('home', 'results_page', 'header', None, ''):
         source_filter = None
     
-    # Dynamic tab filters
     active_data_type = validate_data_type(request.GET.get('data_type', ''))
     active_category = sanitize_filter_value(request.GET.get('category', ''))
     active_schema = validate_schema(request.GET.get('schema', ''))
     
-    # Build filters dict
     filters = {
         'data_type': active_data_type,
         'category': active_category,
@@ -7509,12 +7445,10 @@ def search(request):
         'location': sanitize_filter_value(request.GET.get('location', '')),
         'sort': validate_sort(request.GET.get('sort', ''), ['relevance', 'recent', 'authority'], 'relevance'),
     }
-    # Remove empty filters
     filters = {k: v for k, v in filters.items() if v}
     
     safe_search = request.GET.get('safe', 'on') == 'on'
     
-    # User location coordinates
     user_location = None
     try:
         user_lat = request.GET.get('lat')
@@ -7565,6 +7499,10 @@ def search(request):
             'active_data_type': active_data_type,
             'active_category': active_category,
             'active_schema': active_schema,
+            'show_images': False,
+            'image_results': [],
+            'image_count': 0,
+            'image_pagination': None,
             'filters': filters,
             'facets': {},
             'safe_search': safe_search,
@@ -7622,6 +7560,10 @@ def search(request):
             'active_data_type': '',
             'active_category': '',
             'active_schema': '',
+            'show_images': False,
+            'image_results': [],
+            'image_count': 0,
+            'image_pagination': None,
             'display_total': 0,
             'total_results': 0,
             'facet_total': 0,
@@ -7662,7 +7604,6 @@ def search(request):
         })
     
     # === 6. INITIALIZE ALL VARIABLES ===
-    
     result = {}
     results = []
     total_results = 0
@@ -7684,12 +7625,17 @@ def search(request):
     
     related_searches = []
     
+    image_results = []
+    image_count = 0
+    image_pagination = None
+    
     has_filters = bool(active_data_type or active_category or active_schema)
     
     # === 6A. GENERATE CACHE KEY ===
     cache_key = get_cache_key(
         'search', params.query, page, params.alt_mode,
         active_data_type, active_category, active_schema,
+        view_mode,
         json.dumps(filters, sort_keys=True)
     )
     
@@ -7785,7 +7731,6 @@ def search(request):
     # === 8. EXECUTE SEARCH ===
     if execute_full_search:
         try:
-            # _run_async wraps the async bridge call for sync context
             result = _run_async(execute_full_search(
                 query=params.query,
                 session_id=params.session_id,
@@ -7807,21 +7752,87 @@ def search(request):
             search_time = result.get('search_time', 0)
             search_strategy = result.get('search_strategy', search_type)
             
-            # === Get correction info from bridge ===
             bridge_corrected = result.get('corrected_query', params.query)
             if bridge_corrected and bridge_corrected.lower() != params.query.lower():
                 corrected_query = bridge_corrected
                 was_corrected = True
                 word_corrections = result.get('word_discovery', {}).get('corrections', [])
             
-            # Get facets from the search result
             data_type_facets = result.get('data_type_facets', [])
             category_facets = result.get('category_facets', [])
             schema_facets = result.get('schema_facets', [])
             facet_total = result.get('facet_total', 0)
             
-            # Get related searches from the search result
             related_searches = result.get('related_searches', [])
+            # DEBUG — remove after testing
+            if results:
+                print(f"🔗 8B DEBUG: title='{results[0].get('title', '')[:50]}' sem_uuid='{results[0].get('semantic_uuid', 'MISSING')}' id='{results[0].get('id', 'MISSING')}'")
+            
+            image_count = result.get('total_image_count', 0)
+            
+# === 8B. SEMANTIC RELATED SEARCHES ===
+            if results and fetch_documents_by_semantic_uuid:
+                try:
+                    top_result = results[0]
+                    sem_uuid = top_result.get('semantic_uuid', '')
+                    if sem_uuid and not sem_uuid.startswith('sem-solo-'):
+                        cluster_docs = _run_async(fetch_documents_by_semantic_uuid(
+                            semantic_uuid=sem_uuid,
+                            exclude_uuid=top_result.get('id', ''),
+                            limit=5,
+                        ))
+                        if cluster_docs:
+                            semantic_related = [
+                                {'query': doc['title'], 'url': doc.get('url', '')}
+                                for doc in cluster_docs
+                                if doc.get('title')
+                            ]
+                            print(f"🔗 8B semantic_related built: {len(semantic_related)} items")
+                            if semantic_related:
+                                if related_searches:
+                                    existing_titles = {r.get('query', '').lower() for r in related_searches}
+                                    for sr in semantic_related:
+                                        if sr['query'].lower() not in existing_titles:
+                                            related_searches.insert(0, sr)
+                                        else:
+                                            print(f"🔗 8B DEDUPE: '{sr['query'][:50]}' already in related_searches")
+                                else:
+                                    related_searches = semantic_related
+                            print(f"🔗 8B final related_searches count: {len(related_searches)}")
+                except Exception as e:
+                    logger.warning(f"Semantic related searches error: {e}")
+                    print(f"🔗 8B ERROR: {e}")
+            
+            # === 8C. IMAGE DATA ===
+            if show_images:
+                try:
+                    stable_key = _generate_stable_cache_key(params.session_id, params.query)
+                    finished = _run_async(_get_cached_results(stable_key))
+
+                    if finished and finished.get('all_results'):
+                        all_candidates = finished['all_results']
+                        has_image = [r for r in all_candidates if _has_real_images(r)]
+
+                        if has_image:
+                            first_batch = has_image[:20]
+                            page_ids = [item['id'] for item in first_batch if item.get('id')]
+                            if page_ids:
+                                full_docs = _run_async(fetch_full_documents(page_ids, params.query))
+                                image_results = extract_images_from_results(full_docs)
+                            else:
+                                image_results = []
+                        else:
+                            image_results = []
+                    else:
+                        image_results = extract_images_from_results(results)
+                except Exception as e:
+                    logger.warning(f"Image extraction error: {e}")
+                    image_results = []
+
+                image_pagination = None
+            else:
+                image_results = []
+                image_pagination = None
 
         except Exception as e:
             logger.error(f"Search execution error: {e}", exc_info=True)
@@ -7945,6 +7956,12 @@ def search(request):
         'answer': result.get('answer', ''),
         'answer_type': result.get('answer_type', ''),
         
+        # Image results
+        'show_images': show_images,
+        'image_results': image_results,
+        'image_count': image_count,
+        'image_pagination': image_pagination,
+        
         # Filters
         'filters': filters,
         'facets': facets,
@@ -7998,7 +8015,6 @@ def search(request):
         safe_cache_set(cache_key, context, SEARCH_CONFIG['cache_timeout'])
 
     # NOTE: Trending is now driven by clicks only — see click_redirect view.
-    # No cache_trending_result() calls here.
 
     return render(request, 'results2.html', context)
 
@@ -9252,187 +9268,6 @@ def get_category_stats(category: str, city: str) -> Dict[str, str]:
     return redis_manager.safe_hgetall(cache_key)
 
 
-# # =============================================================================
-# # VIEW: TRACK CLICK (Analytics)
-# # =============================================================================
-
-# @csrf_exempt
-# @require_http_methods(["POST", "GET"])
-# def track_click(request):
-#     """Track when a user clicks on a search result or other events."""
-    
-#     if request.method == 'POST':
-#         try:
-#             content_length = request.META.get('CONTENT_LENGTH', 0)
-#             try:
-#                 content_length = int(content_length)
-#             except (TypeError, ValueError):
-#                 content_length = 0
-            
-#             if content_length > TRACK_CLICK_CONFIG['max_event_data_size']:
-#                 return JsonResponse(
-#                     {'success': False, 'error': 'Request body too large'},
-#                     status=413
-#                 )
-            
-#             data = json.loads(request.body)
-#         except (json.JSONDecodeError, ValueError):
-#             data = request.POST.dict()
-#     else:
-#         data = request.GET.dict()
-    
-#     client_ip = get_client_ip(request)
-    
-#     session_id = sanitize_string(
-#         data.get('session_id', ''),
-#         max_length=TRACK_CLICK_CONFIG['max_session_id_length']
-#     )
-    
-#     is_allowed, rate_error = TrackClickRateLimiter.check_rate_limit(session_id, client_ip)
-#     if not is_allowed:
-#         return JsonResponse(
-#             {'success': False, 'error': rate_error},
-#             status=429
-#         )
-    
-#     event_type = sanitize_string(data.get('event_type', ''), max_length=50)
-    
-#     if event_type and event_type != 'click':
-#         analytics = get_analytics()
-#         if analytics:
-#             try:
-#                 if session_id:
-#                     location = get_location_from_request(request)
-                    
-#                     user_id = None
-#                     if hasattr(request, 'user') and request.user.is_authenticated:
-#                         user_id = str(request.user.id)
-                    
-#                     sanitized_data = {}
-#                     for key, value in data.items():
-#                         if isinstance(value, str):
-#                             sanitized_data[key] = value[:500]
-#                         elif isinstance(value, (int, float, bool)):
-#                             sanitized_data[key] = value
-#                         elif isinstance(value, dict):
-#                             sanitized_data[key] = {
-#                                 k[:100]: str(v)[:500] 
-#                                 for k, v in list(value.items())[:20]
-#                             }
-                    
-#                     analytics.track_event(
-#                         session_id=session_id,
-#                         event_type=event_type,
-#                         event_data=sanitized_data,
-#                         user_id=user_id,
-#                         location=location
-#                     )
-#                 return JsonResponse({'success': True})
-#             except Exception as e:
-#                 logger.error(f"Event tracking error: {e}")
-#                 return JsonResponse(
-#                     {'success': False, 'error': 'Event tracking failed'},
-#                     status=500
-#                 )
-#         return JsonResponse({'success': True})
-    
-#     clicked_url = sanitize_url(
-#         data.get('url', ''),
-#         max_length=TRACK_CLICK_CONFIG['max_url_length']
-#     )
-#     query = sanitize_string(
-#         data.get('query', ''),
-#         max_length=TRACK_CLICK_CONFIG['max_query_length']
-#     )
-    
-#     if not session_id:
-#         return JsonResponse(
-#             {'success': False, 'error': 'Missing session_id'},
-#             status=400
-#         )
-    
-#     if not clicked_url:
-#         return JsonResponse(
-#             {'success': False, 'error': 'Missing or invalid URL'},
-#             status=400
-#         )
-    
-#     clicked_position = sanitize_int(data.get('position', 0), default=0, min_val=0, max_val=1000)
-#     result_id = sanitize_string(
-#         data.get('result_id', ''),
-#         max_length=TRACK_CLICK_CONFIG['max_result_id_length']
-#     )
-#     result_title = sanitize_string(
-#         data.get('title', ''),
-#         max_length=TRACK_CLICK_CONFIG['max_title_length']
-#     )
-#     result_source = sanitize_string(
-#         data.get('source', ''),
-#         max_length=TRACK_CLICK_CONFIG['max_source_length']
-#     )
-#     search_request_id = sanitize_string(
-#         data.get('request_id', ''),
-#         max_length=TRACK_CLICK_CONFIG['max_request_id_length']
-#     )
-    
-#     results_count = sanitize_int(data.get('results_count', 0), default=0, min_val=0, max_val=10000)
-    
-#     was_corrected = str(data.get('was_corrected', 'false')).lower() == 'true'
-#     corrected_query = sanitize_string(
-#         data.get('corrected_query', ''),
-#         max_length=TRACK_CLICK_CONFIG['max_corrected_query_length']
-#     )
-    
-#     time_to_click_ms = None
-#     raw_time = data.get('time_to_click_ms')
-#     if raw_time is not None:
-#         time_to_click_ms = sanitize_int(raw_time, default=0, min_val=0, max_val=3600000)
-#         if time_to_click_ms == 0:
-#             time_to_click_ms = None
-    
-#     user_id = None
-#     if hasattr(request, 'user') and request.user.is_authenticated:
-#         user_id = str(request.user.id)
-    
-#     location = get_location_from_request(request)
-    
-#     analytics = get_analytics()
-#     if analytics:
-#         try:
-#             analytics.track_click(
-#                 session_id=session_id,
-#                 query=query,
-#                 clicked_url=clicked_url,
-#                 clicked_position=clicked_position,
-#                 result_id=result_id,
-#                 result_title=result_title,
-#                 result_source=result_source,
-#                 user_id=user_id,
-#                 time_to_click_ms=time_to_click_ms,
-#                 location=location,
-#                 search_request_id=search_request_id,
-#                 results_count=results_count,
-#                 was_corrected=was_corrected,
-#                 corrected_query=corrected_query
-#             )
-            
-#             return JsonResponse({'success': True})
-#         except Exception as e:
-#             logger.error(f"Click tracking error: {e}")
-#             return JsonResponse(
-#                 {'success': False, 'error': 'Tracking failed'},
-#                 status=500
-#             )
-    
-#     return JsonResponse(
-#         {'success': False, 'error': 'Analytics not available'},
-#         status=503
-#     )
-
-
-# =============================================================================
-# VIEW: TRACK CLICK (Analytics)
-# =============================================================================
 # =============================================================================
 # VIEW: TRACK CLICK (Analytics)
 # =============================================================================
@@ -9659,86 +9494,6 @@ def track_click(request):
         status=503
     )
 
-# @require_GET
-# def click_redirect(request):
-#     """Redirect-based click tracking."""
-    
-#     destination_url = sanitize_url(
-#         request.GET.get('url', ''),
-#         max_length=TRACK_CLICK_CONFIG['max_url_length']
-#     )
-    
-#     if not destination_url:
-#         return HttpResponseBadRequest('Missing or invalid URL parameter')
-    
-#     client_ip = get_client_ip(request)
-    
-#     session_id = sanitize_string(
-#         request.GET.get('session_id', ''),
-#         max_length=TRACK_CLICK_CONFIG['max_session_id_length']
-#     )
-    
-#     is_allowed, _ = TrackClickRateLimiter.check_rate_limit(session_id, client_ip)
-    
-#     if is_allowed:
-#         query = sanitize_string(
-#             request.GET.get('query', ''),
-#             max_length=TRACK_CLICK_CONFIG['max_query_length']
-#         )
-#         clicked_position = sanitize_int(request.GET.get('position', 0), default=0, min_val=0, max_val=1000)
-#         result_id = sanitize_string(
-#             request.GET.get('result_id', ''),
-#             max_length=TRACK_CLICK_CONFIG['max_result_id_length']
-#         )
-#         result_title = sanitize_string(
-#             request.GET.get('title', ''),
-#             max_length=TRACK_CLICK_CONFIG['max_title_length']
-#         )
-#         result_source = sanitize_string(
-#             request.GET.get('source', ''),
-#             max_length=TRACK_CLICK_CONFIG['max_source_length']
-#         )
-#         search_request_id = sanitize_string(
-#             request.GET.get('request_id', ''),
-#             max_length=TRACK_CLICK_CONFIG['max_request_id_length']
-#         )
-        
-#         results_count = sanitize_int(request.GET.get('results_count', 0), default=0, min_val=0, max_val=10000)
-#         was_corrected = request.GET.get('was_corrected', 'false').lower() == 'true'
-#         corrected_query = sanitize_string(
-#             request.GET.get('corrected_query', ''),
-#             max_length=TRACK_CLICK_CONFIG['max_corrected_query_length']
-#         )
-        
-#         user_id = None
-#         if hasattr(request, 'user') and request.user.is_authenticated:
-#             user_id = str(request.user.id)
-        
-#         location = get_location_from_request(request)
-        
-#         analytics = get_analytics()
-#         if analytics and session_id:
-#             try:
-#                 analytics.track_click(
-#                     session_id=session_id,
-#                     query=query,
-#                     clicked_url=destination_url,
-#                     clicked_position=clicked_position,
-#                     result_id=result_id,
-#                     result_title=result_title,
-#                     result_source=result_source,
-#                     user_id=user_id,
-#                     time_to_click_ms=None,
-#                     location=location,
-#                     search_request_id=search_request_id,
-#                     results_count=results_count,
-#                     was_corrected=was_corrected,
-#                     corrected_query=corrected_query
-#                 )
-#             except Exception as e:
-#                 logger.warning(f"Click redirect tracking error: {e}")
-    
-#     return redirect(destination_url)
 
 @require_GET
 def click_redirect(request):
