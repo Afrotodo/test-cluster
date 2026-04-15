@@ -7954,6 +7954,7 @@ def search(request):
         'has_results': len(results) > 0,
         'featured': featured,
         'related_searches': related_searches,
+        'related_type': 'questions' if is_question_path else 'searches',
         'answer': result.get('answer', ''),
         'answer_type': result.get('answer_type', ''),
         
