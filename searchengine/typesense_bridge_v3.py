@@ -8511,6 +8511,51 @@ async def fetch_documents_by_semantic_uuid(
     except Exception as e:
         print(f"❌ fetch_documents_by_semantic_uuid error: {e}")
         return []
+    
+
+
+async def fetch_questions_by_document_uuids(
+    document_uuids: List[str],
+    exclude_query: str = '',
+    limit: int = 10
+) -> List[Dict]:
+    """Fetch questions from the questions collection by document UUIDs."""
+    if not document_uuids:
+        return []
+
+    uuid_filter = ','.join([f'`{uuid}`' for uuid in document_uuids])
+
+    params = {
+        'q':              '*',
+        'filter_by':      f'document_uuid:[{uuid_filter}]',
+        'per_page':       limit,
+        'include_fields': 'question,document_uuid,answer_type',
+    }
+
+    try:
+        response = await asyncio.to_thread(
+            client.collections['questions'].documents.search,
+            params
+        )
+        hits = response.get('hits', [])
+
+        exclude_lower = exclude_query.lower().strip()
+        questions = [
+            {
+                'query':         hit['document'].get('question', ''),
+                'document_uuid': hit['document'].get('document_uuid', ''),
+                'answer_type':   hit['document'].get('answer_type', ''),
+            }
+            for hit in hits
+            if hit.get('document', {}).get('question', '').lower().strip() != exclude_lower
+        ]
+
+        print(f"❓ Related questions: {len(questions)} for {len(document_uuids)} documents")
+        return questions
+
+    except Exception as e:
+        print(f"❌ fetch_questions_by_document_uuids error: {e}")
+        return []        
 
 async def fetch_documents_by_cluster_uuid(
     cluster_uuid: str,
@@ -8996,6 +9041,120 @@ async def execute_full_search(
     #         'profile': {},
     #     }
 
+
+    # =========================================================================
+    # QUESTION DIRECT PATH
+    # =========================================================================
+    # if document_uuid and search_source == 'question':
+    #     print(f"❓ QUESTION PATH: document_uuid={document_uuid} query='{query}'")
+    #     t_fetch = time.time()
+    #     results = await fetch_full_documents([document_uuid], query)
+    #     times['fetch_docs'] = round((time.time() - t_fetch) * 1000, 2)
+
+    #     # Fetch cluster siblings if the document belongs to a cluster
+    #     if results and results[0].get('cluster_uuid'):
+    #         cluster_uuid = results[0]['cluster_uuid']
+    #         try:
+    #             cluster_docs = await fetch_documents_by_cluster_uuid(
+    #                 cluster_uuid, exclude_uuid=document_uuid, limit=5
+    #             )
+    #             cluster_ids = [d['id'] for d in cluster_docs if d.get('id')]
+    #             if cluster_ids:
+    #                 cluster_results = await fetch_full_documents(cluster_ids, query)
+    #                 results.extend(cluster_results)
+    #                 print(f"   🔗 Cluster siblings: {len(cluster_results)} added "
+    #                       f"from cluster={cluster_uuid[:12]}...")
+    #         except Exception as e:
+    #             print(f"⚠️ Cluster fetch error: {e}")
+
+    #     ai_overview   = None
+    #     question_word = None
+    #     q_lower       = query.lower().strip()
+    #     for word in ('who', 'what', 'where', 'when', 'why', 'how'):
+    #         if q_lower.startswith(word):
+    #             question_word = word
+    #             break
+
+    #     question_signals = {
+    #         'query_mode':          'answer',
+    #         'wants_single_result': True,
+    #         'question_word':       question_word,
+    #     }
+
+    #     if results and results[0].get('key_facts'):
+    #         ai_overview = _build_ai_overview(question_signals, results, query)
+    #         if ai_overview:
+    #             print(f"   💡 AI Overview (question path): {ai_overview[:80]}...")
+    #             results[0]['humanized_summary'] = ai_overview
+
+    #     related_searches = []
+    #     if results:
+    #         semantic_uuid = results[0].get('semantic_uuid')
+    #         if semantic_uuid:
+    #             try:
+    #                 related_docs     = await fetch_documents_by_semantic_uuid(
+    #                     semantic_uuid, exclude_uuid=document_uuid, limit=5
+    #                 )
+    #                 related_searches = [
+    #                     {'query': doc.get('title', ''), 'url': doc.get('url', '')}
+    #                     for doc in related_docs if doc.get('title')
+    #                 ]
+    #             except Exception as e:
+    #                 print(f"⚠️ Related searches error: {e}")
+
+    #     times['total'] = round((time.time() - t0) * 1000, 2)
+
+    #     return {
+    #         'query':             query,
+    #         'corrected_query':   query,
+    #         'intent':            'answer',
+    #         'query_mode':        'answer',
+    #         'answer':            answer,
+    #         'answer_type':       answer_type or 'UNKNOWN',
+    #         'results':           results,
+    #         'total':             len(results),
+    #         'facet_total':       len(results),
+    #         'total_image_count': 0,
+    #         'page':              1,
+    #         'per_page':          per_page,
+    #         'search_time':       round(time.time() - t0, 3),
+    #         'session_id':        session_id,
+    #         'semantic_enabled':  False,
+    #         'search_strategy':   'question_direct',
+    #         'alt_mode':          alt_mode,
+    #         'skip_embedding':    True,
+    #         'search_source':     'question',
+    #         'valid_terms':       query.split(),
+    #         'unknown_terms':     [],
+    #         'data_type_facets':  [],
+    #         'category_facets':   [],
+    #         'schema_facets':     [],
+    #         'related_searches':  related_searches,
+    #         'facets':            {},
+    #         'word_discovery': {
+    #             'valid_count':   len(query.split()),
+    #             'unknown_count': 0,
+    #             'corrections':   [],
+    #             'filters':       [],
+    #             'locations':     [],
+    #             'sort':          None,
+    #             'total_score':   0,
+    #             'average_score': 0,
+    #             'max_score':     0,
+    #         },
+    #         'timings':          times,
+    #         'filters_applied': {
+    #             'data_type':             None,
+    #             'category':              None,
+    #             'schema':                None,
+    #             'is_local_search':       False,
+    #             'local_search_strength': 'none',
+    #         },
+    #         'signals': question_signals,
+    #         'profile': {},
+    #     }
+
+
     # =========================================================================
     # QUESTION DIRECT PATH
     # =========================================================================
@@ -9041,20 +9200,16 @@ async def execute_full_search(
                 print(f"   💡 AI Overview (question path): {ai_overview[:80]}...")
                 results[0]['humanized_summary'] = ai_overview
 
-        related_searches = []
-        if results:
-            semantic_uuid = results[0].get('semantic_uuid')
-            if semantic_uuid:
-                try:
-                    related_docs     = await fetch_documents_by_semantic_uuid(
-                        semantic_uuid, exclude_uuid=document_uuid, limit=5
-                    )
-                    related_searches = [
-                        {'query': doc.get('title', ''), 'url': doc.get('url', '')}
-                        for doc in related_docs if doc.get('title')
-                    ]
-                except Exception as e:
-                    print(f"⚠️ Related searches error: {e}")
+        # Related questions — from the original document + cluster siblings
+        all_doc_uuids = [document_uuid]
+        for r in results[1:]:
+            rid = r.get('id')
+            if rid and rid != document_uuid:
+                all_doc_uuids.append(rid)
+
+        related_questions = await fetch_questions_by_document_uuids(
+            all_doc_uuids, exclude_query=query, limit=10
+        )
 
         times['total'] = round((time.time() - t0) * 1000, 2)
 
@@ -9083,7 +9238,7 @@ async def execute_full_search(
             'data_type_facets':  [],
             'category_facets':   [],
             'schema_facets':     [],
-            'related_searches':  related_searches,
+            'related_searches':  related_questions,
             'facets':            {},
             'word_discovery': {
                 'valid_count':   len(query.split()),
@@ -9106,7 +9261,7 @@ async def execute_full_search(
             },
             'signals': question_signals,
             'profile': {},
-        }
+        }    
 
     # =========================================================================
     # FAST PATH — finished cache hit

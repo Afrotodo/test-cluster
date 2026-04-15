@@ -7771,7 +7771,8 @@ def search(request):
             image_count = result.get('total_image_count', 0)
             
 # === 8B. SEMANTIC RELATED SEARCHES ===
-            if results and fetch_documents_by_semantic_uuid:
+            if results and fetch_documents_by_semantic_uuid and not is_question_path:
+            # if results and fetch_documents_by_semantic_uuid:
                 try:
                     top_result = results[0]
                     sem_uuid = top_result.get('semantic_uuid', '')
