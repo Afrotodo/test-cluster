@@ -8512,6 +8512,51 @@ async def fetch_documents_by_semantic_uuid(
         print(f"❌ fetch_documents_by_semantic_uuid error: {e}")
         return []
 
+async def fetch_documents_by_cluster_uuid(
+    cluster_uuid: str,
+    exclude_uuid: str = None,
+    limit: int = 5
+) -> List[Dict]:
+    """Fetch documents that share the same cluster."""
+    if not cluster_uuid:
+        return []
+
+    filter_str = f'cluster_uuid:={cluster_uuid}'
+    if exclude_uuid:
+        filter_str += f' && document_uuid:!={exclude_uuid}'
+
+    params = {
+        'q':              '*',
+        'filter_by':      filter_str,
+        'per_page':       limit,
+        'include_fields': 'document_uuid,document_title,document_url',
+        'sort_by':        'authority_score:desc',
+    }
+
+    try:
+        search_requests = {'searches': [{'collection': COLLECTION_NAME, **params}]}
+        response        = await asyncio.to_thread(
+            client.multi_search.perform,
+            search_requests, {}
+        )
+        hits            = response['results'][0].get('hits', [])
+
+        related = [
+            {
+                'title': hit['document'].get('document_title', ''),
+                'url':   hit['document'].get('document_url', ''),
+                'id':    hit['document'].get('document_uuid', ''),
+            }
+            for hit in hits
+            if hit.get('document', {}).get('document_uuid')
+        ]
+
+        print(f"🔗 Cluster docs: {len(related)} found for cluster_uuid={cluster_uuid[:12]}...")
+        return related
+
+    except Exception as e:
+        print(f"❌ fetch_documents_by_cluster_uuid error: {e}")
+        return []
 
 def format_result(hit: Dict, query: str = '') -> Dict:
     """Transform a raw Typesense hit into the response format."""
@@ -8855,6 +8900,102 @@ async def execute_full_search(
         if active_filters:
             print(f"🎛️ Active UI filters: {active_filters}")
 
+    # # =========================================================================
+    # # QUESTION DIRECT PATH
+    # # =========================================================================
+    # if document_uuid and search_source == 'question':
+    #     print(f"❓ QUESTION PATH: document_uuid={document_uuid} query='{query}'")
+    #     t_fetch = time.time()
+    #     results = await fetch_full_documents([document_uuid], query)
+    #     times['fetch_docs'] = round((time.time() - t_fetch) * 1000, 2)
+
+    #     ai_overview   = None
+    #     question_word = None
+    #     q_lower       = query.lower().strip()
+    #     for word in ('who', 'what', 'where', 'when', 'why', 'how'):
+    #         if q_lower.startswith(word):
+    #             question_word = word
+    #             break
+
+    #     question_signals = {
+    #         'query_mode':          'answer',
+    #         'wants_single_result': True,
+    #         'question_word':       question_word,
+    #     }
+
+    #     if results and results[0].get('key_facts'):
+    #         ai_overview = _build_ai_overview(question_signals, results, query)
+    #         if ai_overview:
+    #             print(f"   💡 AI Overview (question path): {ai_overview[:80]}...")
+    #             results[0]['humanized_summary'] = ai_overview
+
+    #     related_searches = []
+    #     if results:
+    #         semantic_uuid = results[0].get('semantic_uuid')
+    #         if semantic_uuid:
+    #             try:
+    #                 related_docs     = await fetch_documents_by_semantic_uuid(
+    #                     semantic_uuid, exclude_uuid=document_uuid, limit=5
+    #                 )
+    #                 related_searches = [
+    #                     {'query': doc.get('title', ''), 'url': doc.get('url', '')}
+    #                     for doc in related_docs if doc.get('title')
+    #                 ]
+    #             except Exception as e:
+    #                 print(f"⚠️ Related searches error: {e}")
+
+    #     times['total'] = round((time.time() - t0) * 1000, 2)
+
+    #     return {
+    #         'query':             query,
+    #         'corrected_query':   query,
+    #         'intent':            'answer',
+    #         'query_mode':        'answer',
+    #         'answer':            answer,
+    #         'answer_type':       answer_type or 'UNKNOWN',
+    #         'results':           results,
+    #         'total':             len(results),
+    #         'facet_total':       len(results),
+    #         'total_image_count': 0,
+    #         'page':              1,
+    #         'per_page':          per_page,
+    #         'search_time':       round(time.time() - t0, 3),
+    #         'session_id':        session_id,
+    #         'semantic_enabled':  False,
+    #         'search_strategy':   'question_direct',
+    #         'alt_mode':          alt_mode,
+    #         'skip_embedding':    True,
+    #         'search_source':     'question',
+    #         'valid_terms':       query.split(),
+    #         'unknown_terms':     [],
+    #         'data_type_facets':  [],
+    #         'category_facets':   [],
+    #         'schema_facets':     [],
+    #         'related_searches':  related_searches,
+    #         'facets':            {},
+    #         'word_discovery': {
+    #             'valid_count':   len(query.split()),
+    #             'unknown_count': 0,
+    #             'corrections':   [],
+    #             'filters':       [],
+    #             'locations':     [],
+    #             'sort':          None,
+    #             'total_score':   0,
+    #             'average_score': 0,
+    #             'max_score':     0,
+    #         },
+    #         'timings':          times,
+    #         'filters_applied': {
+    #             'data_type':             None,
+    #             'category':              None,
+    #             'schema':                None,
+    #             'is_local_search':       False,
+    #             'local_search_strength': 'none',
+    #         },
+    #         'signals': question_signals,
+    #         'profile': {},
+    #     }
+
     # =========================================================================
     # QUESTION DIRECT PATH
     # =========================================================================
@@ -8863,6 +9004,22 @@ async def execute_full_search(
         t_fetch = time.time()
         results = await fetch_full_documents([document_uuid], query)
         times['fetch_docs'] = round((time.time() - t_fetch) * 1000, 2)
+
+        # Fetch cluster siblings if the document belongs to a cluster
+        if results and results[0].get('cluster_uuid'):
+            cluster_uuid = results[0]['cluster_uuid']
+            try:
+                cluster_docs = await fetch_documents_by_cluster_uuid(
+                    cluster_uuid, exclude_uuid=document_uuid, limit=5
+                )
+                cluster_ids = [d['id'] for d in cluster_docs if d.get('id')]
+                if cluster_ids:
+                    cluster_results = await fetch_full_documents(cluster_ids, query)
+                    results.extend(cluster_results)
+                    print(f"   🔗 Cluster siblings: {len(cluster_results)} added "
+                          f"from cluster={cluster_uuid[:12]}...")
+            except Exception as e:
+                print(f"⚠️ Cluster fetch error: {e}")
 
         ai_overview   = None
         question_word = None
