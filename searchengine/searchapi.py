@@ -1207,7 +1207,6 @@
 
 
 # ---------------------------------  Version 2 -------------------------
-
 """
 searchapi.py - Redis-based search preprocessing for Django
 
@@ -1217,10 +1216,6 @@ This module provides Redis hash and sorted set lookups for:
 - Autocomplete suggestions (terms + questions)
 - Query caching
 - Index introspection utilities
-
-Indexes used:
-- terms_idx      → RediSearch index over `term:*`      hashes (words/entities)
-- questions_idx  → RediSearch index over `questions:*` hashes (user questions)
 """
 
 from __future__ import annotations
@@ -1337,7 +1332,7 @@ def escape_tag(text: str) -> str:
 # =============================================================================
 
 def create_index() -> bool:
-    """Create the terms RediSearch index (STOPWORDS 0 — index every token)."""
+    """Create the RediSearch index (STOPWORDS 0 — index every token)."""
     client = RedisLookupTable.get_client()
     if not client:
         return False
@@ -1372,46 +1367,8 @@ def create_index() -> bool:
         return False
 
 
-def create_questions_index() -> bool:
-    """
-    Create the questions RediSearch index.
-
-    Only `question` is searchable; `score` is sortable for popularity ranking
-    (incremented via `increment_question_score`). Other hash fields (answer,
-    answer_type, document_uuid) are still returned with search results but
-    are NOT searchable — answers come from Typesense.
-    """
-    client = RedisLookupTable.get_client()
-    if not client:
-        return False
-
-    try:
-        try:
-            client.ft(QUESTIONS_INDEX_NAME).info()
-            logger.info("Index '%s' already exists", QUESTIONS_INDEX_NAME)
-            return True
-        except Exception:
-            pass  # index doesn't exist yet — create it
-
-        client.execute_command(
-            "FT.CREATE", QUESTIONS_INDEX_NAME,
-            "ON", "HASH",
-            "PREFIX", "1", "questions:",
-            "STOPWORDS", "0",
-            "SCHEMA",
-            "question", "TEXT",
-            "score",    "NUMERIC", "SORTABLE",
-        )
-        logger.info("Index '%s' created successfully", QUESTIONS_INDEX_NAME)
-        return True
-
-    except Exception:
-        logger.exception("Error creating index '%s'", QUESTIONS_INDEX_NAME)
-        return False
-
-
 def drop_index() -> bool:
-    """Drop the terms index while keeping the underlying data."""
+    """Drop the index while keeping the underlying data."""
     client = RedisLookupTable.get_client()
     if not client:
         return False
@@ -1425,29 +1382,11 @@ def drop_index() -> bool:
         return False
 
 
-def drop_questions_index() -> bool:
-    """Drop the questions index while keeping the underlying data."""
-    client = RedisLookupTable.get_client()
-    if not client:
-        return False
-
-    try:
-        client.ft(QUESTIONS_INDEX_NAME).dropindex(delete_documents=False)
-        logger.info("Index '%s' dropped", QUESTIONS_INDEX_NAME)
-        return True
-    except Exception:
-        logger.exception("Error dropping index '%s'", QUESTIONS_INDEX_NAME)
-        return False
-
-
 # =============================================================================
 # INDEX INTROSPECTION UTILITIES
 # =============================================================================
 
-def get_index_info(
-    client: Optional[redis.Redis] = None,
-    index_name: str = INDEX_NAME,
-) -> Dict[str, Any]:
+def get_index_info(client: Optional[redis.Redis] = None) -> Dict[str, Any]:
     """
     Return RediSearch index metadata as a flat key/value dict.
     Returns an empty dict if the index does not exist or the call fails.
@@ -1457,27 +1396,23 @@ def get_index_info(
         return {}
 
     try:
-        raw = client.ft(index_name).info()
+        raw = client.ft(INDEX_NAME).info()
         items = list(raw)
         return {items[i]: items[i + 1] for i in range(0, len(items) - 1, 2)}
     except redis.ResponseError:
         return {}
     except Exception:
-        logger.warning("Could not read index info for '%s'", index_name, exc_info=True)
+        logger.warning("Could not read index info for '%s'", INDEX_NAME, exc_info=True)
         return {}
 
 
-def index_has_field(
-    field_name: str,
-    client: Optional[redis.Redis] = None,
-    index_name: str = INDEX_NAME,
-) -> bool:
-    """Return True if *field_name* is a registered attribute on the given index."""
+def index_has_field(field_name: str, client: Optional[redis.Redis] = None) -> bool:
+    """Return True if *field_name* is a registered attribute on INDEX_NAME."""
     client = client or RedisLookupTable.get_client()
     if not client:
         return False
 
-    info = get_index_info(client, index_name=index_name)
+    info = get_index_info(client)
     attributes = info.get("attributes", [])
     field_lower = field_name.lower()
 
@@ -1494,7 +1429,7 @@ def index_has_field(
 
 def get_index_status() -> Dict[str, Any]:
     """
-    Return a structured summary of the current indexes and key counts.
+    Return a structured summary of the current index and key counts.
 
     Intended for health-check endpoints or management commands.
     Does NOT print — callers decide how to surface the data.
@@ -1503,24 +1438,29 @@ def get_index_status() -> Dict[str, Any]:
     if not client:
         return {"index_exists": False, "error": "Redis connection failed"}
 
-    terms_info     = get_index_info(client, index_name=INDEX_NAME)
-    questions_info = get_index_info(client, index_name=QUESTIONS_INDEX_NAME)
+    info = get_index_info(client)
 
-    term_count     = sum(1 for _ in client.scan_iter("term:*",      count=500))
-    question_count = sum(1 for _ in client.scan_iter("questions:*", count=500))
+    if not info:
+        return {
+            "index_exists": False,
+            "index_name": INDEX_NAME,
+            "message": "Index not found — run create_index() to create it",
+        }
+
+    index_def_str = str(info.get("index_definition", ""))
+    term_count     = sum(1 for _ in client.scan_iter("term:*",      count=100))
+    question_count = sum(1 for _ in client.scan_iter("questions:*", count=100))
 
     return {
-        "terms_index": {
-            "exists":             bool(terms_info),
-            "name":               INDEX_NAME,
-            "num_docs":           terms_info.get("num_docs", 0),
-            "indexing_failures":  terms_info.get("hash_indexing_failures", 0),
-        },
-        "questions_index": {
-            "exists":             bool(questions_info),
-            "name":               QUESTIONS_INDEX_NAME,
-            "num_docs":           questions_info.get("num_docs", 0),
-            "indexing_failures":  questions_info.get("hash_indexing_failures", 0),
+        "index_exists": True,
+        "index_name": INDEX_NAME,
+        "num_docs": info.get("num_docs", "unknown"),
+        "indexing_failures": info.get("hash_indexing_failures", 0),
+        "fields": {
+            "term_exact":        index_has_field("term_exact",  client),
+            "entity_type":       index_has_field("entity_type", client),
+            "rank":              index_has_field("rank",        client),
+            "questions_prefix":  "questions:" in index_def_str,
         },
         "key_counts": {
             "term_keys":     term_count,
@@ -1556,25 +1496,6 @@ def _safe_int(value: Any, default: int = 0) -> int:
         return int(float(value))
     except (TypeError, ValueError):
         return default
-
-
-def _scan_keys(
-    client: redis.Redis,
-    pattern: str,
-    limit: int = 200,
-    scan_count: int = 500,
-) -> List[str]:
-    """
-    Non-blocking key scan with an early exit once `limit` keys are found.
-
-    Preferred over client.keys() for production — SCAN does not block Redis.
-    """
-    found: List[str] = []
-    for key in client.scan_iter(match=pattern, count=scan_count):
-        found.append(key)
-        if len(found) >= limit:
-            break
-    return found
 
 
 def parse_search_doc(doc: Any) -> Dict[str, Any]:
@@ -1637,9 +1558,8 @@ def get_exact_term_matches(term: str) -> List[Dict[str, Any]]:
     """
     Find all Redis hashes whose key matches ``term:{word}:*``.
 
-    Uses SCAN (non-blocking) + pipelined HGETALL for minimal round trips.
-    Direct key scan is used here — not RediSearch full-text search — so
-    stop-words and tokenisation rules do not affect results.
+    Uses direct key scan — not RediSearch full-text search — so stop-words
+    and tokenisation rules do not affect results.
     """
     client = RedisLookupTable.get_client()
     if not client or not term:
@@ -1653,32 +1573,43 @@ def get_exact_term_matches(term: str) -> List[Dict[str, Any]]:
     term_key = term_lower.replace(" ", "_")
 
     try:
-        keys = _scan_keys(client, f"term:{term_key}:*", limit=50)
+        keys = client.keys(f"term:{term_key}:*")
         if not keys:
             return []
 
-        # Pipeline all HGETALL calls into a single round trip
-        pipe = client.pipeline()
-        for key in keys:
-            pipe.hgetall(key)
-        metadatas = pipe.execute()
-
         matches: List[Dict[str, Any]] = []
-        for key, metadata in zip(keys, metadatas):
+        for key in keys:
+            metadata = client.hgetall(key)
             if not metadata:
                 continue
 
+            # matches.append({
+            #     "id":            key,
+            #     "member":        key,
+            #     "term":          metadata.get("question", ""),
+            #     "display":       metadata.get("question", ""),
+            #     "description":   "",
+            #     "category":      "question",
+            #     "entity_type":   "question",
+            #     "pos":           "question",
+            #     "rank":          _safe_int(metadata.get("score", 0)),
+            #     "exists":        True,
+            #     "document_uuid": metadata.get("document_uuid", ""),
+            #     "answer":        metadata.get("answer", ""),
+            #     "answer_type":   metadata.get("answer_type", "UNKNOWN"),
+            # })
+
             matches.append({
-                "id":            key,
-                "member":        key,
-                "term":          metadata.get("term", ""),
-                "display":       metadata.get("display", ""),
-                "description":   metadata.get("description", ""),
-                "category":      metadata.get("category", ""),
-                "entity_type":   metadata.get("entity_type", ""),
-                "pos":           metadata.get("pos", ""),
-                "rank":          _safe_int(metadata.get("rank", 0)),
-                "exists":        True,
+            "id":            key,
+            "member":        key,
+            "term":          metadata.get("term", ""),      # ← correct
+            "display":       metadata.get("display", ""),   # ← correct
+            "description":   metadata.get("description", ""),
+            "category":      metadata.get("category", ""),
+            "entity_type":   metadata.get("entity_type", ""),
+            "pos":           metadata.get("pos", ""),
+            "rank":          _safe_int(metadata.get("rank", 0)),  # ← correct
+            "exists":        True,
             })
 
         matches.sort(key=lambda x: x.get("rank", 0), reverse=True)
@@ -1689,20 +1620,18 @@ def get_exact_term_matches(term: str) -> List[Dict[str, Any]]:
         return []
 
 
+
 # =============================================================================
-# QUESTION LOOKUP — REDISEARCH-BACKED (O(log N + k))
+# QUESTION LOOKUP — REDISEARCH (questions_idx)
 # =============================================================================
 
 def get_question_matches(prefix: str, limit: int = 5) -> List[Dict[str, Any]]:
     """
-    Return question hashes matching the prefix via RediSearch.
+    Return question hashes matching the prefix via RediSearch questions_idx.
 
-    Uses the `questions_idx` RediSearch index for near-O(1) lookup regardless
-    of dataset size. Results are sorted by `score` descending, so questions
-    that have been clicked/asked more often appear first.
-
-    Output shape is identical to the prior KEYS-based implementation so
-    downstream callers (get_autocomplete, frontend) need no changes.
+    Splits the input on spaces, escapes each word individually, and appends
+    the wildcard ``*`` to the last word only — so spaces act as RediSearch
+    token separators and multi-word prefixes like ``"who was the"`` work.
     """
     client = RedisLookupTable.get_client()
     if not client or not prefix:
@@ -1713,7 +1642,14 @@ def get_question_matches(prefix: str, limit: int = 5) -> List[Dict[str, Any]]:
         return []
 
     try:
-        query_str = f"{escape_query(prefix_lower)}*"
+        words = prefix_lower.split()
+        if not words:
+            return []
+
+        escaped_words = [escape_query(w) for w in words]
+        escaped_words[-1] = escaped_words[-1] + "*"
+        query_str = " ".join(escaped_words)
+
         query = Query(query_str).sort_by("score", asc=False).paging(0, limit)
         result = client.ft(QUESTIONS_INDEX_NAME).search(query)
 
@@ -1739,34 +1675,6 @@ def get_question_matches(prefix: str, limit: int = 5) -> List[Dict[str, Any]]:
     except Exception:
         logger.exception("Question match error for prefix '%s'", prefix)
         return []
-
-
-def increment_question_score(question_key: str, amount: int = 1) -> int:
-    """
-    Atomically increment the score (popularity counter) for a question.
-
-    Safe for concurrent callers — HINCRBY is atomic. Returns the new score,
-    or 0 on failure. RediSearch automatically reindexes the updated hash,
-    so the new score affects the next `get_question_matches` call.
-
-    Args:
-        question_key: Full Redis key, e.g. "questions:what_is_photosynthesis"
-        amount: How much to increment by (default 1)
-    """
-    client = RedisLookupTable.get_client()
-    if not client or not question_key:
-        return 0
-
-    if not question_key.startswith("questions:"):
-        logger.warning("increment_question_score: key '%s' missing 'questions:' prefix",
-                       question_key)
-        return 0
-
-    try:
-        return int(client.hincrby(question_key, "score", amount))
-    except Exception:
-        logger.exception("Failed to increment score for '%s'", question_key)
-        return 0
 
 
 def get_prefix_matches(prefix: str, limit: int = 50) -> List[Dict[str, Any]]:
@@ -2145,8 +2053,7 @@ def get_suggestions(
                 item.update(distance=distance, score=calculate_score(distance, item.get("rank", 0)))
                 all_results.append(item)
                 seen_terms.add(term_lower)
-                if "prefix" not in tiers_used:
-                    tiers_used.append("prefix")
+                tiers_used.append("prefix") if "prefix" not in tiers_used else None
 
         # --- Tier 3: fuzzy match (only when results are sparse) ---
         if len(all_results) < limit:
@@ -2156,8 +2063,7 @@ def get_suggestions(
                     item["score"] = calculate_score(item["distance"], item.get("rank", 0))
                     all_results.append(item)
                     seen_terms.add(term_lower)
-                    if "fuzzy" not in tiers_used:
-                        tiers_used.append("fuzzy")
+                    tiers_used.append("fuzzy") if "fuzzy" not in tiers_used else None
 
         all_results.sort(key=lambda x: (-x.get("rank", 0), x.get("distance", 99)))
 
@@ -2175,16 +2081,11 @@ def get_suggestions(
 # AUTOCOMPLETE
 # =============================================================================
 
-def get_autocomplete(
-    prefix: str,
-    limit: int = 10,
-    max_questions: int = 3,
-) -> List[Dict[str, Any]]:
+def get_autocomplete(prefix: str, limit: int = 10) -> List[Dict[str, Any]]:
     """
     Return autocomplete suggestions: questions first, then terms.
 
-    - Up to `max_questions` question results sourced from RediSearch
-      (ranked by popularity `score`)
+    - Up to 3 question results sourced from ``get_question_matches()``
     - Remaining slots filled with term suggestions from ``get_suggestions()``
     - Frontend can split on ``entity_type == 'question'`` to render separately
     """
@@ -2193,11 +2094,8 @@ def get_autocomplete(
 
     prefix_clean = prefix.strip()
 
-    question_results = get_question_matches(prefix_clean, limit=max_questions)
-
-    # Clamp remaining slots to at least 1 in case questions fill the limit
-    remaining = max(1, limit - len(question_results))
-    term_results = get_suggestions(prefix_clean, limit=remaining)
+    question_results = get_question_matches(prefix_clean, limit=3)
+    term_results = get_suggestions(prefix_clean, limit=limit - len(question_results))
 
     return question_results + term_results.get("suggestions", [])
 
@@ -2219,38 +2117,6 @@ def get_top_words_by_rank(limit: int = 200) -> List[Dict[str, Any]]:
 
     except Exception:
         logger.exception("Error getting top words by rank")
-        return []
-
-
-def get_top_questions_by_score(limit: int = 50) -> List[Dict[str, Any]]:
-    """
-    Return the top *limit* questions sorted by score descending.
-
-    Useful for a "popular questions" display or analytics dashboards.
-    """
-    client = RedisLookupTable.get_client()
-    if not client:
-        return []
-
-    try:
-        query = Query("*").sort_by("score", asc=False).paging(0, limit)
-        result = client.ft(QUESTIONS_INDEX_NAME).search(query)
-
-        matches: List[Dict[str, Any]] = []
-        for doc in result.docs:
-            matches.append({
-                "id":            doc.id,
-                "member":        doc.id,
-                "question":      getattr(doc, "question", ""),
-                "score":         _safe_int(getattr(doc, "score", 0)),
-                "document_uuid": getattr(doc, "document_uuid", ""),
-                "answer":        getattr(doc, "answer", ""),
-                "answer_type":   getattr(doc, "answer_type", "UNKNOWN"),
-            })
-        return matches
-
-    except Exception:
-        logger.exception("Error getting top questions by score")
         return []
 
 
@@ -2543,13 +2409,3 @@ def autocomplete(prefix: str, limit: int = 10) -> List[Dict[str, Any]]:
 def spell_check(word: str) -> Dict[str, Any]:
     """Shorthand for ``validate_word``."""
     return validate_word(word)
-
-
-
-
-
-
-
-
-
-
