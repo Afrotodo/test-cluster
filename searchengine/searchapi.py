@@ -2081,23 +2081,61 @@ def get_suggestions(
 # AUTOCOMPLETE
 # =============================================================================
 
+# def get_autocomplete(prefix: str, limit: int = 10) -> List[Dict[str, Any]]:
+#     """
+#     Return autocomplete suggestions: questions first, then terms.
+
+#     - Up to 3 question results sourced from ``get_question_matches()``
+#     - Remaining slots filled with term suggestions from ``get_suggestions()``
+#     - Frontend can split on ``entity_type == 'question'`` to render separately
+#     """
+#     if not prefix or len(prefix.strip()) < 2:
+#         return []
+
+#     prefix_clean = prefix.strip()
+
+#     question_results = get_question_matches(prefix_clean, limit=3)
+#     term_results = get_suggestions(prefix_clean, limit=limit - len(question_results))
+
+#     return question_results + term_results.get("suggestions", [])
+
+# Interrogative words that signal the user is typing a question
+_INTERROGATIVES: frozenset[str] = frozenset({
+    "who", "what", "when", "where", "why", "which", "whose", "how",
+    "is", "are", "was", "were", "do", "does", "did",
+    "can", "could", "should", "will", "would",
+})
+
+
 def get_autocomplete(prefix: str, limit: int = 10) -> List[Dict[str, Any]]:
     """
-    Return autocomplete suggestions: questions first, then terms.
+    Return autocomplete suggestions: terms first, then questions.
 
-    - Up to 3 question results sourced from ``get_question_matches()``
-    - Remaining slots filled with term suggestions from ``get_suggestions()``
+    Questions are only fetched when the input starts with an interrogative
+    word (who, what, when, where, why, how, etc.) — typing ``jeff`` returns
+    only term suggestions, while ``who was jeff`` returns questions too.
+
+    - Terms come from ``get_suggestions()`` (exact → prefix → fuzzy tiers)
+    - Questions (if triggered) come from ``get_question_matches()``,
+      appended after terms
     - Frontend can split on ``entity_type == 'question'`` to render separately
     """
     if not prefix or len(prefix.strip()) < 2:
         return []
 
     prefix_clean = prefix.strip()
+    first_word = prefix_clean.lower().split()[0] if prefix_clean else ""
+    is_question_intent = first_word in _INTERROGATIVES
 
-    question_results = get_question_matches(prefix_clean, limit=3)
-    term_results = get_suggestions(prefix_clean, limit=limit - len(question_results))
+    if is_question_intent:
+        # Reserve a few slots for questions, fill the rest with terms
+        term_results = get_suggestions(prefix_clean, limit=limit - 3)
+        question_results = get_question_matches(prefix_clean, limit=3)
+        return term_results.get("suggestions", []) + question_results
 
-    return question_results + term_results.get("suggestions", [])
+    # Keyword search — terms only
+    term_results = get_suggestions(prefix_clean, limit=limit)
+    return term_results.get("suggestions", [])
 
 
 # =============================================================================
