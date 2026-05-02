@@ -9616,28 +9616,25 @@ def term(request):
 def contact(request):
     return render(request, 'contact.html')
 
-
 # ============================================================
 # views_debug.py — DEBUG ENDPOINTS (ASYNC-COMPATIBLE)
 # ============================================================
 #
-# UPDATED FOR WORD DISCOVERY v4 PIPELINE:
-#   - debug_keyword, debug_semantic, debug_question are unchanged
-#     because they consume the same profile dict output.
-#   - debug_word_discovery is fully rewritten to trace the v4
-#     4-step pipeline:
-#       Step 1: Tokenize + Known Sets + RAM Hash Lookup
-#       Step 2: Clean + Resolve (corrections → POS → "in" disambig)
-#       Step 3: N-gram Resolution (single pass on corrected words)
-#       Step 4: Build Profile + Intent
+# UPDATED FOR SUBJECT-FIELD SCORING (v5):
+#   - Every result row now surfaces the 5 new subject fields:
+#       primary_subject_name, primary_subject_type,
+#       primary_subject_confidence, primary_subject_disambiguator,
+#       secondary_subjects
+#   - Every result row also surfaces the v5 scoring diagnostics:
+#       subject_multiplier, subject_match_reason, richness
+#   - New per-endpoint "subject_routing" summary block shows the
+#     distribution of primary/secondary/penalty/neutral matches so
+#     you can see at a glance whether the new ranking is working.
+#   - debug_word_discovery is unchanged — it's pre-Typesense.
 #
 # REQUIREMENTS:
 #   - Django 4.1+ (for async view support)
 # ============================================================
-
-
-# ── typesense client (for debug_question raw search) ─────────────────────────
-# (client already imported from typesense_bridge_v3 at top of file)
 
 
 # ============================================================
@@ -9674,12 +9671,82 @@ def _build_full_result(
     signals: dict,
     source_pool: str = 'document'
 ) -> dict:
-    """Merge a scored metadata item with its full Typesense document."""
+    """
+    Merge a scored metadata item with its full Typesense document.
+    v5: surfaces all 5 subject fields plus subject_multiplier,
+    subject_match_reason, and richness diagnostics produced by the
+    updated scorer.
+    """
     query_mode = signals.get('query_mode', 'explore')
 
     dom_m  = _domain_relevance(scored_item, signals)
     cint_m = _content_intent_match(scored_item, query_mode)
     pool_m = _pool_type_multiplier(scored_item, query_mode)
+
+    # ── Subject fields — read from scored_item first (where the
+    # scorer wrote them), then fall back to full_doc. Either source
+    # works because _doc_to_metadata copies them onto scored_item.
+    def _pick(key, default=None):
+        v = scored_item.get(key)
+        if v not in (None, '', []):
+            return v
+        return full_doc.get(key, default)
+
+    primary_subject_name         = _pick('primary_subject_name', '')
+    primary_subject_type         = _pick('primary_subject_type', '')
+    primary_subject_confidence   = _pick('primary_subject_confidence', '')
+    primary_subject_disambiguator = _pick('primary_subject_disambiguator', '')
+    secondary_subjects           = _pick('secondary_subjects', []) or []
+
+    # ── Build a human-readable explanation of the subject ranking. ────
+    sub_mult   = scored_item.get('subject_multiplier', 1.0)
+    sub_reason = scored_item.get('subject_match_reason', 'unscored')
+    richness   = scored_item.get('richness', 0.0)
+
+    if sub_reason.startswith('primary_high'):
+        subject_explain = (
+            f'Query matches primary_subject_name with HIGH confidence '
+            f'→ ×{sub_mult:.2f}'
+        )
+    elif sub_reason.startswith('primary_medium'):
+        subject_explain = (
+            f'Query matches primary_subject_name with MEDIUM confidence '
+            f'→ ×{sub_mult:.2f}'
+        )
+    elif sub_reason.startswith('primary_low'):
+        subject_explain = (
+            f'Query matches primary_subject_name with LOW confidence '
+            f'→ ×{sub_mult:.2f}'
+        )
+    elif sub_reason.startswith('primary_unknown_conf'):
+        subject_explain = (
+            f'Query matches primary_subject_name (no confidence label, '
+            f'treated as MEDIUM) → ×{sub_mult:.2f}'
+        )
+    elif sub_reason == 'secondary':
+        subject_explain = (
+            f'Query matches secondary_subjects only (not the primary '
+            f'subject) → ×{sub_mult:.2f}'
+        )
+    elif sub_reason == 'no_subject_match_penalty':
+        subject_explain = (
+            f'Query token appears in keywords/title/entities but is NOT '
+            f'this doc\'s subject → ×{sub_mult:.2f} PENALTY'
+        )
+    elif sub_reason == 'neutral':
+        subject_explain = (
+            f'Query has no overlap with this doc\'s subject or keyword '
+            f'fields → ×{sub_mult:.2f}'
+        )
+    elif sub_reason == 'neutral_no_query':
+        subject_explain = 'No query tokens to compare → neutral'
+    else:
+        subject_explain = f'reason={sub_reason} multiplier=×{sub_mult:.2f}'
+
+    if '+type_match' in sub_reason:
+        subject_explain += (
+            ' + question-word ↔ subject_type alignment bonus'
+        )
 
     return {
         'rank':          scored_item.get('rank', 0),
@@ -9711,6 +9778,15 @@ def _build_full_result(
         'published_date': full_doc.get('published_date', ''),
         'semantic_uuid': full_doc.get('semantic_uuid', ''),
 
+        # ── NEW v5: subject-hierarchy fields ──────────────────────────
+        'subject': {
+            'primary_name':           primary_subject_name,
+            'primary_type':           primary_subject_type,
+            'primary_confidence':     primary_subject_confidence,
+            'primary_disambiguator':  primary_subject_disambiguator,
+            'secondary':              secondary_subjects,
+        },
+
         'scores': {
             'blended':         round(scored_item.get('blended_score', 0), 4),
             'text':            round(scored_item.get('text_score', 0), 4),
@@ -9724,6 +9800,21 @@ def _build_full_result(
             'content_intent':      round(cint_m, 3),
             'pool_type':           round(pool_m, 3),
             'combined_multiplier': round(dom_m * cint_m * pool_m, 3),
+            # NEW v5 — subject multiplier already baked into text_score,
+            # but exposed here for transparency.
+            'subject_multiplier':  round(sub_mult, 3),
+        },
+
+        # ── NEW v5: scoring diagnostics ──────────────────────────────
+        'subject_match': {
+            'multiplier':  round(sub_mult, 3),
+            'reason':      sub_reason,
+            'explanation': subject_explain,
+            'richness':    round(richness, 3),
+            'note': (
+                'subject_multiplier is applied INSIDE text_score, not on '
+                'top of it — what you see in scores.text is post-multiplier.'
+            ),
         },
 
         'authority_inputs': {
@@ -9740,6 +9831,7 @@ def _build_full_result(
         },
 
         'why_this_score': {
+            'subject_match':   subject_explain,
             'domain_match':    f"primary_domain={signals.get('primary_domain')} "
                                f"category={scored_item.get('category', '')} "
                                f"service_type={full_doc.get('service_type', [])}",
@@ -9751,6 +9843,68 @@ def _build_full_result(
             'authority_note':  'no rating/review data' if scored_item.get('auth_score', 0) == 0
                                else f"auth_score_n={scored_item.get('auth_score', 0):.3f}",
         },
+    }
+
+
+def _summarize_subject_routing(scored_items: list) -> dict:
+    """
+    Build a per-pool summary of how docs were routed by the subject
+    matcher. Lets you see at a glance whether the new ranking is doing
+    its job.
+    """
+    buckets = {
+        'primary_high':        0,
+        'primary_medium':      0,
+        'primary_low':         0,
+        'primary_unknown_conf': 0,
+        'secondary':           0,
+        'no_subject_match_penalty': 0,
+        'neutral':             0,
+        'neutral_no_query':    0,
+        'with_type_match_bonus': 0,
+        'unscored':            0,
+    }
+    type_counts = {}
+    confidence_counts = {'HIGH': 0, 'MEDIUM': 0, 'LOW': 0, 'UNLABELED': 0}
+
+    for item in scored_items:
+        reason = item.get('subject_match_reason', 'unscored')
+
+        # Strip the +type_match suffix for the main bucket count.
+        base_reason = reason.split('+')[0]
+        if base_reason in buckets:
+            buckets[base_reason] += 1
+        else:
+            buckets.setdefault(base_reason, 0)
+            buckets[base_reason] += 1
+
+        if '+type_match' in reason:
+            buckets['with_type_match_bonus'] += 1
+
+        # Count subject_type distribution
+        st = (item.get('primary_subject_type') or '').upper()
+        if st:
+            type_counts[st] = type_counts.get(st, 0) + 1
+
+        # Count confidence distribution
+        conf = (item.get('primary_subject_confidence') or '').upper()
+        if conf in confidence_counts:
+            confidence_counts[conf] += 1
+        elif item.get('primary_subject_name'):
+            confidence_counts['UNLABELED'] += 1
+
+    return {
+        'total_scored': len(scored_items),
+        'match_buckets': buckets,
+        'primary_subject_type_distribution': type_counts,
+        'primary_subject_confidence_distribution': confidence_counts,
+        'note': (
+            'primary_high docs got ×1.60 boost, primary_medium ×1.30, '
+            'primary_low ×1.10, secondary ×1.15. '
+            'no_subject_match_penalty docs got ×0.70 (the "Africa mentioned '
+            'but not the subject" fix). +type_match adds ×1.20 when the '
+            'question word aligns with primary_subject_type.'
+        ),
     }
 
 
@@ -9776,7 +9930,7 @@ async def debug_keyword(request):
 
     URL:
         /debug/keyword/?query=restaurants+in+atlanta
-        /debug/keyword/?query=best+soul+food+houston
+        /debug/keyword/?query=africa
     """
     if not DEBUG_BRIDGE_AVAILABLE:
         return JsonResponse(
@@ -9838,6 +9992,7 @@ async def debug_keyword(request):
             'wants_single_result':    signals.get('wants_single_result', False),
             'wants_multiple_results': signals.get('wants_multiple_results', False),
             'local_search_strength':  signals.get('local_search_strength', 'none'),
+            'question_word':          signals.get('question_word', None),
             'domain_inferred':        True,
         }
 
@@ -9855,11 +10010,17 @@ async def debug_keyword(request):
         ts_params = build_typesense_params(profile, signals=signals)
 
         report['steps']['typesense_params'] = {
-            'q':         ts_params.get('q', ''),
-            'query_by':  ts_params.get('query_by', ''),
-            'filter_by': ts_params.get('filter_by', ''),
-            'sort_by':   ts_params.get('sort_by', ''),
-            'num_typos': ts_params.get('num_typos', 0),
+            'q':                ts_params.get('q', ''),
+            'query_by':         ts_params.get('query_by', ''),
+            'query_by_weights': ts_params.get('query_by_weights', ''),
+            'filter_by':        ts_params.get('filter_by', ''),
+            'sort_by':          ts_params.get('sort_by', ''),
+            'num_typos':        ts_params.get('num_typos', 0),
+            'note':             (
+                'v5 hierarchy: primary_subject_name(15) > document_title(10) > '
+                'entity_names(8) > primary_keywords(6) > secondary_subjects(5) > '
+                'key_facts(4) > semantic_keywords(3)'
+            ),
         }
 
         # ── Step 5: Fetch candidates ──────────────────────────────────────
@@ -9899,6 +10060,9 @@ async def debug_keyword(request):
             'authority':  round(blend['authority'], 3),
             'note':       'authority=0 means no service_rating/review_count in data',
         }
+
+        # ── Step 6b: Subject routing summary (NEW v5) ─────────────────────
+        report['steps']['subject_routing'] = _summarize_subject_routing(candidates)
 
         # ── Step 7: Fetch full documents for ALL results ──────────────────
         t5       = time.time()
@@ -9943,7 +10107,7 @@ async def debug_semantic(request):
 
     URL:
         /debug/semantic/?query=restaurants+in+atlanta
-        /debug/semantic/?query=what+is+soul+food
+        /debug/semantic/?query=africa
     """
     if not DEBUG_BRIDGE_AVAILABLE:
         return JsonResponse(
@@ -10008,6 +10172,7 @@ async def debug_semantic(request):
             'has_unknown_terms':      signals.get('has_unknown_terms', False),
             'wants_single_result':    signals.get('wants_single_result', False),
             'local_search_strength':  signals.get('local_search_strength', 'none'),
+            'question_word':          signals.get('question_word', None),
         }
 
         # ── Step 3: Profile ───────────────────────────────────────────────
@@ -10131,6 +10296,9 @@ async def debug_semantic(request):
 
         report['timings']['scoring_ms'] = round((time.time() - t6) * 1000, 2)
 
+        # ── Step 9b: Subject routing summary (NEW v5) ─────────────────────
+        report['steps']['subject_routing'] = _summarize_subject_routing(all_results)
+
         # ── Step 10: Fetch full documents for ALL results ─────────────────
         t7       = time.time()
         all_ids  = [item.get('id') for item in all_results if item.get('id')]
@@ -10177,11 +10345,12 @@ async def debug_question(request):
     Tests the questions collection vector search with FULL validation.
 
     Each result shows the raw vector hit PLUS whether it would pass
-    the bridge's distance gate and token validation.
+    the bridge's distance gate and token validation. v5: full document
+    rows now include the 5 subject fields.
 
     URL:
         /debug/question/?query=who+was+the+first+mayor+of+savannah
-        /debug/question/?query=what+is+soul+food
+        /debug/question/?query=africa
     """
     if not DEBUG_BRIDGE_AVAILABLE:
         return JsonResponse(
@@ -10374,6 +10543,7 @@ async def debug_question(request):
         report['timings']['fetch_full_docs_ms'] = round((time.time() - t4) * 1000, 2)
 
         # ── Step 7: Merge full document into each result ──────────────────
+        # NEW v5: include the 5 subject fields on each row.
         for r in results:
             full_doc      = full_docs_map.get(r['document_uuid'], {})
             r['document'] = {
@@ -10391,6 +10561,14 @@ async def debug_question(request):
                 },
                 'key_facts':    full_doc.get('key_facts', []),
                 'image_url':    full_doc.get('image_url', []),
+                # NEW v5: subject hierarchy
+                'subject': {
+                    'primary_name':           full_doc.get('primary_subject_name', ''),
+                    'primary_type':           full_doc.get('primary_subject_type', ''),
+                    'primary_confidence':     full_doc.get('primary_subject_confidence', ''),
+                    'primary_disambiguator':  full_doc.get('primary_subject_disambiguator', ''),
+                    'secondary':              full_doc.get('secondary_subjects', []),
+                },
             }
 
         # ── Step 8: Distance distribution + validation summary ────────────
@@ -10426,6 +10604,29 @@ async def debug_question(request):
             'below_0_65': sum(1 for d in distances if d < 0.65),
         }
 
+        # ── NEW v5: subject distribution across the question hits ────────
+        subject_type_counts = {}
+        subject_conf_counts = {'HIGH': 0, 'MEDIUM': 0, 'LOW': 0, 'UNLABELED': 0}
+        for r in results:
+            full = full_docs_map.get(r['document_uuid'], {})
+            st = (full.get('primary_subject_type') or '').upper()
+            if st:
+                subject_type_counts[st] = subject_type_counts.get(st, 0) + 1
+            conf = (full.get('primary_subject_confidence') or '').upper()
+            if conf in subject_conf_counts:
+                subject_conf_counts[conf] += 1
+            elif full.get('primary_subject_name'):
+                subject_conf_counts['UNLABELED'] += 1
+
+        report['steps']['subject_distribution'] = {
+            'primary_subject_type_distribution':       subject_type_counts,
+            'primary_subject_confidence_distribution': subject_conf_counts,
+            'note': (
+                'These counts come from the full document records linked '
+                'to each matching question.'
+            ),
+        }
+
         report['results']                = results
         report['steps']['total_results'] = len(results)
 
@@ -10440,6 +10641,9 @@ async def debug_question(request):
 # ============================================================
 # DEBUG ENDPOINT 4 — /api/debug/word-discovery/
 # ============================================================
+#
+# UNCHANGED from previous version — Word Discovery is upstream of
+# Typesense and has nothing to do with the new subject fields.
 
 async def debug_word_discovery(request):
     """
