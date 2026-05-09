@@ -2264,6 +2264,63 @@ def paginate_cached_results(
 # DOCUMENT FETCHING, FORMATTING, AI OVERVIEW
 # ============================================================
 
+async def fetch_documents_by_primary_subject_name(
+    primary_subject_name: str,
+    exclude_uuid: str = None,
+    limit: int = 20
+) -> List[Dict]:
+    """
+    Fetch documents that share the same primary_subject_name.
+    Used by the QUESTION DIRECT PATH so when a user clicks a question
+    about a subject (person, place, concept), they also see more
+    documents that are ABOUT that same subject.
+
+    Matches on primary_subject_name only (no type constraint), sorted by
+    authority_score desc. Excludes the answer doc UUID.
+    """
+    if not primary_subject_name:
+        return []
+
+    # Escape backticks in the subject name for the filter
+    safe_name = primary_subject_name.replace('`', '')
+    filter_str = f'primary_subject_name:=`{safe_name}`'
+    if exclude_uuid:
+        filter_str += f' && document_uuid:!={exclude_uuid}'
+
+    params = {
+        'q':              '*',
+        'filter_by':      filter_str,
+        'per_page':       limit,
+        'include_fields': 'document_uuid,document_title,document_url',
+        'sort_by':        'authority_score:desc',
+    }
+
+    try:
+        search_requests = {'searches': [{'collection': COLLECTION_NAME, **params}]}
+        response        = await asyncio.to_thread(
+            client.multi_search.perform,
+            search_requests, {}
+        )
+        hits            = response['results'][0].get('hits', [])
+
+        related = [
+            {
+                'title': hit['document'].get('document_title', ''),
+                'url':   hit['document'].get('document_url', ''),
+                'id':    hit['document'].get('document_uuid', ''),
+            }
+            for hit in hits
+            if hit.get('document', {}).get('document_uuid')
+        ]
+
+        print(f"🔗 Subject docs: {len(related)} found for "
+              f"primary_subject_name='{primary_subject_name}'")
+        return related
+
+    except Exception as e:
+        print(f"❌ fetch_documents_by_primary_subject_name error: {e}")
+        return []
+
 async def fetch_full_documents(document_ids: List[str], query: str = '') -> List[Dict]:
     """Fetch complete document records from Typesense for the current page only."""
     if not document_ids:
@@ -2769,27 +2826,166 @@ async def execute_full_search(
     # =========================================================================
     # QUESTION DIRECT PATH
     # =========================================================================
+    # if document_uuid and search_source == 'question':
+    #     print(f"❓ QUESTION PATH: document_uuid={document_uuid} query='{query}'")
+    #     t_fetch = time.time()
+    #     results = await fetch_full_documents([document_uuid], query)
+    #     times['fetch_docs'] = round((time.time() - t_fetch) * 1000, 2)
+
+    #     if results and results[0].get('cluster_uuid'):
+    #         cluster_uuid = results[0]['cluster_uuid']
+    #         try:
+    #             cluster_docs = await fetch_documents_by_cluster_uuid(
+    #                 cluster_uuid, exclude_uuid=document_uuid, limit=5
+    #             )
+    #             cluster_ids = [d['id'] for d in cluster_docs if d.get('id')]
+    #             if cluster_ids:
+    #                 cluster_results = await fetch_full_documents(cluster_ids, query)
+    #                 results.extend(cluster_results)
+    #                 print(f"   🔗 Cluster siblings: {len(cluster_results)} added "
+    #                       f"from cluster={cluster_uuid[:12]}...")
+    #         except Exception as e:
+    #             print(f"⚠️ Cluster fetch error: {e}")
+
+    #     ai_overview   = None
+    #     question_word = None
+    #     q_lower       = query.lower().strip()
+    #     for word in ('who', 'what', 'where', 'when', 'why', 'how'):
+    #         if q_lower.startswith(word):
+    #             question_word = word
+    #             break
+
+    #     question_signals = {
+    #         'query_mode':          'answer',
+    #         'wants_single_result': True,
+    #         'question_word':       question_word,
+    #     }
+
+    #     if results and results[0].get('key_facts'):
+    #         ai_overview = _build_ai_overview(question_signals, results, query)
+    #         if ai_overview:
+    #             print(f"   💡 AI Overview (question path): {ai_overview[:80]}...")
+    #             results[0]['humanized_summary'] = ai_overview
+
+    #     all_doc_uuids = [document_uuid]
+    #     for r in results[1:]:
+    #         rid = r.get('id')
+    #         if rid and rid != document_uuid:
+    #             all_doc_uuids.append(rid)
+
+    #     related_questions = await fetch_questions_by_document_uuids(
+    #         all_doc_uuids, exclude_query=query, limit=10
+    #     )
+
+    #     times['total'] = round((time.time() - t0) * 1000, 2)
+
+    #     return {
+    #         'query':             query,
+    #         'corrected_query':   query,
+    #         'intent':            'answer',
+    #         'query_mode':        'answer',
+    #         'answer':            answer,
+    #         'answer_type':       answer_type or 'UNKNOWN',
+    #         'results':           results,
+    #         'total':             len(results),
+    #         'facet_total':       len(results),
+    #         'total_image_count': 0,
+    #         'page':              1,
+    #         'per_page':          per_page,
+    #         'search_time':       round(time.time() - t0, 3),
+    #         'session_id':        session_id,
+    #         'semantic_enabled':  False,
+    #         'search_strategy':   'question_direct',
+    #         'alt_mode':          alt_mode,
+    #         'skip_embedding':    True,
+    #         'search_source':     'question',
+    #         'valid_terms':       query.split(),
+    #         'unknown_terms':     [],
+    #         'data_type_facets':  [],
+    #         'category_facets':   [],
+    #         'schema_facets':     [],
+    #         'related_searches':  related_questions,
+    #         'facets':            {},
+    #         'word_discovery': {
+    #             'valid_count':   len(query.split()),
+    #             'unknown_count': 0,
+    #             'corrections':   [],
+    #             'filters':       [],
+    #             'locations':     [],
+    #             'sort':          None,
+    #             'total_score':   0,
+    #             'average_score': 0,
+    #             'max_score':     0,
+    #         },
+    #         'timings':          times,
+    #         'filters_applied': {
+    #             'data_type':             None,
+    #             'category':              None,
+    #             'schema':                None,
+    #             'is_local_search':       False,
+    #             'local_search_strength': 'none',
+    #         },
+    #         'signals': question_signals,
+    #         'profile': {},
+    #     }
+    
+    # =========================================================================
+    # QUESTION DIRECT PATH
+    # =========================================================================
     if document_uuid and search_source == 'question':
         print(f"❓ QUESTION PATH: document_uuid={document_uuid} query='{query}'")
         t_fetch = time.time()
         results = await fetch_full_documents([document_uuid], query)
         times['fetch_docs'] = round((time.time() - t_fetch) * 1000, 2)
 
+        # Track UUIDs already in results so we don't add duplicates
+        seen_uuids = {document_uuid}
+
+        # ── Fetch docs that share the same primary_subject_name ──
+        # If the answer doc is about a subject (person, place, concept),
+        # pull more docs that are ALSO about that subject.
+        if results and results[0].get('primary_subject_name'):
+            subject_name = results[0]['primary_subject_name']
+            try:
+                subject_docs = await fetch_documents_by_primary_subject_name(
+                    subject_name,
+                    exclude_uuid=document_uuid,
+                    limit=20,
+                )
+                subject_ids = [
+                    d['id'] for d in subject_docs
+                    if d.get('id') and d['id'] not in seen_uuids
+                ]
+                if subject_ids:
+                    subject_results = await fetch_full_documents(subject_ids, query)
+                    results.extend(subject_results)
+                    seen_uuids.update(subject_ids)
+                    print(f"   🎯 Subject matches: {len(subject_results)} added "
+                          f"for primary_subject_name='{subject_name}'")
+            except Exception as e:
+                print(f"⚠️ Subject fetch error: {e}")
+
+        # ── Fetch cluster siblings (deduped against subject matches) ──
         if results and results[0].get('cluster_uuid'):
             cluster_uuid = results[0]['cluster_uuid']
             try:
                 cluster_docs = await fetch_documents_by_cluster_uuid(
                     cluster_uuid, exclude_uuid=document_uuid, limit=5
                 )
-                cluster_ids = [d['id'] for d in cluster_docs if d.get('id')]
+                cluster_ids = [
+                    d['id'] for d in cluster_docs
+                    if d.get('id') and d['id'] not in seen_uuids
+                ]
                 if cluster_ids:
                     cluster_results = await fetch_full_documents(cluster_ids, query)
                     results.extend(cluster_results)
+                    seen_uuids.update(cluster_ids)
                     print(f"   🔗 Cluster siblings: {len(cluster_results)} added "
                           f"from cluster={cluster_uuid[:12]}...")
             except Exception as e:
                 print(f"⚠️ Cluster fetch error: {e}")
 
+        # ── AI Overview ──
         ai_overview   = None
         question_word = None
         q_lower       = query.lower().strip()
@@ -2810,6 +3006,7 @@ async def execute_full_search(
                 print(f"   💡 AI Overview (question path): {ai_overview[:80]}...")
                 results[0]['humanized_summary'] = ai_overview
 
+        # ── Related questions for all docs in the result set ──
         all_doc_uuids = [document_uuid]
         for r in results[1:]:
             rid = r.get('id')
@@ -2821,6 +3018,9 @@ async def execute_full_search(
         )
 
         times['total'] = round((time.time() - t0) * 1000, 2)
+
+        print(f"❓ QUESTION PATH COMPLETE: {len(results)} total docs "
+              f"(1 answer + {len(results) - 1} related)")
 
         return {
             'query':             query,
