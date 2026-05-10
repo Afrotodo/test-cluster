@@ -2804,6 +2804,7 @@ async def execute_full_search(
     answer_type: str = None,
     skip_embedding: bool = False,
     document_uuid: str = None,
+    question_id: str = None,   
     search_source: str = None
 ) -> Dict:
     """
@@ -2933,7 +2934,9 @@ async def execute_full_search(
     # QUESTION DIRECT PATH
     # =========================================================================
     if document_uuid and search_source == 'question':
-        print(f"❓ QUESTION PATH: document_uuid={document_uuid} query='{query}'")
+        from .question_id import bump_question_score
+        bump_question_score(query, question_id)
+
         t_fetch = time.time()
         results = await fetch_full_documents([document_uuid], query)
         times['fetch_docs'] = round((time.time() - t_fetch) * 1000, 2)

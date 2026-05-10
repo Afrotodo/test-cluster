@@ -6726,6 +6726,7 @@ def search_suggestions(request):
                 'description': item.get('description', ''),
                 'entity_type': item.get('entity_type', ''),
                 'document_uuid': item.get('document_uuid', ''),
+                'question_id': item.get('question_id', ''),
                 'answer': item.get('answer', ''),
                 'answer_type': item.get('answer_type', ''),
             }
@@ -7377,6 +7378,7 @@ def search(request):
     # === 1B. EXTRACT QUESTION PATH FIELDS ===
     document_uuid = request.GET.get('document_uuid', '').strip()
     search_source = request.GET.get('search_source', '').strip()
+    question_id = request.GET.get('question_id', '').strip()  
     answer = request.GET.get('answer', '').strip()
     answer_type = request.GET.get('answer_type', '').strip()
     is_question_path = (search_source == 'question' and bool(document_uuid))
@@ -7736,6 +7738,7 @@ def search(request):
                 session_id=params.session_id,
                 filters=filters,
                 page=page,
+                question_id=question_id if is_question_path else None,
                 per_page=per_page,
                 alt_mode=params.alt_mode,
                 user_location=user_location,

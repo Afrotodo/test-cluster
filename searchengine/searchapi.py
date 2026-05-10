@@ -1625,6 +1625,58 @@ def get_exact_term_matches(term: str) -> List[Dict[str, Any]]:
 # QUESTION LOOKUP — REDISEARCH (questions_idx)
 # =============================================================================
 
+# def get_question_matches(prefix: str, limit: int = 5) -> List[Dict[str, Any]]:
+#     """
+#     Return question hashes matching the prefix via RediSearch questions_idx.
+
+#     Splits the input on spaces, escapes each word individually, and appends
+#     the wildcard ``*`` to the last word only — so spaces act as RediSearch
+#     token separators and multi-word prefixes like ``"who was the"`` work.
+#     """
+#     client = RedisLookupTable.get_client()
+#     if not client or not prefix:
+#         return []
+
+#     prefix_lower = prefix.lower().strip()
+#     if len(prefix_lower) < 2:
+#         return []
+
+#     try:
+#         words = prefix_lower.split()
+#         if not words:
+#             return []
+
+#         escaped_words = [escape_query(w) for w in words]
+#         escaped_words[-1] = escaped_words[-1] + "*"
+#         query_str = " ".join(escaped_words)
+
+#         query = Query(query_str).sort_by("score", asc=False).paging(0, limit)
+#         result = client.ft(QUESTIONS_INDEX_NAME).search(query)
+
+#         matches: List[Dict[str, Any]] = []
+#         for doc in result.docs:
+#             matches.append({
+#                 "id":            doc.id,
+#                 "member":        doc.id,
+#                 "term":          getattr(doc, "question", ""),
+#                 "display":       getattr(doc, "question", ""),
+#                 "description":   "",
+#                 "category":      "question",
+#                 "entity_type":   "question",
+#                 "pos":           "question",
+#                 "rank":          _safe_int(getattr(doc, "score", 0)),
+#                 "exists":        True,
+#                 "document_uuid": getattr(doc, "document_uuid", ""),
+#                 "answer":        getattr(doc, "answer", ""),
+#                 "answer_type":   getattr(doc, "answer_type", "UNKNOWN"),
+#             })
+#         return matches
+
+#     except Exception:
+#         logger.exception("Question match error for prefix '%s'", prefix)
+#         return []
+
+
 def get_question_matches(prefix: str, limit: int = 5) -> List[Dict[str, Any]]:
     """
     Return question hashes matching the prefix via RediSearch questions_idx.
@@ -1667,14 +1719,16 @@ def get_question_matches(prefix: str, limit: int = 5) -> List[Dict[str, Any]]:
                 "rank":          _safe_int(getattr(doc, "score", 0)),
                 "exists":        True,
                 "document_uuid": getattr(doc, "document_uuid", ""),
+                "question_id":   getattr(doc, "question_id", ""),   # ← NEW
                 "answer":        getattr(doc, "answer", ""),
                 "answer_type":   getattr(doc, "answer_type", "UNKNOWN"),
             })
+          
         return matches
 
     except Exception:
         logger.exception("Question match error for prefix '%s'", prefix)
-        return []
+        return []        
 
 
 def get_prefix_matches(prefix: str, limit: int = 50) -> List[Dict[str, Any]]:

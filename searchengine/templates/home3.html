@@ -1248,7 +1248,6 @@ body.has-location .loc-only {
         </footer>
     </main>
 
-
 <!-- ==================== SEARCH & UI SCRIPT ==================== -->
 <script>
 document.addEventListener('DOMContentLoaded', function() {
@@ -1331,6 +1330,7 @@ document.addEventListener('DOMContentLoaded', function() {
         clientFingerprint: SearchSecurity.getClientFingerprint(),
 
         questionUUID: null,
+        questionId: null,
         isQuestion: false,
         questionAnswer: null,
         questionAnswerType: null,
@@ -1340,6 +1340,7 @@ document.addEventListener('DOMContentLoaded', function() {
             this.selectedFromDropdown = false;
             this.resultCount = 0;
             this.questionUUID = null;
+            this.questionId = null;
             this.isQuestion = false;
             this.questionAnswer = null;
             this.questionAnswerType = null;
@@ -1557,6 +1558,7 @@ LocationManager.init();
         const query = this.value.trim();
         SearchState.selectedFromDropdown = false;
         SearchState.questionUUID = null;
+        SearchState.questionId = null;
         SearchState.isQuestion = false;
         SearchState.questionAnswer = null;
         SearchState.questionAnswerType = null;
@@ -1627,11 +1629,13 @@ LocationManager.init();
 
             if (suggestion.entity_type === 'question' && suggestion.document_uuid) {
                 SearchState.questionUUID = suggestion.document_uuid;
+                SearchState.questionId = suggestion.question_id || null;
                 SearchState.isQuestion = true;
                 SearchState.questionAnswer = suggestion.answer || '';
                 SearchState.questionAnswerType = suggestion.answer_type || 'UNKNOWN';
             } else {
                 SearchState.questionUUID = null;
+                SearchState.questionId = null;
                 SearchState.isQuestion = false;
                 SearchState.questionAnswer = null;
                 SearchState.questionAnswerType = null;
@@ -1732,12 +1736,14 @@ LocationManager.init();
         if (SearchState.isQuestion && SearchState.questionUUID) {
             params.search_source = 'question';
             params.document_uuid = SearchState.questionUUID;
+            params.question_id = SearchState.questionId || '';
             params.answer = SearchState.questionAnswer || '';
             params.answer_type = SearchState.questionAnswerType || 'UNKNOWN';
             params.alt_mode = 'n';
         } else {
             params.search_source = SearchState.source;
             addHiddenField('document_uuid', '');
+            addHiddenField('question_id', '');
             addHiddenField('answer', '');
             addHiddenField('answer_type', '');
         }
@@ -1785,6 +1791,7 @@ LocationManager.init();
                 searchInput.value = query;
                 SearchState.selectedFromDropdown = false;
                 SearchState.questionUUID = null;
+                SearchState.questionId = null;
                 SearchState.isQuestion = false;
                 SearchState.questionAnswer = null;
                 SearchState.questionAnswerType = null;
