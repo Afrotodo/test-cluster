@@ -6,14 +6,8 @@ Fire-and-forget score increment for question hashes.
 Called from the bridge whenever a user clicks a question in the dropdown.
 Runs in a background thread so the search response is never blocked.
 
-The bridge passes in the question text (query) and the question_id (UUID).
-The helper rebuilds the Redis key from the query by lowercasing it,
-stripping punctuation, and replacing spaces with underscores —
-matching how the keys were originally written.
-
-Each bump:
-- Increments the `score` field on the question hash by 1
-- Updates `last_clicked_at` (unix timestamp) so decay can be applied later
+Each (session_id, question_id) pair can bump the score only once,
+enforced via a short-lived Redis marker key.
 """
 
 import logging
@@ -27,6 +21,8 @@ from decouple import config
 logger = logging.getLogger(__name__)
 
 QUESTION_KEY_PREFIX = "questions:"
+SESSION_CLICK_PREFIX = "session_click:"
+SESSION_CLICK_TTL_SECONDS = 24 * 60 * 60   # 24h — matches a typical session lifetime
 
 _client: redis.Redis | None = None
 _client_lock = threading.Lock()
@@ -44,8 +40,8 @@ def _get_client() -> redis.Redis | None:
 
         host = config("REDIS_LOCATION")
         port = config("REDIS_PORT")
-        password = config("REDIS_PASSWORD", default="")
-        username = config("REDIS_USERNAME", default="")
+        password = config("REDIS_PASSWORD")
+        username = config("REDIS_USERNAME")
         db = config("REDIS_DB", default="0")
 
         if not host:
@@ -71,63 +67,75 @@ def _get_client() -> redis.Redis | None:
 
 
 def _query_to_key(query: str) -> str:
-    """
-    Rebuild the questions:<slug> Redis key from the question text.
-
-    Example:
-        "Who was the assistant pianist who led the Fisk Jubilee Singers?"
-        → "questions:who_was_the_assistant_pianist_who_led_the_fisk_jubilee_singers"
-    """
+    """Rebuild the questions:<slug> Redis key from the question text."""
     slug = query.lower()
-    slug = re.sub(r"[^a-z0-9\s]", "", slug)    # strip punctuation
-    slug = re.sub(r"\s+", "_", slug.strip())   # collapse whitespace into underscores
+    slug = re.sub(r"[^a-z0-9\s]", "", slug)
+    slug = re.sub(r"\s+", "_", slug.strip())
     return f"{QUESTION_KEY_PREFIX}{slug}"
 
 
-def bump_question_score(query: str, question_id: str = "") -> None:
+def bump_question_score(
+    query: str,
+    question_id: str = "",
+    session_id: str = "",
+) -> None:
     """
-    Fire-and-forget. Returns immediately. The bump runs in a background thread.
+    Fire-and-forget. Returns immediately. Bump runs in a background thread.
 
-    Args:
-        query:       The question text, e.g. "Who was the assistant pianist..."
-        question_id: The question's UUID (logged for traceability; not required
-                     for the write itself).
+    A (session_id, question_id) pair can only bump once within
+    SESSION_CLICK_TTL_SECONDS.
     """
-    print(f"🎯 bump_question_score called  query={query!r}  question_id={question_id!r}")
-
     if not query:
-        print("❌ Empty query; skipping bump")
         return
 
     thread = threading.Thread(
         target=_do_bump,
-        args=(query, question_id),
+        args=(query, question_id, session_id),
         daemon=True,
     )
     thread.start()
 
 
-def _do_bump(query: str, question_id: str) -> None:
-    """Background worker — does the actual Redis writes."""
+def _do_bump(query: str, question_id: str, session_id: str) -> None:
+    """Background worker — claims the session marker, then writes."""
     try:
         client = _get_client()
         if client is None:
-            print("❌ No Redis client")
             return
 
+        # Atomically claim the (session, question) marker.
+        # If it already exists, this session already bumped this question — skip.
+        if session_id and question_id:
+            marker_key = f"{SESSION_CLICK_PREFIX}{session_id}:{question_id}"
+            claimed = client.set(
+                marker_key,
+                "1",
+                nx=True,
+                ex=SESSION_CLICK_TTL_SECONDS,
+            )
+            if not claimed:
+                logger.debug(
+                    "Session %s already bumped question %s; skipping",
+                    session_id, question_id
+                )
+                return
+
         key = _query_to_key(query)
-        print(f"🔑 Computed key: {key!r}")
 
         if not client.exists(key):
-            print(f"⚠️  Key not found in Redis: {key!r}  (question_id={question_id!r})")
+            logger.info("Key not found in Redis: %r", key)
             return
 
         new_score = client.hincrby(key, "score", 100)
         client.hset(key, "last_clicked_at", int(time.time()))
 
-        print(f"✅ Bumped {key} → score={new_score}")
-        logger.debug("Bumped %s → score=%d (question_id=%s)", key, new_score, question_id)
+        logger.debug(
+            "Bumped %s → score=%d (question_id=%s session=%s)",
+            key, new_score, question_id, session_id,
+        )
 
     except Exception:
-        logger.exception("Failed to bump score for query=%r question_id=%r", query, question_id)
-        print(f"❌ Exception bumping query={query!r}")
+        logger.exception(
+            "Failed to bump score for query=%r question_id=%r session=%r",
+            query, question_id, session_id,
+        )

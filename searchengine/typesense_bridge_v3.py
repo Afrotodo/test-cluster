@@ -2935,7 +2935,7 @@ async def execute_full_search(
     # =========================================================================
     if document_uuid and search_source == 'question':
         from .question_id import bump_question_score
-        bump_question_score(query, question_id)
+        bump_question_score(query, question_id, session_id)
 
         t_fetch = time.time()
         results = await fetch_full_documents([document_uuid], query)
