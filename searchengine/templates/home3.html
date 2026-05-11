@@ -1247,7 +1247,6 @@ body.has-location .loc-only {
             </div>
         </footer>
     </main>
-
 <!-- ==================== SEARCH & UI SCRIPT ==================== -->
 <script>
 document.addEventListener('DOMContentLoaded', function() {
@@ -1335,6 +1334,9 @@ document.addEventListener('DOMContentLoaded', function() {
         questionAnswer: null,
         questionAnswerType: null,
 
+        // === NEW: term_key for dropdown rank bumping ===
+        termKey: null,
+
         reset: function() {
             this.typingStartTime = null;
             this.selectedFromDropdown = false;
@@ -1344,6 +1346,9 @@ document.addEventListener('DOMContentLoaded', function() {
             this.isQuestion = false;
             this.questionAnswer = null;
             this.questionAnswerType = null;
+
+            // === NEW: reset termKey ===
+            this.termKey = null;
         },
 
         getTypingTime: function() {
@@ -1563,6 +1568,9 @@ LocationManager.init();
         SearchState.questionAnswer = null;
         SearchState.questionAnswerType = null;
 
+        // === NEW: clear termKey on new typing ===
+        SearchState.termKey = null;
+
         if (query.length < 2) {
             hideDropdown();
             return;
@@ -1633,12 +1641,18 @@ LocationManager.init();
                 SearchState.isQuestion = true;
                 SearchState.questionAnswer = suggestion.answer || '';
                 SearchState.questionAnswerType = suggestion.answer_type || 'UNKNOWN';
+
+                // Not a term — clear termKey
+                SearchState.termKey = null;
             } else {
                 SearchState.questionUUID = null;
                 SearchState.questionId = null;
                 SearchState.isQuestion = false;
                 SearchState.questionAnswer = null;
                 SearchState.questionAnswerType = null;
+
+                // === NEW: capture term's Redis key for rank bump ===
+                SearchState.termKey = suggestion.id || null;
             }
 
             hideDropdown();
@@ -1740,12 +1754,18 @@ LocationManager.init();
             params.answer = SearchState.questionAnswer || '';
             params.answer_type = SearchState.questionAnswerType || 'UNKNOWN';
             params.alt_mode = 'n';
+
+            // Not a term — clear term_key on the form
+            params.term_key = '';
         } else {
             params.search_source = SearchState.source;
             addHiddenField('document_uuid', '');
             addHiddenField('question_id', '');
             addHiddenField('answer', '');
             addHiddenField('answer_type', '');
+
+            // === NEW: include term_key for keyword-path bump ===
+            params.term_key = SearchState.termKey || '';
         }
 
         Object.entries(params).forEach(([name, value]) => {
@@ -1795,6 +1815,10 @@ LocationManager.init();
                 SearchState.isQuestion = false;
                 SearchState.questionAnswer = null;
                 SearchState.questionAnswerType = null;
+
+                // === NEW: question cards aren't terms ===
+                SearchState.termKey = null;
+
                 submitSearch();
             }
         });

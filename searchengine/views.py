@@ -6722,6 +6722,7 @@ def search_suggestions(request):
         suggestions = [
             {
                 'text': item.get('term', ''),
+                'id': item.get('id', ''), 
                 'display': item.get('display', ''),
                 'description': item.get('description', ''),
                 'entity_type': item.get('entity_type', ''),
@@ -7731,6 +7732,7 @@ def search(request):
                 intent = {}
     
     # === 8. EXECUTE SEARCH ===
+    term_key = request.GET.get('term_key', '').strip()
     if execute_full_search:
         try:
             result = _run_async(execute_full_search(
@@ -7744,6 +7746,7 @@ def search(request):
                 user_location=user_location,
                 pos_tags=tuple_array if params.is_semantic_search else [],
                 safe_search=safe_search,
+                term_key=term_key,
                 search_source=search_source,
                 answer=answer if is_question_path else None,
                 answer_type=answer_type if is_question_path else None,

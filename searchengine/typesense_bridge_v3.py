@@ -2801,6 +2801,7 @@ async def execute_full_search(
     safe_search: bool = True,
     alt_mode: str = 'y',
     answer: str = None,
+    term_key: str = None, 
     answer_type: str = None,
     skip_embedding: bool = False,
     document_uuid: str = None,
@@ -3088,7 +3089,7 @@ async def execute_full_search(
             'preferred_data_types': ['article'],
         }
 
-        t1          = time.time()
+        t1 = time.time()
         all_results = await fetch_candidates_with_metadata(query, profile)
         times['stage1'] = round((time.time() - t1) * 1000, 2)
 
@@ -3126,7 +3127,7 @@ async def execute_full_search(
         filtered_results           = filter_cached_results(all_results, active_data_type, active_category, active_schema)
         page_items, total_filtered = paginate_cached_results(filtered_results, page, per_page)
 
-        t2      = time.time()
+        t2 = time.time()
         results = await fetch_full_documents([item['id'] for item in page_items], query)
         times['fetch_docs'] = round((time.time() - t2) * 1000, 2)
         times['total']      = round((time.time() - t0) * 1000, 2)
