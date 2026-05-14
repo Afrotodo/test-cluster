@@ -1200,6 +1200,292 @@ body.has-location .loc-only {
         padding: var(--space-sm) var(--space-md);
     }
 }
+
+/* ==================== PRODUCTS SLIDER ==================== */
+.products-slider-section {
+    width: 100%;
+    max-width: 640px;
+    margin-bottom: var(--space-xl);
+}
+
+.products-slider-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-sm);
+    margin-bottom: var(--space-md);
+}
+
+.products-slider-title-group {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.products-slider-icon {
+    width: 20px;
+    height: 20px;
+    color: var(--gold);
+}
+
+.products-slider-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--gray-500);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.products-slider-controls {
+    display: flex;
+    gap: 6px;
+}
+
+.products-arrow {
+    width: 32px;
+    height: 32px;
+    border: 1px solid var(--gray-200);
+    border-radius: 50%;
+    background: var(--warm-white);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--gray-700);
+    transition: all var(--transition-fast);
+}
+
+.products-arrow:hover {
+    border-color: var(--gray-300);
+    background: var(--gray-100);
+    color: var(--black);
+}
+
+.products-arrow:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+}
+
+.products-arrow svg {
+    width: 16px;
+    height: 16px;
+}
+
+.products-slider-viewport {
+    position: relative;
+    overflow: hidden;
+    margin: 0 calc(-1 * var(--space-md));
+    padding: 0 var(--space-md);
+}
+
+.products-slider-track {
+    display: flex;
+    gap: var(--space-md);
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    scroll-behavior: smooth;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 4px;
+}
+
+.products-slider-track::-webkit-scrollbar {
+    display: none;
+}
+
+.product-card {
+    flex: 0 0 160px;
+    scroll-snap-align: start;
+    background: var(--warm-white);
+    border: 1px solid var(--gray-200);
+    border-radius: 12px;
+    overflow: hidden;
+    text-decoration: none;
+    color: inherit;
+    transition: all var(--transition-fast);
+    display: flex;
+    flex-direction: column;
+}
+
+.product-card:hover {
+    border-color: var(--gray-300);
+    box-shadow: 0 4px 14px -4px rgba(0, 0, 0, 0.1);
+    transform: translateY(-2px);
+}
+
+.product-card-image-wrap {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    background: var(--gray-100);
+    overflow: hidden;
+    position: relative;
+}
+
+.product-card-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.product-new-badge {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    background: var(--green);
+    color: var(--warm-white);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    border-radius: 4px;
+}
+
+.product-card-body {
+    padding: var(--space-sm) var(--space-md) var(--space-md);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1;
+}
+
+.product-card-name {
+    font-family: var(--font-body);
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--black);
+    line-height: 1.4;
+    margin: 0;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.product-card-price {
+    font-family: var(--font-body);
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--green);
+    margin-top: auto;
+}
+
+@media (max-width: 480px) {
+    .product-card {
+        flex: 0 0 140px;
+    }
+
+    .products-slider-controls {
+        display: none;
+    }
+}
+
+/* ==================== TODAY'S KNOWLEDGE BANNER ==================== */
+.knowledge-banner {
+    width: 100%;
+    max-width: 640px;
+    margin-bottom: var(--space-xl);
+    background: linear-gradient(135deg, rgba(45, 106, 79, 0.06) 0%, rgba(212, 160, 58, 0.06) 100%);
+    border: 1px solid var(--gray-200);
+    border-radius: 12px;
+    padding: var(--space-md) var(--space-lg);
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    text-decoration: none;
+    color: inherit;
+    transition: all var(--transition-fast);
+}
+
+.knowledge-banner:hover {
+    border-color: var(--green);
+    background: linear-gradient(135deg, rgba(45, 106, 79, 0.1) 0%, rgba(212, 160, 58, 0.1) 100%);
+}
+
+.knowledge-banner-icon {
+    width: 36px;
+    height: 36px;
+    background: var(--warm-white);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    color: var(--green);
+}
+
+.knowledge-banner-icon svg {
+    width: 18px;
+    height: 18px;
+}
+
+.knowledge-banner-content {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+}
+
+.knowledge-banner-label {
+    font-family: var(--font-body);
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--green);
+    flex-shrink: 0;
+}
+
+.knowledge-banner-text {
+    font-family: var(--font-body);
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--black);
+    line-height: 1.4;
+    margin: 0;
+    flex: 1;
+    min-width: 0;
+}
+
+.knowledge-banner-arrow {
+    color: var(--gray-500);
+    flex-shrink: 0;
+    transition: transform var(--transition-fast), color var(--transition-fast);
+}
+
+.knowledge-banner-arrow svg {
+    width: 16px;
+    height: 16px;
+}
+
+.knowledge-banner:hover .knowledge-banner-arrow {
+    color: var(--green);
+    transform: translateX(2px);
+}
+
+@media (max-width: 480px) {
+    .knowledge-banner {
+        padding: var(--space-sm) var(--space-md);
+        gap: var(--space-sm);
+    }
+
+    .knowledge-banner-icon {
+        width: 32px;
+        height: 32px;
+    }
+
+    .knowledge-banner-text {
+        font-size: 13px;
+    }
+
+    .knowledge-banner-label {
+        display: none;
+    }
+}
     </style>
 
 
@@ -1298,6 +1584,24 @@ body.has-location .loc-only {
                 </p>
             </section>
 
+            <!-- Today's Knowledge Banner -->
+<a href="#" class="knowledge-banner">
+    <div class="knowledge-banner-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M9.663 17h4.673M12 3v1m0 16v1m-9-9H2m2.222-4.778l-.707-.707m14.142.707l.707-.707M21 12h1m-3.222 4.778l.707.707M4.222 19.778l.707-.707M12 7a5 5 0 015 5c0 2.5-2 3.5-2 5h-6c0-1.5-2-2.5-2-5a5 5 0 015-5z"/>
+        </svg>
+    </div>
+    <div class="knowledge-banner-content">
+        <span class="knowledge-banner-label">Did you know</span>
+        <p class="knowledge-banner-text">Madam C.J. Walker became America's first self-made female millionaire in 1910 through her hair care empire.</p>
+    </div>
+    <div class="knowledge-banner-arrow">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <path d="M9 18l6-6-6-6"/>
+        </svg>
+    </div>
+</a>
+
             <!-- Search Section -->
             <section class="search-section">
                 <div class="search-container">
@@ -1378,7 +1682,7 @@ body.has-location .loc-only {
                 <path d="M4 22h16a2 2 0 002-2V4a2 2 0 00-2-2H8a2 2 0 00-2 2v16a2 2 0 01-2 2zm0 0a2 2 0 01-2-2v-9c0-1.1.9-2 2-2h2"/>
                 <path d="M18 14h-8M15 18h-5M10 6h8v4h-8V6z"/>
             </svg>
-            <span class="news-slider-title">In the News</span>
+            <span class="news-slider-title">News Today</span>
         </div>
         <div class="news-slider-controls">
             <button class="news-arrow" id="news-prev" aria-label="Previous">
