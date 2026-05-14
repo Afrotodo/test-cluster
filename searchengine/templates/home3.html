@@ -1487,6 +1487,98 @@ margin-top: 30px;
         display: none;
     }
 }
+
+/* ==================== CATEGORY CHIPS ==================== */
+.category-chips {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: var(--space-sm);
+    margin-top: var(--space-lg);
+    width: 100%;
+    max-width: 640px;
+}
+
+.category-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    border: 1.5px solid var(--black);
+    border-radius: 100px;
+    font-family: var(--font-body);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--black);
+    background: var(--warm-white);
+    cursor: pointer;
+    text-decoration: none;
+    transition: all var(--transition-fast);
+    white-space: nowrap;
+}
+
+.category-chip:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px -2px rgba(0, 0, 0, 0.15);
+}
+
+.category-chip svg {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+}
+
+/* Tinted variants — each chip gets a lighter shade of brand color */
+.category-chip.chip-business {
+    background: rgba(45, 106, 79, 0.12);
+}
+.category-chip.chip-business:hover {
+    background: rgba(45, 106, 79, 0.2);
+}
+
+.category-chip.chip-history {
+    background: rgba(212, 160, 58, 0.15);
+}
+.category-chip.chip-history:hover {
+    background: rgba(212, 160, 58, 0.25);
+}
+
+.category-chip.chip-wellness {
+    background: rgba(64, 145, 108, 0.12);
+}
+.category-chip.chip-wellness:hover {
+    background: rgba(64, 145, 108, 0.2);
+}
+
+.category-chip.chip-hbcu {
+    background: rgba(188, 71, 73, 0.12);
+}
+.category-chip.chip-hbcu:hover {
+    background: rgba(188, 71, 73, 0.2);
+}
+
+.category-chip.chip-events {
+    background: rgba(233, 196, 106, 0.2);
+}
+.category-chip.chip-events:hover {
+    background: rgba(233, 196, 106, 0.3);
+}
+
+@media (max-width: 480px) {
+    .category-chip {
+        padding: 7px 12px;
+        font-size: 12px;
+    }
+    
+    .category-chip svg {
+        width: 12px;
+        height: 12px;
+    }
+    
+    .category-chips {
+        gap: 6px;
+    }
+}
     </style>
 
 
@@ -1632,7 +1724,49 @@ margin-top: 30px;
                         </div>
                         <div class="search-results" id="search-results"></div>
                     </form>
+<!-- Category Chips -->
+<div class="category-chips">
+    <a href="{% url 'searchengine:search' %}?query=black+owned+businesses+near+me" class="category-chip chip-business">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
+            <path d="M9 22V12h6v10"/>
+        </svg>
+        Businesses
+    </a>
 
+    <a href="{% url 'searchengine:search' %}?query=black+history" class="category-chip chip-history">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M4 19.5A2.5 2.5 0 016.5 17H20"/>
+            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/>
+        </svg>
+        History
+    </a>
+
+    <a href="{% url 'searchengine:search' %}?query=black+wellness+mental+health" class="category-chip chip-wellness">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/>
+        </svg>
+        Wellness
+    </a>
+
+    <a href="{% url 'searchengine:search' %}?query=HBCU+colleges+scholarships" class="category-chip chip-hbcu">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 10v6M2 10l10-5 10 5-10 5z"/>
+            <path d="M6 12v5c3 3 9 3 12 0v-5"/>
+        </svg>
+        HBCUs
+    </a>
+
+    <a href="{% url 'searchengine:search' %}?query=black+events+near+me" class="category-chip chip-events">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+            <line x1="16" y1="2" x2="16" y2="6"/>
+            <line x1="8" y1="2" x2="8" y2="6"/>
+            <line x1="3" y1="10" x2="21" y2="10"/>
+        </svg>
+        Events
+    </a>
+</div>
                     <!-- Scope Buttons -->
                     <!-- <div class="scope-buttons" id="scope-buttons">
                         <button type="button" class="scope-btn" data-scope="local" id="scope-local">

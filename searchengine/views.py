@@ -6677,13 +6677,13 @@ def home(request):
     
     for loc_value, loc_type in location_levels:
         if loc_value:
-            trending_results = get_trending_results(city=loc_value, limit=6)
+            trending_results = get_trending_results(city=loc_value, limit=3)
             if trending_results:
                 trending_label = loc_value.title()
                 break
     
     if not trending_results:
-        trending_results = get_trending_results(city=None, limit=6)
+        trending_results = get_trending_results(city=None, limit=3)
         trending_label = 'Your Area'
     
     context = {
