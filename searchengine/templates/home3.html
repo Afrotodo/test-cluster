@@ -1025,7 +1025,185 @@ body.has-location .loc-only {
         display: none;
     }
 }
+
+
+
+
+
+
+
+
+
+/* ==================== NEWS SLIDER ==================== */
+.news-slider-section {
+    width: 100%;
+    max-width: 640px;
+    margin-bottom: var(--space-xl);
+}
+
+.news-slider-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-sm);
+    margin-bottom: var(--space-md);
+}
+
+.news-slider-title-group {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.news-slider-icon {
+    width: 20px;
+    height: 20px;
+    color: var(--green);
+}
+
+.news-slider-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--gray-500);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.news-slider-controls {
+    display: flex;
+    gap: 6px;
+}
+
+.news-arrow {
+    width: 32px;
+    height: 32px;
+    border: 1px solid var(--gray-200);
+    border-radius: 50%;
+    background: var(--warm-white);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--gray-700);
+    transition: all var(--transition-fast);
+}
+
+.news-arrow:hover {
+    border-color: var(--gray-300);
+    background: var(--gray-100);
+    color: var(--black);
+}
+
+.news-arrow:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+}
+
+.news-arrow svg {
+    width: 16px;
+    height: 16px;
+}
+
+.news-slider-viewport {
+    position: relative;
+    overflow: hidden;
+    margin: 0 calc(-1 * var(--space-md));
+    padding: 0 var(--space-md);
+}
+
+.news-slider-track {
+    display: flex;
+    gap: var(--space-md);
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    scroll-behavior: smooth;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 4px;
+}
+
+.news-slider-track::-webkit-scrollbar {
+    display: none;
+}
+
+.news-card {
+    flex: 0 0 240px;
+    scroll-snap-align: start;
+    background: var(--warm-white);
+    border: 1px solid var(--gray-200);
+    border-radius: 12px;
+    overflow: hidden;
+    text-decoration: none;
+    color: inherit;
+    transition: all var(--transition-fast);
+    display: flex;
+    flex-direction: column;
+}
+
+.news-card:hover {
+    border-color: var(--gray-300);
+    box-shadow: 0 4px 14px -4px rgba(0, 0, 0, 0.1);
+    transform: translateY(-2px);
+}
+
+.news-card-image {
+    width: 100%;
+    aspect-ratio: 16 / 10;
+    object-fit: cover;
+    background: var(--gray-100);
+    display: block;
+}
+
+.news-card-body {
+    padding: var(--space-md);
+    flex: 1;
+    display: flex;
+    align-items: flex-start;
+}
+
+.news-card-title {
+    font-family: var(--font-body);
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--black);
+    line-height: 1.4;
+    margin: 0;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+/* Responsive sizing */
+@media (max-width: 768px) {
+    .news-card {
+        flex: 0 0 200px;
+    }
+
+    .news-card-title {
+        font-size: 13px;
+        -webkit-line-clamp: 2;
+    }
+
+    .news-slider-controls {
+        display: none;
+    }
+}
+
+@media (max-width: 480px) {
+    .news-card {
+        flex: 0 0 170px;
+    }
+
+    .news-card-body {
+        padding: var(--space-sm) var(--space-md);
+    }
+}
     </style>
+
+
+
 </head>
 <body>
     <!-- Mobile Sidebar Overlay -->
@@ -1192,6 +1370,100 @@ body.has-location .loc-only {
 
 
 
+<!-- News Slider Section -->
+<section class="news-slider-section">
+    <div class="news-slider-header">
+        <div class="news-slider-title-group">
+            <svg class="news-slider-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M4 22h16a2 2 0 002-2V4a2 2 0 00-2-2H8a2 2 0 00-2 2v16a2 2 0 01-2 2zm0 0a2 2 0 01-2-2v-9c0-1.1.9-2 2-2h2"/>
+                <path d="M18 14h-8M15 18h-5M10 6h8v4h-8V6z"/>
+            </svg>
+            <span class="news-slider-title">In the News</span>
+        </div>
+        <div class="news-slider-controls">
+            <button class="news-arrow" id="news-prev" aria-label="Previous">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <path d="M15 18l-6-6 6-6"/>
+                </svg>
+            </button>
+            <button class="news-arrow" id="news-next" aria-label="Next">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <path d="M9 18l6-6-6-6"/>
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    <div class="news-slider-viewport">
+        <div class="news-slider-track" id="news-track">
+            <a href="#" class="news-card">
+                <img class="news-card-image" src="https://images.unsplash.com/photo-1556761175-5973dc0f32e7?w=480&q=80" alt="" loading="lazy">
+                <div class="news-card-body">
+                    <h3 class="news-card-title">Black-owned firms see record growth in Q2 amid shifting consumer habits</h3>
+                </div>
+            </a>
+
+            <a href="#" class="news-card">
+                <img class="news-card-image" src="https://images.unsplash.com/photo-1523240795612-9a054b0db644?w=480&q=80" alt="" loading="lazy">
+                <div class="news-card-body">
+                    <h3 class="news-card-title">HBCU enrollment hits 10-year high as students seek community-driven education</h3>
+                </div>
+            </a>
+
+            <a href="#" class="news-card">
+                <img class="news-card-image" src="https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?w=480&q=80" alt="" loading="lazy">
+                <div class="news-card-body">
+                    <h3 class="news-card-title">New legislation aims to expand grant access for minority entrepreneurs nationwide</h3>
+                </div>
+            </a>
+
+            <a href="#" class="news-card">
+                <img class="news-card-image" src="https://images.unsplash.com/photo-1542744173-8e7e53415bb0?w=480&q=80" alt="" loading="lazy">
+                <div class="news-card-body">
+                    <h3 class="news-card-title">Atlanta named top city for Black professionals second year running</h3>
+                </div>
+            </a>
+
+            <a href="#" class="news-card">
+                <img class="news-card-image" src="https://images.unsplash.com/photo-1559757148-5c350d0d3c56?w=480&q=80" alt="" loading="lazy">
+                <div class="news-card-body">
+                    <h3 class="news-card-title">Culinary spotlight: Five rising Black chefs redefining Southern cuisine</h3>
+                </div>
+            </a>
+
+            <a href="#" class="news-card">
+                <img class="news-card-image" src="https://images.unsplash.com/photo-1532619675605-1ede6c2ed2b0?w=480&q=80" alt="" loading="lazy">
+                <div class="news-card-body">
+                    <h3 class="news-card-title">Mental wellness platforms tailored to Black communities raise $45M</h3>
+                </div>
+            </a>
+
+            <a href="#" class="news-card">
+                <img class="news-card-image" src="https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=480&q=80" alt="" loading="lazy">
+                <div class="news-card-body">
+                    <h3 class="news-card-title">Documentary on Tulsa's Black Wall Street earns festival top honors</h3>
+                </div>
+            </a>
+
+            <a href="#" class="news-card">
+                <img class="news-card-image" src="https://images.unsplash.com/photo-1573164713988-8665fc963095?w=480&q=80" alt="" loading="lazy">
+                <div class="news-card-body">
+                    <h3 class="news-card-title">Tech founder launches accelerator for women of color in AI and robotics</h3>
+                </div>
+            </a>
+        </div>
+    </div>
+</section>
+
+
+
+
+
+
+
+
+
+
 
   {% if trending_results %}
             <!-- Trending Section -->
@@ -1211,6 +1483,12 @@ body.has-location .loc-only {
                 </div>
 
                 <div class="question-list">
+
+
+
+
+
+                    
                 {% for item in trending_results %}
                 <a href="{{ item.url }}" class="question-card trending-card">
                    
@@ -1966,6 +2244,41 @@ LocationManager.init();
         security: SearchSecurity
     };
 });
+
+
+
+// ==================== NEWS SLIDER ====================
+(function() {
+    const track = document.getElementById('news-track');
+    const prevBtn = document.getElementById('news-prev');
+    const nextBtn = document.getElementById('news-next');
+    if (!track || !prevBtn || !nextBtn) return;
+
+    function scrollAmount() {
+        const card = track.querySelector('.news-card');
+        if (!card) return 240;
+        const gap = parseInt(getComputedStyle(track).gap) || 16;
+        return card.offsetWidth + gap;
+    }
+
+    function updateArrows() {
+        const maxScroll = track.scrollWidth - track.clientWidth - 1;
+        prevBtn.disabled = track.scrollLeft <= 0;
+        nextBtn.disabled = track.scrollLeft >= maxScroll;
+    }
+
+    prevBtn.addEventListener('click', () => {
+        track.scrollBy({ left: -scrollAmount() * 2, behavior: 'smooth' });
+    });
+
+    nextBtn.addEventListener('click', () => {
+        track.scrollBy({ left: scrollAmount() * 2, behavior: 'smooth' });
+    });
+
+    track.addEventListener('scroll', updateArrows, { passive: true });
+    window.addEventListener('resize', updateArrows);
+    updateArrows();
+})();
 </script>
 
 </body>
