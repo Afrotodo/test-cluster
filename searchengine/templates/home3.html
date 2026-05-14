@@ -1203,6 +1203,7 @@ body.has-location .loc-only {
 
 /* ==================== PRODUCTS SLIDER ==================== */
 .products-slider-section {
+margin-top: 30px;
     width: 100%;
     max-width: 640px;
     margin-bottom: var(--space-xl);
@@ -1812,7 +1813,128 @@ body.has-location .loc-only {
 {% endif %}
 
 
+<!-- Newly Added Products Slider -->
+<section class="products-slider-section">
+    <div class="products-slider-header">
+        <div class="products-slider-title-group">
+            <svg class="products-slider-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/>
+                <line x1="3" y1="6" x2="21" y2="6"/>
+                <path d="M16 10a4 4 0 01-8 0"/>
+            </svg>
+            <span class="products-slider-title">Newly Added</span>
         </div>
+        <div class="products-slider-controls">
+            <button class="products-arrow" id="products-prev" aria-label="Previous">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <path d="M15 18l-6-6 6-6"/>
+                </svg>
+            </button>
+            <button class="products-arrow" id="products-next" aria-label="Next">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <path d="M9 18l6-6-6-6"/>
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    <div class="products-slider-viewport">
+        <div class="products-slider-track" id="products-track">
+            <a href="#" class="product-card">
+                <div class="product-card-image-wrap">
+                    <span class="product-new-badge">New</span>
+                    <img class="product-card-image" src="https://images.unsplash.com/photo-1556228720-195a672e8a03?w=400&q=80" alt="" loading="lazy">
+                </div>
+                <div class="product-card-body">
+                    <h3 class="product-card-name">Shea Butter Body Cream — Lavender</h3>
+                    <span class="product-card-price">$24.00</span>
+                </div>
+            </a>
+
+            <a href="#" class="product-card">
+                <div class="product-card-image-wrap">
+                    <span class="product-new-badge">New</span>
+                    <img class="product-card-image" src="https://images.unsplash.com/photo-1542838132-92c53300491e?w=400&q=80" alt="" loading="lazy">
+                </div>
+                <div class="product-card-body">
+                    <h3 class="product-card-name">Soul Food Seasoning Blend (8oz)</h3>
+                    <span class="product-card-price">$12.99</span>
+                </div>
+            </a>
+
+            <a href="#" class="product-card">
+                <div class="product-card-image-wrap">
+                    <span class="product-new-badge">New</span>
+                    <img class="product-card-image" src="https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=400&q=80" alt="" loading="lazy">
+                </div>
+                <div class="product-card-body">
+                    <h3 class="product-card-name">Ankara Print Tee — Unisex</h3>
+                    <span class="product-card-price">$38.00</span>
+                </div>
+            </a>
+
+            <a href="#" class="product-card">
+                <div class="product-card-image-wrap">
+                    <span class="product-new-badge">New</span>
+                    <img class="product-card-image" src="https://images.unsplash.com/photo-1591375372226-1c2cd25cc1a3?w=400&q=80" alt="" loading="lazy">
+                </div>
+                <div class="product-card-body">
+                    <h3 class="product-card-name">Beard Oil — Cedarwood & Vetiver</h3>
+                    <span class="product-card-price">$18.50</span>
+                </div>
+            </a>
+
+            <a href="#" class="product-card">
+                <div class="product-card-image-wrap">
+                    <span class="product-new-badge">New</span>
+                    <img class="product-card-image" src="https://images.unsplash.com/photo-1544787219-7f47ccb76574?w=400&q=80" alt="" loading="lazy">
+                </div>
+                <div class="product-card-body">
+                    <h3 class="product-card-name">Hand-Beaded Leather Tote Bag</h3>
+                    <span class="product-card-price">$89.00</span>
+                </div>
+            </a>
+
+            <a href="#" class="product-card">
+                <div class="product-card-image-wrap">
+                    <span class="product-new-badge">New</span>
+                    <img class="product-card-image" src="https://images.unsplash.com/photo-1610701596007-11502861dcfa?w=400&q=80" alt="" loading="lazy">
+                </div>
+                <div class="product-card-body">
+                    <h3 class="product-card-name">Black History Coffee Table Book</h3>
+                    <span class="product-card-price">$45.00</span>
+                </div>
+            </a>
+
+            <a href="#" class="product-card">
+                <div class="product-card-image-wrap">
+                    <span class="product-new-badge">New</span>
+                    <img class="product-card-image" src="https://images.unsplash.com/photo-1599751449128-eb7249c3d6b1?w=400&q=80" alt="" loading="lazy">
+                </div>
+                <div class="product-card-body">
+                    <h3 class="product-card-name">Hibiscus Tea Blend (Loose Leaf)</h3>
+                    <span class="product-card-price">$15.00</span>
+                </div>
+            </a>
+
+            <a href="#" class="product-card">
+                <div class="product-card-image-wrap">
+                    <span class="product-new-badge">New</span>
+                    <img class="product-card-image" src="https://images.unsplash.com/photo-1620912189865-1b1f7553d362?w=400&q=80" alt="" loading="lazy">
+                </div>
+                <div class="product-card-body">
+                    <h3 class="product-card-name">Handcrafted Wooden Bangles (Set of 3)</h3>
+                    <span class="product-card-price">$32.00</span>
+                </div>
+            </a>
+        </div>
+    </div>
+</section>
+
+        </div>
+
+
+        
 
         <!-- Footer -->
         <footer class="footer">
@@ -2561,6 +2683,40 @@ LocationManager.init();
     function scrollAmount() {
         const card = track.querySelector('.news-card');
         if (!card) return 240;
+        const gap = parseInt(getComputedStyle(track).gap) || 16;
+        return card.offsetWidth + gap;
+    }
+
+    function updateArrows() {
+        const maxScroll = track.scrollWidth - track.clientWidth - 1;
+        prevBtn.disabled = track.scrollLeft <= 0;
+        nextBtn.disabled = track.scrollLeft >= maxScroll;
+    }
+
+    prevBtn.addEventListener('click', () => {
+        track.scrollBy({ left: -scrollAmount() * 2, behavior: 'smooth' });
+    });
+
+    nextBtn.addEventListener('click', () => {
+        track.scrollBy({ left: scrollAmount() * 2, behavior: 'smooth' });
+    });
+
+    track.addEventListener('scroll', updateArrows, { passive: true });
+    window.addEventListener('resize', updateArrows);
+    updateArrows();
+})();
+
+
+// ==================== PRODUCTS SLIDER ====================
+(function() {
+    const track = document.getElementById('products-track');
+    const prevBtn = document.getElementById('products-prev');
+    const nextBtn = document.getElementById('products-next');
+    if (!track || !prevBtn || !nextBtn) return;
+
+    function scrollAmount() {
+        const card = track.querySelector('.product-card');
+        if (!card) return 160;
         const gap = parseInt(getComputedStyle(track).gap) || 16;
         return card.offsetWidth + gap;
     }
