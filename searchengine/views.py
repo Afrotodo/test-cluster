@@ -6662,6 +6662,28 @@ from .trending import get_trending_results, cache_trending_result
 
 
 
+
+
+
+
+
+
+def get_news_from_cache():
+    """Fetch news items from Redis. Returns empty list on any failure."""
+    try:
+        r = redis.Redis.from_url(
+            config('REDIS_ANALYTICS_URL'),
+            decode_responses=True,
+            socket_timeout=config('REDIS_SOCKET_TIMEOUT', default=5, cast=int),
+            socket_connect_timeout=config('REDIS_SOCKET_CONNECT_TIMEOUT', default=5, cast=int),
+            retry_on_timeout=config('REDIS_RETRY_ON_TIMEOUT', default=True, cast=bool),
+        )
+        raw = r.get('news')
+        return json.loads(raw) if raw else []
+    except (redis.RedisError, json.JSONDecodeError, ValueError) as e:
+        print(f"News cache error: {e}")
+        return []
+
 def home(request):
     city = get_user_city(request)
     location = get_location_from_request(request) or {}
@@ -6686,15 +6708,53 @@ def home(request):
         trending_results = get_trending_results(city=None, limit=3)
         trending_label = 'Your Area'
     
+    # Pull news from Redis cache (populated daily by Colab script)
+    news_items = get_news_from_cache()
+    
     context = {
         'city': city,
         'trending_label': trending_label,
         'trending_results': trending_results,
         'supported_cities': list(SUPPORTED_CITIES),
         'user_location': location,
+        'news_items': news_items,
     }
     
     return render(request, 'home3.html', context)
+
+# def home(request):
+#     city = get_user_city(request)
+#     location = get_location_from_request(request) or {}
+    
+#     location_levels = [
+#         (location.get('city', ''), 'city'),
+#         (location.get('region', ''), 'region'),
+#         (location.get('country', ''), 'country'),
+#     ]
+    
+#     trending_results = []
+#     trending_label = 'Your Area'
+    
+#     for loc_value, loc_type in location_levels:
+#         if loc_value:
+#             trending_results = get_trending_results(city=loc_value, limit=3)
+#             if trending_results:
+#                 trending_label = loc_value.title()
+#                 break
+    
+#     if not trending_results:
+#         trending_results = get_trending_results(city=None, limit=3)
+#         trending_label = 'Your Area'
+    
+#     context = {
+#         'city': city,
+#         'trending_label': trending_label,
+#         'trending_results': trending_results,
+#         'supported_cities': list(SUPPORTED_CITIES),
+#         'user_location': location,
+#     }
+    
+#     return render(request, 'home3.html', context)
 
 
 # =============================================================================
@@ -8548,124 +8608,7 @@ def health_category(request, city: str):
 # VIEW: NEWS CATEGORY
 # =============================================================================
 
-def news_category(request, city: str = DEFAULT_CITY):
-    """News & media page with faceted search."""
-    
-    query = sanitize_query(request.GET.get('q', ''))
-    selected_section = sanitize_filter_value(request.GET.get('section', ''))
-    selected_category = sanitize_filter_value(request.GET.get('category', ''))
-    selected_brand = sanitize_filter_value(request.GET.get('brand', ''))
-    sort = validate_sort(request.GET.get('sort', 'recent'), ['authority', 'recent'], 'recent')
-    page = validate_page(request.GET.get('page', 1))
-    
-    section_category_map = {
-        'local': None,
-        'national': 'national',
-        'politics': 'politics',
-        'business': 'business',
-        'sports': 'sports',
-        'entertainment': 'entertainment',
-        'opinion': 'opinion',
-    }
-    
-    if selected_section and selected_section not in section_category_map:
-        selected_section = ''
-    
-    filters = ['document_schema:=news']
-    
-    if selected_section and selected_section in section_category_map:
-        section_cat = section_category_map[selected_section]
-        if section_cat:
-            filters.append(f'document_category:={section_cat}')
-    
-    if selected_category:
-        filters.append(f'document_category:={selected_category}')
-    if selected_brand:
-        filters.append(f'document_brand:={selected_brand}')
-    
-    filter_by = build_filter_string(filters)
-    sort_by = 'created_at:desc' if sort == 'recent' else 'authority_score:desc'
-    
-    results = typesense_search(
-        query=query or '*',
-        filter_by=filter_by,
-        sort_by=sort_by,
-        facet_by='document_category,document_brand',
-        per_page=20,
-        page=page,
-    )
-    
-    browse_results = safe_get_hits(results)
-    total = safe_get_total(results)
-    facets = parse_facets(results)
-    
-    top_results = typesense_search(
-        query='*',
-        filter_by='document_schema:=news',
-        sort_by='authority_score:desc',
-        per_page=1,
-    )
-    top_hits = safe_get_hits(top_results)
-    top_story = top_hits[0].get('document') if top_hits else None
-    
-    sidebar_results = typesense_search(
-        query='*',
-        filter_by='document_schema:=news',
-        sort_by='created_at:desc',
-        per_page=4,
-    )
-    sidebar_hits = safe_get_hits(sidebar_results)
-    sidebar_stories = [hit.get('document', {}) for hit in sidebar_hits[1:] if hit.get('document')]
-    
-    local_results = typesense_search(
-        query=city,
-        filter_by='document_schema:=news',
-        sort_by='created_at:desc',
-        per_page=5,
-    )
-    local_news = [hit.get('document', {}) for hit in safe_get_hits(local_results) if hit.get('document')]
-    
-    good_results = typesense_search(
-        query='success achievement award grant scholarship wins first',
-        filter_by='document_schema:=news',
-        sort_by='created_at:desc',
-        per_page=5,
-    )
-    good_news = [hit.get('document', {}) for hit in safe_get_hits(good_results) if hit.get('document')]
-    
-    opinion_results = typesense_search(
-        query='*',
-        filter_by='document_schema:=news && document_category:=opinion',
-        sort_by='created_at:desc',
-        per_page=3,
-    )
-    opinions = [hit.get('document', {}) for hit in safe_get_hits(opinion_results) if hit.get('document')]
-    
-    news_sources = [f['value'] for f in facets.get('brand', [])[:12]]
-    active_filter_count = sum([bool(selected_category), bool(selected_brand)])
-    
-    context = {
-        'city': city,
-        'query': query,
-        'top_story': top_story,
-        'sidebar_stories': sidebar_stories,
-        'results': browse_results,
-        'total': total,
-        'facets': facets,
-        'local_news': local_news,
-        'good_news': good_news,
-        'opinions': opinions,
-        'news_sources': news_sources,
-        'selected_section': selected_section,
-        'selected_category': selected_category,
-        'selected_brand': selected_brand,
-        'active_filter_count': active_filter_count,
-        'page': page,
-        'has_more': (page * 20) < total,
-        'sort': sort,
-    }
-    
-    return render(request, 'category_news.html', context)
+
 
 
 # =============================================================================
