@@ -6699,13 +6699,13 @@ def home(request):
     
     for loc_value, loc_type in location_levels:
         if loc_value:
-            trending_results = get_trending_results(city=loc_value, limit=3)
+            trending_results = get_trending_results(city=loc_value, limit=6)
             if trending_results:
                 trending_label = loc_value.title()
                 break
     
     if not trending_results:
-        trending_results = get_trending_results(city=None, limit=3)
+        trending_results = get_trending_results(city=None, limit=6)
         trending_label = 'Your Area'
     
     # Pull news from Redis cache (populated daily by Colab script)
@@ -6721,40 +6721,6 @@ def home(request):
     }
     
     return render(request, 'home3.html', context)
-
-# def home(request):
-#     city = get_user_city(request)
-#     location = get_location_from_request(request) or {}
-    
-#     location_levels = [
-#         (location.get('city', ''), 'city'),
-#         (location.get('region', ''), 'region'),
-#         (location.get('country', ''), 'country'),
-#     ]
-    
-#     trending_results = []
-#     trending_label = 'Your Area'
-    
-#     for loc_value, loc_type in location_levels:
-#         if loc_value:
-#             trending_results = get_trending_results(city=loc_value, limit=3)
-#             if trending_results:
-#                 trending_label = loc_value.title()
-#                 break
-    
-#     if not trending_results:
-#         trending_results = get_trending_results(city=None, limit=3)
-#         trending_label = 'Your Area'
-    
-#     context = {
-#         'city': city,
-#         'trending_label': trending_label,
-#         'trending_results': trending_results,
-#         'supported_cities': list(SUPPORTED_CITIES),
-#         'user_location': location,
-#     }
-    
-#     return render(request, 'home3.html', context)
 
 
 # =============================================================================
