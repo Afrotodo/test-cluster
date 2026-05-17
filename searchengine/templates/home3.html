@@ -1678,7 +1678,9 @@ margin-top: 30px;
             </section>
 
             <!-- Today's Knowledge Banner -->
-<a href="#" class="knowledge-banner">
+             
+{% if did_you_know %}
+<a href="{% url 'searchengine:search' %}?query={{ did_you_know.keyword|urlencode }}&source=did_you_know" class="knowledge-banner">
     <div class="knowledge-banner-icon">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M9.663 17h4.673M12 3v1m0 16v1m-9-9H2m2.222-4.778l-.707-.707m14.142.707l.707-.707M21 12h1m-3.222 4.778l.707.707M4.222 19.778l.707-.707M12 7a5 5 0 015 5c0 2.5-2 3.5-2 5h-6c0-1.5-2-2.5-2-5a5 5 0 015-5z"/>
@@ -1686,7 +1688,7 @@ margin-top: 30px;
     </div>
     <div class="knowledge-banner-content">
         <span class="knowledge-banner-label">Did you know</span>
-        <p class="knowledge-banner-text">Madam C.J. Walker became America's first self-made female millionaire in 1910 through her hair care empire.</p>
+        <p class="knowledge-banner-text">{{ did_you_know.fact }}</p>
     </div>
     <div class="knowledge-banner-arrow">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
@@ -1694,6 +1696,7 @@ margin-top: 30px;
         </svg>
     </div>
 </a>
+{% endif %}
 
             <!-- Search Section -->
             <section class="search-section">

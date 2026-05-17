@@ -6660,12 +6660,27 @@ def log_search_analytics(
 from .cached_embedding_related_search import get_popular_queries
 from .trending import get_trending_results, cache_trending_result
 
+import random
 
 
-
-
-
-
+def get_did_you_know_from_cache():
+    """Fetch a random 'Did you know' fact from Redis. Returns None on any failure."""
+    try:
+        r = redis.Redis.from_url(
+            config('REDIS_ANALYTICS_URL'),
+            decode_responses=True,
+            socket_timeout=config('REDIS_SOCKET_TIMEOUT', default=5, cast=int),
+            socket_connect_timeout=config('REDIS_SOCKET_CONNECT_TIMEOUT', default=5, cast=int),
+            retry_on_timeout=config('REDIS_RETRY_ON_TIMEOUT', default=True, cast=bool),
+        )
+        raw = r.get('did_you_know')
+        if not raw:
+            return None
+        facts = json.loads(raw)
+        return random.choice(facts) if facts else None
+    except (redis.RedisError, json.JSONDecodeError, ValueError, IndexError) as e:
+        print(f"Did you know cache error: {e}")
+        return None
 
 
 def get_news_from_cache():
@@ -6684,6 +6699,7 @@ def get_news_from_cache():
         print(f"News cache error: {e}")
         return []
 
+        
 def home(request):
     city = get_user_city(request)
     location = get_location_from_request(request) or {}
@@ -6708,8 +6724,8 @@ def home(request):
         trending_results = get_trending_results(city=None, limit=6)
         trending_label = 'Your Area'
     
-    # Pull news from Redis cache (populated daily by Colab script)
     news_items = get_news_from_cache()
+    did_you_know = get_did_you_know_from_cache()  # NEW
     
     context = {
         'city': city,
@@ -6718,10 +6734,10 @@ def home(request):
         'supported_cities': list(SUPPORTED_CITIES),
         'user_location': location,
         'news_items': news_items,
+        'did_you_know': did_you_know,  # NEW
     }
     
     return render(request, 'home3.html', context)
-
 
 # =============================================================================
 # VIEW: SEARCH SUGGESTIONS (AUTOCOMPLETE)
