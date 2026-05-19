@@ -2264,14 +2264,14 @@ margin-top: 30px;
     <div class="media-slider-viewport">
         <div class="media-slider-track" id="media-track">
             {% for item in media_items %}
-                <div class="media-card"
-                     data-embed="{{ item.embed_url }}"
-                     data-url="{{ item.url }}"
-                     data-type="{{ item.type }}"
-                     onclick="playMedia(this)"
-                     role="button"
-                     tabindex="0"
-                     aria-label="Play: {{ item.title }}">
+<div class="media-card"
+     data-embed="{{ item.embed_url }}"
+     data-url="{{ item.url }}"
+     data-type="{{ item.type }}"
+     role="button"
+     tabindex="0"
+     aria-label="Play: {{ item.title }}"
+     style="cursor: pointer;">
                     <div class="media-card-image-wrap">
                         <img class="media-card-image" src="{{ item.thumbnail }}" alt="{{ item.title }}" loading="lazy">
                         <span class="media-format-badge media-format-{{ item.type }}">
@@ -3116,69 +3116,99 @@ LocationManager.init();
     window.addEventListener('resize', updateArrows);
     updateArrows();
 })();
-</script>
 
 
-
-<script>
+// ==================== MEDIA SLIDER ====================
 (function() {
-    function playMedia(card) {
-        const embedUrl = card.dataset.embed;
-        const type = card.dataset.type;
+    const track = document.getElementById('media-track');
+    const prevBtn = document.getElementById('media-prev');
+    const nextBtn = document.getElementById('media-next');
+    if (!track || !prevBtn || !nextBtn) return;
 
-        // Fallback: open in new tab if no embed URL
-        if (!embedUrl) {
-            const fallbackUrl = card.dataset.url;
-            if (fallbackUrl) {
-                window.open(fallbackUrl, '_blank', 'noopener,noreferrer');
-            }
-            return;
-        }
-
-        const imageWrap = card.querySelector('.media-card-image-wrap');
-        if (!imageWrap) return;
-
-        if (type === 'watch') {
-            // YouTube video — replace thumbnail with autoplaying iframe
-            const separator = embedUrl.includes('?') ? '&' : '?';
-            imageWrap.innerHTML = `
-                <iframe
-                    src="${embedUrl}${separator}autoplay=1&rel=0"
-                    frameborder="0"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowfullscreen
-                    style="width: 100%; height: 100%; border: 0; display: block;"></iframe>
-            `;
-        } else {
-            // Podcast — replace thumbnail with audio player
-            imageWrap.innerHTML = `
-                <div style="display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; background: #000; padding: 1rem;">
-                    <audio controls autoplay src="${embedUrl}" style="width: 100%;">
-                        Your browser does not support audio playback.
-                    </audio>
-                </div>
-            `;
-        }
-
-        // Mark as playing so we don't re-trigger
-        card.onclick = null;
-        card.setAttribute('aria-pressed', 'true');
-        card.style.cursor = 'default';
+    function scrollAmount() {
+        const card = track.querySelector('.media-card');
+        if (!card) return 280;
+        const gap = parseInt(getComputedStyle(track).gap) || 16;
+        return card.offsetWidth + gap;
     }
 
-    // Expose globally so onclick="playMedia(this)" works
-    window.playMedia = playMedia;
+    function updateArrows() {
+        const maxScroll = track.scrollWidth - track.clientWidth - 1;
+        prevBtn.disabled = track.scrollLeft <= 0;
+        nextBtn.disabled = track.scrollLeft >= maxScroll;
+    }
 
-    // Keyboard accessibility — Enter and Space trigger playback
-    document.addEventListener('keydown', function(e) {
-        if (e.key !== 'Enter' && e.key !== ' ') return;
-        const card = e.target.closest('.media-card');
-        if (card && card.onclick) {
-            e.preventDefault();
-            playMedia(card);
-        }
+    prevBtn.addEventListener('click', () => {
+        track.scrollBy({ left: -scrollAmount() * 2, behavior: 'smooth' });
     });
+
+    nextBtn.addEventListener('click', () => {
+        track.scrollBy({ left: scrollAmount() * 2, behavior: 'smooth' });
+    });
+
+    track.addEventListener('scroll', updateArrows, { passive: true });
+    window.addEventListener('resize', updateArrows);
+    updateArrows();
 })();
 </script>
+<script>
+document.addEventListener('click', function(e) {
+    const card = e.target.closest('.media-card');
+    if (!card) return;
+    
+    // Don't re-trigger if already playing
+    if (card.dataset.playing === 'true') return;
+    
+    const embedUrl = card.dataset.embed;
+    const type = card.dataset.type;
+    
+    // No embed URL? Fall back to opening original link in new tab.
+    if (!embedUrl) {
+        const fallbackUrl = card.dataset.url;
+        if (fallbackUrl) {
+            window.open(fallbackUrl, '_blank', 'noopener,noreferrer');
+        }
+        return;
+    }
+    
+    const imageWrap = card.querySelector('.media-card-image-wrap');
+    if (!imageWrap) return;
+    
+    if (type === 'watch') {
+        const separator = embedUrl.includes('?') ? '&' : '?';
+        imageWrap.innerHTML = `
+            <iframe
+                src="${embedUrl}${separator}autoplay=1&rel=0"
+                frameborder="0"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowfullscreen
+                style="width: 100%; height: 100%; border: 0; display: block;"></iframe>
+        `;
+    } else {
+        imageWrap.innerHTML = `
+            <div style="display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; background: #000; padding: 1rem;">
+                <audio controls autoplay src="${embedUrl}" style="width: 100%;">
+                    Your browser does not support audio playback.
+                </audio>
+            </div>
+        `;
+    }
+    
+    card.dataset.playing = 'true';
+    card.style.cursor = 'default';
+});
+
+// Keyboard accessibility — Enter and Space trigger playback
+document.addEventListener('keydown', function(e) {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const card = e.target.closest('.media-card');
+    if (card && card.dataset.playing !== 'true') {
+        e.preventDefault();
+        card.click();
+    }
+});
+</script>
+
+
 </body>
 </html>

@@ -6663,11 +6663,7 @@ from .trending import get_trending_results, cache_trending_result
 import random
 
 def get_videos_from_cache():
-    """
-    Fetch videos from Redis and limit to one video per channel.
-    Keeps the first occurrence (most recent, since the Colab script
-    stores them in date order).
-    """
+    """Fetch videos from Redis, dedupe to one per channel, reshape for template."""
     try:
         r = redis.Redis.from_url(
             config('REDIS_ANALYTICS_URL'),
@@ -6681,18 +6677,15 @@ def get_videos_from_cache():
             return []
         raw_videos = json.loads(raw)
         
-        # Dedupe — keep only the first video per channel
         seen_channels = set()
         media = []
         for v in raw_videos:
             channel = v.get('channel', '')
-            
-            # Skip if we already have a video from this channel
             if channel in seen_channels:
                 continue
             seen_channels.add(channel)
             
-            # Reshape to match what the template expects
+            video_id = v.get('video_id', '')
             media.append({
                 'type': 'watch',
                 'title': v.get('title', ''),
@@ -6700,9 +6693,8 @@ def get_videos_from_cache():
                 'thumbnail': v.get('thumbnail', ''),
                 'duration': v.get('duration', ''),
                 'url': v.get('url', ''),
-                'embed_url': f"https://www.youtube.com/embed/{v.get('video_id', '')}",
+                'embed_url': f"https://www.youtube.com/embed/{video_id}" if video_id else '',
             })
-        
         return media
     except (redis.RedisError, json.JSONDecodeError, ValueError) as e:
         print(f"Video cache error: {e}")
