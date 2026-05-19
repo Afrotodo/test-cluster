@@ -1383,6 +1383,258 @@ margin-top: 30px;
     }
 }
 
+
+
+/* ==================== MEDIA SLIDER (WATCH & LISTEN) ==================== */
+.media-slider-section {
+    margin-top: 30px;
+    width: 100%;
+    max-width: 640px;
+    margin-bottom: var(--space-xl);
+}
+
+.media-slider-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-sm);
+    margin-bottom: var(--space-md);
+}
+
+.media-slider-title-group {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.media-slider-icon {
+    width: 20px;
+    height: 20px;
+    color: var(--red);
+}
+
+.media-slider-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--gray-500);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.media-slider-controls {
+    display: flex;
+    gap: 6px;
+}
+
+.media-arrow {
+    width: 32px;
+    height: 32px;
+    border: 1px solid var(--gray-200);
+    border-radius: 50%;
+    background: var(--warm-white);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--gray-700);
+    transition: all var(--transition-fast);
+}
+
+.media-arrow:hover {
+    border-color: var(--gray-300);
+    background: var(--gray-100);
+    color: var(--black);
+}
+
+.media-arrow:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+}
+
+.media-arrow svg {
+    width: 16px;
+    height: 16px;
+}
+
+.media-slider-viewport {
+    position: relative;
+    overflow: hidden;
+    margin: 0 calc(-1 * var(--space-md));
+    padding: 0 var(--space-md);
+}
+
+.media-slider-track {
+    display: flex;
+    gap: var(--space-md);
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    scroll-behavior: smooth;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 4px;
+}
+
+.media-slider-track::-webkit-scrollbar {
+    display: none;
+}
+
+.media-card {
+    flex: 0 0 240px;
+    scroll-snap-align: start;
+    background: var(--warm-white);
+    border: 1px solid var(--gray-200);
+    border-radius: 12px;
+    overflow: hidden;
+    text-decoration: none;
+    color: inherit;
+    transition: all var(--transition-fast);
+    display: flex;
+    flex-direction: column;
+    cursor: pointer;
+}
+
+.media-card:hover {
+    border-color: var(--gray-300);
+    box-shadow: 0 4px 14px -4px rgba(0, 0, 0, 0.1);
+    transform: translateY(-2px);
+}
+
+.media-card-image-wrap {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16 / 10;
+    overflow: hidden;
+    background: var(--gray-100);
+}
+
+.media-card-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.media-format-badge {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    color: var(--warm-white);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    border-radius: 4px;
+    backdrop-filter: blur(4px);
+}
+
+.media-format-watch {
+    background: rgba(188, 71, 73, 0.9); /* red for watch */
+}
+
+.media-format-listen {
+    background: rgba(45, 106, 79, 0.9); /* green for listen */
+}
+
+.media-duration-badge {
+    position: absolute;
+    bottom: 8px;
+    right: 8px;
+    background: rgba(0, 0, 0, 0.75);
+    color: var(--warm-white);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 4px;
+    backdrop-filter: blur(4px);
+}
+
+.media-play-button {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 44px;
+    height: 44px;
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--black);
+    transition: transform var(--transition-fast);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.media-card:hover .media-play-button {
+    transform: translate(-50%, -50%) scale(1.08);
+}
+
+.media-play-button svg {
+    width: 20px;
+    height: 20px;
+    margin-left: 2px; /* visually center the play triangle */
+}
+
+.media-play-button.listen svg {
+    margin-left: 0;
+}
+
+.media-card-body {
+    padding: var(--space-sm) var(--space-md) var(--space-md);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1;
+}
+
+.media-card-source {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--green);
+}
+
+.media-card-title {
+    font-family: var(--font-body);
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--black);
+    line-height: 1.4;
+    margin: 0;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .media-card {
+        flex: 0 0 220px;
+    }
+
+    .media-slider-controls {
+        display: none;
+    }
+}
+
+@media (max-width: 480px) {
+    .media-card {
+        flex: 0 0 200px;
+    }
+
+    .media-card-body {
+        padding: var(--space-sm) var(--space-md);
+    }
+
+    .media-card-title {
+        font-size: 13px;
+    }
+}
+
 /* ==================== TODAY'S KNOWLEDGE BANNER ==================== */
 .knowledge-banner {
     width: 100%;
@@ -1677,8 +1929,8 @@ margin-top: 30px;
                 </p>
             </section>
 
-            <!-- Today's Knowledge Banner -->
-             
+            <!-- Did you know Banner -->
+
 {% if did_you_know %}
 <a href="{% url 'searchengine:search' %}?query={{ did_you_know.keyword|urlencode }}&source=did_you_know" class="knowledge-banner">
     <div class="knowledge-banner-icon">
@@ -1757,26 +2009,6 @@ margin-top: 30px;
     Education
 </a>
 </div>
-
-
-                    <!-- Scope Buttons -->
-                    <!-- <div class="scope-buttons" id="scope-buttons">
-                        <button type="button" class="scope-btn" data-scope="local" id="scope-local">
-                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <circle cx="11" cy="11" r="8"/>
-        <path d="M21 21l-4.35-4.35"/>
-    </svg>
-                            Browse
-                        </button>
-                        <button type="button" class="scope-btn active" data-scope="global" id="scope-global">
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M9 18h6"/>
-        <path d="M10 22h4"/>
-        <path d="M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z"/>
-    </svg>
-                            Learn
-                        </button>
-                    </div> -->
                 </div>
             </section>
 
@@ -1867,13 +2099,7 @@ margin-top: 30px;
 
                 </div>
 
-                <div class="question-list">
-
-
-
-
-
-                    
+                <div class="question-list">    
                 {% for item in trending_results %}
                 <a href="{{ item.url }}" class="question-card trending-card">
                    
@@ -1891,6 +2117,7 @@ margin-top: 30px;
                 </div>
             </section>
 {% endif %}
+
 
 
 <!-- Newly Added Products Slider -->
@@ -2009,7 +2236,77 @@ margin-top: 30px;
             </a>
         </div>
     </div>
+
+<!-- Watch & Listen Slider -->
+<section class="media-slider-section">
+    <div class="media-slider-header">
+        <div class="media-slider-title-group">
+            <svg class="media-slider-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <polygon points="10 8 16 12 10 16 10 8" fill="currentColor"/>
+            </svg>
+            <span class="media-slider-title">Watch &amp; Listen</span>
+        </div>
+        <div class="media-slider-controls">
+            <button class="media-arrow" id="media-prev" aria-label="Previous">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <path d="M15 18l-6-6 6-6"/>
+                </svg>
+            </button>
+            <button class="media-arrow" id="media-next" aria-label="Next">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <path d="M9 18l6-6-6-6"/>
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    <div class="media-slider-viewport">
+        <div class="media-slider-track" id="media-track">
+            {% for item in media_items %}
+                <div class="media-card"
+                     data-embed="{{ item.embed_url }}"
+                     data-url="{{ item.url }}"
+                     data-type="{{ item.type }}"
+                     onclick="playMedia(this)"
+                     role="button"
+                     tabindex="0"
+                     aria-label="Play: {{ item.title }}">
+                    <div class="media-card-image-wrap">
+                        <img class="media-card-image" src="{{ item.thumbnail }}" alt="{{ item.title }}" loading="lazy">
+                        <span class="media-format-badge media-format-{{ item.type }}">
+                            {% if item.type == 'watch' %}WATCH{% else %}LISTEN{% endif %}
+                        </span>
+                        <span class="media-duration-badge">{{ item.duration }}</span>
+                        <div class="media-play-button">
+                            {% if item.type == 'watch' %}
+                                <svg viewBox="0 0 24 24" fill="currentColor"><polygon points="8 5 19 12 8 19 8 5"/></svg>
+                            {% else %}
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M3 18v-6a9 9 0 0118 0v6"/>
+                                    <path d="M21 19a2 2 0 01-2 2h-1v-7h3v5zM3 19a2 2 0 002 2h1v-7H3v5z"/>
+                                </svg>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="media-card-body">
+                        <span class="media-card-source">{{ item.source }}</span>
+                        <h3 class="media-card-title">{{ item.title }}</h3>
+                    </div>
+                </div>
+            {% empty %}
+                <div class="media-card-empty">New episodes coming soon.</div>
+            {% endfor %}
+        </div>
+    </div>
 </section>
+
+
+</section>
+
+
+
+
 
         </div>
 
@@ -2821,5 +3118,67 @@ LocationManager.init();
 })();
 </script>
 
+
+
+<script>
+(function() {
+    function playMedia(card) {
+        const embedUrl = card.dataset.embed;
+        const type = card.dataset.type;
+
+        // Fallback: open in new tab if no embed URL
+        if (!embedUrl) {
+            const fallbackUrl = card.dataset.url;
+            if (fallbackUrl) {
+                window.open(fallbackUrl, '_blank', 'noopener,noreferrer');
+            }
+            return;
+        }
+
+        const imageWrap = card.querySelector('.media-card-image-wrap');
+        if (!imageWrap) return;
+
+        if (type === 'watch') {
+            // YouTube video — replace thumbnail with autoplaying iframe
+            const separator = embedUrl.includes('?') ? '&' : '?';
+            imageWrap.innerHTML = `
+                <iframe
+                    src="${embedUrl}${separator}autoplay=1&rel=0"
+                    frameborder="0"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowfullscreen
+                    style="width: 100%; height: 100%; border: 0; display: block;"></iframe>
+            `;
+        } else {
+            // Podcast — replace thumbnail with audio player
+            imageWrap.innerHTML = `
+                <div style="display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; background: #000; padding: 1rem;">
+                    <audio controls autoplay src="${embedUrl}" style="width: 100%;">
+                        Your browser does not support audio playback.
+                    </audio>
+                </div>
+            `;
+        }
+
+        // Mark as playing so we don't re-trigger
+        card.onclick = null;
+        card.setAttribute('aria-pressed', 'true');
+        card.style.cursor = 'default';
+    }
+
+    // Expose globally so onclick="playMedia(this)" works
+    window.playMedia = playMedia;
+
+    // Keyboard accessibility — Enter and Space trigger playback
+    document.addEventListener('keydown', function(e) {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        const card = e.target.closest('.media-card');
+        if (card && card.onclick) {
+            e.preventDefault();
+            playMedia(card);
+        }
+    });
+})();
+</script>
 </body>
 </html>

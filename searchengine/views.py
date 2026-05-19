@@ -6662,6 +6662,51 @@ from .trending import get_trending_results, cache_trending_result
 
 import random
 
+def get_videos_from_cache():
+    """
+    Fetch videos from Redis and limit to one video per channel.
+    Keeps the first occurrence (most recent, since the Colab script
+    stores them in date order).
+    """
+    try:
+        r = redis.Redis.from_url(
+            config('REDIS_ANALYTICS_URL'),
+            decode_responses=True,
+            socket_timeout=config('REDIS_SOCKET_TIMEOUT', default=5, cast=int),
+            socket_connect_timeout=config('REDIS_SOCKET_CONNECT_TIMEOUT', default=5, cast=int),
+            retry_on_timeout=config('REDIS_RETRY_ON_TIMEOUT', default=True, cast=bool),
+        )
+        raw = r.get('videos')
+        if not raw:
+            return []
+        raw_videos = json.loads(raw)
+        
+        # Dedupe — keep only the first video per channel
+        seen_channels = set()
+        media = []
+        for v in raw_videos:
+            channel = v.get('channel', '')
+            
+            # Skip if we already have a video from this channel
+            if channel in seen_channels:
+                continue
+            seen_channels.add(channel)
+            
+            # Reshape to match what the template expects
+            media.append({
+                'type': 'watch',
+                'title': v.get('title', ''),
+                'source': channel,
+                'thumbnail': v.get('thumbnail', ''),
+                'duration': v.get('duration', ''),
+                'url': v.get('url', ''),
+                'embed_url': f"https://www.youtube.com/embed/{v.get('video_id', '')}",
+            })
+        
+        return media
+    except (redis.RedisError, json.JSONDecodeError, ValueError) as e:
+        print(f"Video cache error: {e}")
+        return []
 
 def get_did_you_know_from_cache():
     """Fetch a random 'Did you know' fact from Redis. Returns None on any failure."""
@@ -6683,6 +6728,38 @@ def get_did_you_know_from_cache():
         return None
 
 
+def get_media_from_cache():
+    """Read videos from Redis and reshape to match template fields."""
+    try:
+        r = redis.Redis.from_url(
+            config('REDIS_ANALYTICS_URL'),
+            decode_responses=True,
+            socket_timeout=config('REDIS_SOCKET_TIMEOUT', default=5, cast=int),
+            socket_connect_timeout=config('REDIS_SOCKET_CONNECT_TIMEOUT', default=5, cast=int),
+            retry_on_timeout=config('REDIS_RETRY_ON_TIMEOUT', default=True, cast=bool),
+        )
+        raw = r.get('videos')
+        if not raw:
+            return []
+        raw_videos = json.loads(raw)
+        
+        # Reshape to match template's expected fields
+        media = []
+        for v in raw_videos:
+            media.append({
+                'type': 'watch',
+                'title': v.get('title', ''),
+                'source': v.get('channel', ''),
+                'thumbnail': v.get('thumbnail', ''),
+                'duration': '',   # not stored — empty until you add it
+                'url': v.get('url', ''),
+                'embed_url': f"https://www.youtube.com/embed/{v.get('video_id', '')}",
+            })
+        return media
+    except (redis.RedisError, json.JSONDecodeError, ValueError) as e:
+        print(f"Media cache error: {e}")
+        return []
+
 def get_news_from_cache():
     """Fetch news items from Redis. Returns empty list on any failure."""
     try:
@@ -6699,7 +6776,6 @@ def get_news_from_cache():
         print(f"News cache error: {e}")
         return []
 
-        
 def home(request):
     city = get_user_city(request)
     location = get_location_from_request(request) or {}
@@ -6725,7 +6801,8 @@ def home(request):
         trending_label = 'Your Area'
     
     news_items = get_news_from_cache()
-    did_you_know = get_did_you_know_from_cache()  # NEW
+    did_you_know = get_did_you_know_from_cache()
+    media_items = get_videos_from_cache()   # ← NEW
     
     context = {
         'city': city,
@@ -6734,7 +6811,8 @@ def home(request):
         'supported_cities': list(SUPPORTED_CITIES),
         'user_location': location,
         'news_items': news_items,
-        'did_you_know': did_you_know,  # NEW
+        'did_you_know': did_you_know,
+        'media_items': media_items,   # ← NEW
     }
     
     return render(request, 'home3.html', context)
