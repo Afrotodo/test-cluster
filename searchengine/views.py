@@ -1529,7 +1529,7 @@ def home(request):
     news_items = get_news_from_cache()
     did_you_know = get_did_you_know_from_cache()
     media_items = get_videos_from_cache()
-    nonprofits = get_nonprofits_from_cache()
+    nonprofits = get_nonprofits_from_cache(5)
     products = get_products_from_cache()   # ← NEW
     
     context = {
