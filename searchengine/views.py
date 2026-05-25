@@ -1348,8 +1348,21 @@ def get_videos_from_cache():
         print(f"Video cache error: {e}")
         return []
 
-def get_nonprofits_from_cache():
-    """Fetch nonprofits from Redis. Returns empty list on any failure."""
+
+from datetime import datetime
+import zoneinfo
+
+def _daily_shuffle(items, salt=""):
+    today = datetime.now(zoneinfo.ZoneInfo("America/New_York")).date()
+    seed = f"{today.isoformat()}:{salt}"
+    rng = random.Random(seed)
+    shuffled = list(items)
+    rng.shuffle(shuffled)
+    return shuffled
+
+
+def get_nonprofits_from_cache(limit=5):
+    """Fetch nonprofits from Redis, daily-shuffled and limited."""
     try:
         r = redis.Redis.from_url(
             config('REDIS_ANALYTICS_URL'),
@@ -1363,7 +1376,6 @@ def get_nonprofits_from_cache():
             return []
         raw_nonprofits = json.loads(raw)
 
-        # Reshape to match template's expected fields
         nonprofits = []
         for n in raw_nonprofits:
             url = n.get('url', '')
@@ -1372,18 +1384,20 @@ def get_nonprofits_from_cache():
             nonprofits.append({
                 'name': n.get('name', ''),
                 'mission': n.get('mission', ''),
-                'cause': n.get('cause', ''),     # e.g. "Education", "Health"
+                'cause': n.get('cause', ''),
                 'location': n.get('location', ''),
                 'image': n.get('image', ''),
                 'url': url,
             })
-        return nonprofits
+
+        return _daily_shuffle(nonprofits, salt="nonprofits")[:limit]
     except (redis.RedisError, json.JSONDecodeError, ValueError) as e:
         print(f"Nonprofits cache error: {e}")
         return []
+    
 
-def get_products_from_cache():
-    """Fetch products from Redis. Returns empty list on any failure."""
+def get_products_from_cache(limit=8):
+    """Fetch products from Redis, daily-shuffled and limited."""
     try:
         r = redis.Redis.from_url(
             config('REDIS_ANALYTICS_URL'),
@@ -1397,20 +1411,24 @@ def get_products_from_cache():
             return []
         raw_products = json.loads(raw)
 
-        # Reshape to match template's expected fields
         products = []
         for p in raw_products:
+            url = p.get('url', '')
+            if url and not url.startswith(('http://', 'https://')):
+                continue
             products.append({
                 'title': p.get('title', ''),
                 'brand': p.get('brand', ''),
                 'price': p.get('price', ''),
                 'image': p.get('image', ''),
-                'url': p.get('url', ''),
+                'url': url,
             })
-        return products
+
+        return _daily_shuffle(products, salt="products")[:limit]
     except (redis.RedisError, json.JSONDecodeError, ValueError) as e:
         print(f"Products cache error: {e}")
         return []
+
 
 def get_did_you_know_from_cache():
     """Fetch a random 'Did you know' fact from Redis. Returns None on any failure."""
@@ -1432,8 +1450,9 @@ def get_did_you_know_from_cache():
         return None
 
 
-def get_media_from_cache():
-    """Read videos from Redis and reshape to match template fields."""
+
+def get_media_from_cache(limit=8):
+    """Fetch media from Redis, daily-shuffled and limited."""
     try:
         r = redis.Redis.from_url(
             config('REDIS_ANALYTICS_URL'),
@@ -1446,8 +1465,7 @@ def get_media_from_cache():
         if not raw:
             return []
         raw_videos = json.loads(raw)
-        
-        # Reshape to match template's expected fields
+
         media = []
         for v in raw_videos:
             media.append({
@@ -1455,14 +1473,16 @@ def get_media_from_cache():
                 'title': v.get('title', ''),
                 'source': v.get('channel', ''),
                 'thumbnail': v.get('thumbnail', ''),
-                'duration': '',   # not stored — empty until you add it
+                'duration': '',
                 'url': v.get('url', ''),
                 'embed_url': f"https://www.youtube.com/embed/{v.get('video_id', '')}",
             })
-        return media
+
+        return _daily_shuffle(media, salt="media")[:limit]
     except (redis.RedisError, json.JSONDecodeError, ValueError) as e:
         print(f"Media cache error: {e}")
         return []
+    
 
 def get_news_from_cache():
     """Fetch news items from Redis. Returns empty list on any failure."""
@@ -1479,6 +1499,8 @@ def get_news_from_cache():
     except (redis.RedisError, json.JSONDecodeError, ValueError) as e:
         print(f"News cache error: {e}")
         return []
+    
+
     
 def home(request):
     city = get_user_city(request)
