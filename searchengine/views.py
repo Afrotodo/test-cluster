@@ -1507,7 +1507,8 @@ def home(request):
     news_items = get_news_from_cache()
     did_you_know = get_did_you_know_from_cache()
     media_items = get_videos_from_cache()
-    nonprofits = get_nonprofits_from_cache()   # ← NEW
+    nonprofits = get_nonprofits_from_cache()
+    products = get_products_from_cache()   # ← NEW
     
     context = {
         'city': city,
@@ -1518,7 +1519,8 @@ def home(request):
         'news_items': news_items,
         'did_you_know': did_you_know,
         'media_items': media_items,
-        'nonprofits': nonprofits,   # ← NEW
+        'nonprofits': nonprofits,
+        'products': products,   # ← NEW
     }
     
     return render(request, 'home3.html', context)

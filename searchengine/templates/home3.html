@@ -2138,7 +2138,8 @@ margin-top: 30px;
 
 
 
-<!-- Newly Added Products Slider -->
+<!-- Products Slider -->
+{% if products %}
 <section class="products-slider-section">
     <div class="products-slider-header">
         <div class="products-slider-title-group">
@@ -2163,99 +2164,29 @@ margin-top: 30px;
         </div>
     </div>
 
-
-
     <div class="products-slider-viewport">
         <div class="products-slider-track" id="products-track">
-            <a href="#" class="product-card">
-                <div class="product-card-image-wrap">
-                    <span class="product-new-badge">New</span>
-                    <img class="product-card-image" src="https://images.unsplash.com/photo-1556228720-195a672e8a03?w=400&q=80" alt="" loading="lazy">
-                </div>
-                <div class="product-card-body">
-                    <h3 class="product-card-name">Shea Butter Body Cream — Lavender</h3>
-                    <span class="product-card-price">$24.00</span>
-                </div>
-            </a>
-
-            <a href="#" class="product-card">
-                <div class="product-card-image-wrap">
-                    <span class="product-new-badge">New</span>
-                    <img class="product-card-image" src="https://images.unsplash.com/photo-1542838132-92c53300491e?w=400&q=80" alt="" loading="lazy">
-                </div>
-                <div class="product-card-body">
-                    <h3 class="product-card-name">Soul Food Seasoning Blend (8oz)</h3>
-                    <span class="product-card-price">$12.99</span>
-                </div>
-            </a>
-
-            <a href="#" class="product-card">
-                <div class="product-card-image-wrap">
-                    <span class="product-new-badge">New</span>
-                    <img class="product-card-image" src="https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=400&q=80" alt="" loading="lazy">
-                </div>
-                <div class="product-card-body">
-                    <h3 class="product-card-name">Ankara Print Tee — Unisex</h3>
-                    <span class="product-card-price">$38.00</span>
-                </div>
-            </a>
-
-            <a href="#" class="product-card">
-                <div class="product-card-image-wrap">
-                    <span class="product-new-badge">New</span>
-                    <img class="product-card-image" src="https://images.unsplash.com/photo-1591375372226-1c2cd25cc1a3?w=400&q=80" alt="" loading="lazy">
-                </div>
-                <div class="product-card-body">
-                    <h3 class="product-card-name">Beard Oil — Cedarwood & Vetiver</h3>
-                    <span class="product-card-price">$18.50</span>
-                </div>
-            </a>
-
-            <a href="#" class="product-card">
-                <div class="product-card-image-wrap">
-                    <span class="product-new-badge">New</span>
-                    <img class="product-card-image" src="https://images.unsplash.com/photo-1544787219-7f47ccb76574?w=400&q=80" alt="" loading="lazy">
-                </div>
-                <div class="product-card-body">
-                    <h3 class="product-card-name">Hand-Beaded Leather Tote Bag</h3>
-                    <span class="product-card-price">$89.00</span>
-                </div>
-            </a>
-
-            <a href="#" class="product-card">
-                <div class="product-card-image-wrap">
-                    <span class="product-new-badge">New</span>
-                    <img class="product-card-image" src="https://images.unsplash.com/photo-1610701596007-11502861dcfa?w=400&q=80" alt="" loading="lazy">
-                </div>
-                <div class="product-card-body">
-                    <h3 class="product-card-name">Black History Coffee Table Book</h3>
-                    <span class="product-card-price">$45.00</span>
-                </div>
-            </a>
-
-            <a href="#" class="product-card">
-                <div class="product-card-image-wrap">
-                    <span class="product-new-badge">New</span>
-                    <img class="product-card-image" src="https://images.unsplash.com/photo-1599751449128-eb7249c3d6b1?w=400&q=80" alt="" loading="lazy">
-                </div>
-                <div class="product-card-body">
-                    <h3 class="product-card-name">Hibiscus Tea Blend (Loose Leaf)</h3>
-                    <span class="product-card-price">$15.00</span>
-                </div>
-            </a>
-
-            <a href="#" class="product-card">
-                <div class="product-card-image-wrap">
-                    <span class="product-new-badge">New</span>
-                    <img class="product-card-image" src="https://images.unsplash.com/photo-1620912189865-1b1f7553d362?w=400&q=80" alt="" loading="lazy">
-                </div>
-                <div class="product-card-body">
-                    <h3 class="product-card-name">Handcrafted Wooden Bangles (Set of 3)</h3>
-                    <span class="product-card-price">$32.00</span>
-                </div>
-            </a>
+            {% for p in products %}
+                <a href="{{ p.url }}" class="product-card" target="_blank" rel="noopener noreferrer">
+                    <div class="product-card-image-wrap">
+                        <span class="product-new-badge">New</span>
+                        {% if p.image %}
+                        <img class="product-card-image" src="{{ p.image }}" alt="{{ p.title }}" loading="lazy">
+                        {% endif %}
+                    </div>
+                    <div class="product-card-body">
+                        {% if p.brand %}<span class="product-card-brand">{{ p.brand }}</span>{% endif %}
+                        <h3 class="product-card-name">{{ p.title }}</h3>
+                        <span class="product-card-price">{{ p.price }}</span>
+                    </div>
+                </a>
+            {% empty %}
+                <div class="news-card-empty">No products available right now.</div>
+            {% endfor %}
         </div>
     </div>
+</section>
+{% endif %}
 
     
 {% if nonprofits %}
@@ -2284,7 +2215,6 @@ margin-top: 30px;
     </div>
 </section>
 {% endif %}
-
 <!-- Watch & Listen Slider -->
 <section class="media-slider-section">
     <div class="media-slider-header">
@@ -2312,36 +2242,25 @@ margin-top: 30px;
     <div class="media-slider-viewport">
         <div class="media-slider-track" id="media-track">
             {% for item in media_items %}
-<div class="media-card"
-     data-embed="{{ item.embed_url }}"
-     data-url="{{ item.url }}"
-     data-type="{{ item.type }}"
-     role="button"
-     tabindex="0"
-     aria-label="Play: {{ item.title }}"
-     style="cursor: pointer;">
+                <a href="{{ item.url }}"
+                   class="media-card"
+                   target="_blank"
+                   rel="noopener noreferrer"
+                   aria-label="Open: {{ item.title }}">
                     <div class="media-card-image-wrap">
                         <img class="media-card-image" src="{{ item.thumbnail }}" alt="{{ item.title }}" loading="lazy">
                         <span class="media-format-badge media-format-{{ item.type }}">
                             {% if item.type == 'watch' %}WATCH{% else %}LISTEN{% endif %}
                         </span>
+                        {% if item.duration %}
                         <span class="media-duration-badge">{{ item.duration }}</span>
-                        <div class="media-play-button">
-                            {% if item.type == 'watch' %}
-                                <svg viewBox="0 0 24 24" fill="currentColor"><polygon points="8 5 19 12 8 19 8 5"/></svg>
-                            {% else %}
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <path d="M3 18v-6a9 9 0 0118 0v6"/>
-                                    <path d="M21 19a2 2 0 01-2 2h-1v-7h3v5zM3 19a2 2 0 002 2h1v-7H3v5z"/>
-                                </svg>
-                            {% endif %}
-                        </div>
+                        {% endif %}
                     </div>
                     <div class="media-card-body">
                         <span class="media-card-source">{{ item.source }}</span>
                         <h3 class="media-card-title">{{ item.title }}</h3>
                     </div>
-                </div>
+                </a>
             {% empty %}
                 <div class="media-card-empty">New episodes coming soon.</div>
             {% endfor %}
