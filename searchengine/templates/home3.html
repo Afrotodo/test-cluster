@@ -1831,6 +1831,24 @@ margin-top: 30px;
         gap: 6px;
     }
 }
+
+
+/* ==================== NONPROFITS SECTION ==================== */
+.nonprofits-section {
+    margin-top: var(--space-xl);
+}
+
+.nonprofit-cause {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--red);
+}
+
+.nonprofit-card:hover {
+    border-color: var(--green);
+}
     </style>
 
 
@@ -2145,6 +2163,8 @@ margin-top: 30px;
         </div>
     </div>
 
+
+
     <div class="products-slider-viewport">
         <div class="products-slider-track" id="products-track">
             <a href="#" class="product-card">
@@ -2236,6 +2256,34 @@ margin-top: 30px;
             </a>
         </div>
     </div>
+
+    
+{% if nonprofits %}
+<!-- Nonprofits Section -->
+<section class="community-section nonprofits-section">
+    <div class="section-header">
+        <svg class="section-icon" viewBox="0 0 24 24" fill="currentColor" style="color: var(--green);">
+            <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+        </svg>
+        <span class="section-title">Nonprofits Making a Difference</span>
+    </div>
+
+    <div class="question-list">
+        {% for n in nonprofits %}
+        <a href="{{ n.url }}" class="question-card trending-card nonprofit-card" target="_blank" rel="noopener noreferrer">
+            {% if n.image %}
+            <img src="{{ n.image }}" alt="{{ n.name }}" class="trending-thumb" loading="lazy" onerror="this.style.display='none'">
+            {% endif %}
+            <div class="trending-info">
+                {% if n.cause %}<span class="nonprofit-cause">{{ n.cause }}</span>{% endif %}
+                <span class="question-text">{{ n.name }}</span>
+                <span class="trending-summary">{{ n.mission|truncatewords:18 }}</span>
+            </div>
+        </a>
+        {% endfor %}
+    </div>
+</section>
+{% endif %}
 
 <!-- Watch & Listen Slider -->
 <section class="media-slider-section">
