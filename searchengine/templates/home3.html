@@ -1849,6 +1849,22 @@ margin-top: 30px;
 .nonprofit-card:hover {
     border-color: var(--green);
 }
+
+.news-card-body {
+    display: flex;
+    flex-direction: column;
+}
+
+.news-card-source {
+    display: block;
+    width: 100%;
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: goldenrod;
+    margin-bottom: 6px;
+}
     </style>
 
 
@@ -2019,7 +2035,7 @@ margin-top: 30px;
     Community
 </a>
 
-<a href="{% url 'searchengine:search' %}?query=black+education+HBCU+scholarships+teachers&source=chip" class="category-chip chip-events" data-query="education">
+<a href="{% url 'searchengine:search' %}?query=HBCU&source=chip" class="category-chip chip-events" data-query="education">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M22 10v6M2 10l10-5 10 5-10 5z"/>
         <path d="M6 12v5c3 3 9 3 12 0v-5"/>
@@ -2080,6 +2096,7 @@ margin-top: 30px;
                 <a href="{{ item.url }}" class="news-card" target="_blank" rel="noopener noreferrer">
                     <img class="news-card-image" src="{{ item.image }}" alt="{{ item.title }}" loading="lazy">
                     <div class="news-card-body">
+                        <span class="news-card-source">{{ item.source }}</span>
                         <h3 class="news-card-title">{{ item.title }}</h3>
                     </div>
                 </a>
