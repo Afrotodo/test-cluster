@@ -1963,10 +1963,12 @@ margin-top: 30px;
                 </p>
             </section>
 
-            <!-- Did you know Banner -->
-
-{% if did_you_know %}
-<a href="{% url 'searchengine:search' %}?query={{ did_you_know.keyword|urlencode }}&source=did_you_know" class="knowledge-banner">
+           {% if did_you_know %}
+<a href="#"
+   id="did-you-know-card"
+   class="knowledge-banner"
+   data-query="{{ did_you_know.primary_subject }}"
+   data-term-key="{{ did_you_know.term_key|default:'' }}">
     <div class="knowledge-banner-icon">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M9.663 17h4.673M12 3v1m0 16v1m-9-9H2m2.222-4.778l-.707-.707m14.142.707l.707-.707M21 12h1m-3.222 4.778l.707.707M4.222 19.778l.707-.707M12 7a5 5 0 015 5c0 2.5-2 3.5-2 5h-6c0-1.5-2-2.5-2-5a5 5 0 015-5z"/>
@@ -1974,7 +1976,7 @@ margin-top: 30px;
     </div>
     <div class="knowledge-banner-content">
         <span class="knowledge-banner-label">Did you know</span>
-        <p class="knowledge-banner-text">{{ did_you_know.fact }}</p>
+        <p class="knowledge-banner-text">{{ did_you_know.summary }}</p>
     </div>
     <div class="knowledge-banner-arrow">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
@@ -2888,6 +2890,29 @@ LocationManager.init();
             }
         });
     });
+
+    // ==================== DID YOU KNOW CARD CLICK ====================
+    const didYouKnowCard = document.getElementById('did-you-know-card');
+    if (didYouKnowCard) {
+        didYouKnowCard.addEventListener('click', function(e) {
+            e.preventDefault();
+            const query = this.dataset.query;
+            if (!query) return;
+
+            searchInput.value = query;
+            SearchState.selectedFromDropdown = true;   
+            SearchState.questionUUID = null;
+            SearchState.questionId = null;
+            SearchState.isQuestion = false;
+            SearchState.questionAnswer = null;
+            SearchState.questionAnswerType = null;
+            SearchState.source = 'did_you_know';         
+            SearchState.termKey = this.dataset.termKey || null;
+
+            submitSearch();
+        });
+    }
+
     // ==================== CYLINDER PLACEHOLDER ====================
     const rollerPhrases = [
         'Black genealogy and history',
@@ -3102,6 +3127,7 @@ LocationManager.init();
 })();
 
 
+
 // ==================== MEDIA SLIDER ====================
 (function() {
     const track = document.getElementById('media-track');
@@ -3139,13 +3165,13 @@ LocationManager.init();
 document.addEventListener('click', function(e) {
     const card = e.target.closest('.media-card');
     if (!card) return;
-    
+
     // Don't re-trigger if already playing
     if (card.dataset.playing === 'true') return;
-    
+
     const embedUrl = card.dataset.embed;
     const type = card.dataset.type;
-    
+
     // No embed URL? Fall back to opening original link in new tab.
     if (!embedUrl) {
         const fallbackUrl = card.dataset.url;
@@ -3154,10 +3180,10 @@ document.addEventListener('click', function(e) {
         }
         return;
     }
-    
+
     const imageWrap = card.querySelector('.media-card-image-wrap');
     if (!imageWrap) return;
-    
+
     if (type === 'watch') {
         const separator = embedUrl.includes('?') ? '&' : '?';
         imageWrap.innerHTML = `
@@ -3177,7 +3203,7 @@ document.addEventListener('click', function(e) {
             </div>
         `;
     }
-    
+
     card.dataset.playing = 'true';
     card.style.cursor = 'default';
 });

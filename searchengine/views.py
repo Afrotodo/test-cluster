@@ -1444,7 +1444,9 @@ def get_did_you_know_from_cache():
         if not raw:
             return None
         facts = json.loads(raw)
-        return random.choice(facts) if facts else None
+        if not facts:
+            return None
+        return _daily_shuffle(facts, salt="did_you_know")[0]
     except (redis.RedisError, json.JSONDecodeError, ValueError, IndexError) as e:
         print(f"Did you know cache error: {e}")
         return None
