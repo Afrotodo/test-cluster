@@ -57,26 +57,113 @@ def logout(request):
 # REGISTRATION VIEWS
 # =============================================================================
 
+# def register(request):
+#     """
+#     Render the registration page with location data pre-populated.
+#     Location comes from server-side IP geolocation (cached in session).
+#     """
+#     location = get_location_from_request(request) or {}
+#     return render(request, 'register.html', {'user_location': location})
+
 def register(request):
     """
-    Render the registration page with location data pre-populated.
-    Location comes from server-side IP geolocation (cached in session).
+    Render the registration page. NO location lookup here.
+    Geolocation only runs on POST submission to avoid burning API
+    credits on crawlers/bots that land on the page and never submit.
     """
-    location = get_location_from_request(request) or {}
-    return render(request, 'register.html', {'user_location': location})
+    return render(request, 'register.html')
 
+
+
+
+
+# def user(request):
+#     """Handle user registration form submission."""
+#     if request.method != 'POST':
+#         return redirect('accounts:register')
+
+#     # Get location early so we can pass it back on validation errors
+#     location = get_location_from_request(request) or {}
+
+#     try:
+#         ip_address = get_client_ip(request)
+#         device = get_device_info(request.META.get('HTTP_USER_AGENT', ''))
+
+#         # Get form data
+#         username = request.POST.get('username', '').strip()
+#         email = request.POST.get('email', '').strip()
+#         password = request.POST.get('password', '')
+#         gender = request.POST.get('Gender', '')
+#         birthdate_month = request.POST.get('Birthdate_One', '')
+#         birthdate_day = request.POST.get('Birthdate_Two', '')
+#         birthdate_year = request.POST.get('Birthdate_Three', '')
+#         birthdate = f"{birthdate_month}-{birthdate_day.zfill(2)}-{birthdate_year}"
+
+#         # Validate required fields
+#         if not username or not email or not password:
+#             messages.error(request, "Please fill in all required fields.")
+#             return render(request, 'register.html', {'user_location': location})
+
+#         if User.objects.filter(username=username).exists():
+#             messages.error(request, "Username already exists. Please choose a different username.")
+#             return render(request, 'register.html', {'user_location': location})
+
+#         if User.objects.filter(email=email).exists():
+#             messages.error(request, "Email already exists. Please choose a different email.")
+#             return render(request, 'register.html', {'user_location': location})
+
+#         # Create user
+#         user_obj = User.objects.create_user(
+#             username=username,
+#             email=email,
+#             password=password,
+#         )
+
+#         # Create profile
+#         UserProfile.objects.create(
+#             user=user_obj,
+#             gender=gender,
+#             birthdate=birthdate,
+#             submission_group='UserGroup',
+#             country=location.get('country_code') or '',
+#             state=location.get('region_code') or location.get('region') or '',
+#             city=location.get('city') or '',
+#             postal_code=location.get('postal') or '',
+#         )
+
+#         # Create session record
+#         UserSession.objects.create(
+#             user=user_obj,
+#             ip_address=ip_address,
+#             browser=f"{device['browser']} {device.get('browser_version', '')}".strip(),
+#             device_type=device['device_type'],
+#             os=f"{device['os']} {device.get('os_version', '')}".strip(),
+#         )
+
+#         messages.success(request, "Registration successful!")
+#         return redirect('accounts:thankyoupage')
+
+#     except Exception as e:
+#         logger.error(f"User registration error: {e}")
+#         messages.error(request, "An error occurred during registration. Please try again.")
+#         return redirect('accounts:register')
 
 def user(request):
     """Handle user registration form submission."""
     if request.method != 'POST':
         return redirect('accounts:register')
 
-    # Get location early so we can pass it back on validation errors
+    # Bot guard: skip API + DB work for crawlers that somehow POST
+    device = get_device_info(request.META.get('HTTP_USER_AGENT', ''))
+    if device.get('is_bot'):
+        logger.info("Skipping registration for detected bot.")
+        return redirect('accounts:register')
+
+    # Location resolved ONLY here, on a real POST
     location = get_location_from_request(request) or {}
 
     try:
         ip_address = get_client_ip(request)
-        device = get_device_info(request.META.get('HTTP_USER_AGENT', ''))
 
         # Get form data
         username = request.POST.get('username', '').strip()
@@ -137,19 +224,107 @@ def user(request):
         messages.error(request, "An error occurred during registration. Please try again.")
         return redirect('accounts:register')
 
+# def business(request):
+#     """Handle business registration form submission."""
+#     if request.method != 'POST':
+#         location = get_location_from_request(request) or {}
+#         return render(request, 'register.html', {'user_location': location})
+
+#     # Get location early so we can pass it back on validation errors
+#     location = get_location_from_request(request) or {}
+
+#     try:
+#         ip_address = get_client_ip(request)
+#         device = get_device_info(request.META.get('HTTP_USER_AGENT', ''))
+
+#         # Get form data
+#         username = request.POST.get('username', '').strip()
+#         email = request.POST.get('email', '').strip()
+#         password = request.POST.get('password', '')
+#         business_name = request.POST.get('business_name', '').strip()
+#         business_website = request.POST.get('business_website', '').strip()
+#         industry = request.POST.get('industry', '')
+#         store_type = request.POST.get('store_type', '')
+#         gender = request.POST.get('Gender', '')
+#         birthdate_month = request.POST.get('Birthdate_One', '')
+#         birthdate_day = request.POST.get('Birthdate_Two', '')
+#         birthdate_year = request.POST.get('Birthdate_Three', '')
+#         business_start_date = f"{birthdate_month}-{birthdate_day.zfill(2)}-{birthdate_year}"
+
+#         # Validate required fields
+#         if not username or not email or not password or not business_name:
+#             messages.error(request, "Please fill in all required fields.")
+#             return render(request, 'register.html', {'user_location': location})
+
+#         if User.objects.filter(username=username).exists():
+#             messages.error(request, "Username already exists. Please choose a different username.")
+#             return render(request, 'register.html', {'user_location': location})
+
+#         if User.objects.filter(email=email).exists():
+#             messages.error(request, "Email already exists. Please choose a different email.")
+#             return render(request, 'register.html', {'user_location': location})
+
+#         # Create user
+#         user_obj = User.objects.create_user(
+#             username=username,
+#             email=email,
+#             password=password,
+#         )
+
+#         time.sleep(1)
+
+#         # Create business profile
+#         BusinessProfile.objects.create(
+#             user=user_obj,
+#             business_name=business_name,
+#             business_address='None',
+#             industry=industry,
+#             website=business_website,
+#             gender=gender,
+#             business_start_date=business_start_date,
+#             store_type=store_type,
+#             submission_group='BusinessGroup',
+#             latitude=location.get('lat') or None,
+#             longitude=location.get('lng') or None,
+#             country=location.get('country_code') or '',
+#             state=location.get('region_code') or location.get('region') or '',
+#             city=location.get('city') or '',
+#             postal_code=location.get('postal') or '',
+#         )
+
+#         # Create session record
+#         UserSession.objects.create(
+#             user=user_obj,
+#             ip_address=ip_address,
+#             browser=f"{device['browser']} {device.get('browser_version', '')}".strip(),
+#             device_type=device['device_type'],
+#             os=f"{device['os']} {device.get('os_version', '')}".strip(),
+#         )
+
+#         messages.success(request, "Registration successful!")
+#         return redirect('accounts:thankyoupage')
+
+#     except Exception as e:
+#         logger.error(f"Business registration error: {e}")
+#         messages.error(request, "An error occurred during registration. Please try again.")
+#         return redirect('accounts:register')
 
 def business(request):
     """Handle business registration form submission."""
     if request.method != 'POST':
-        location = get_location_from_request(request) or {}
-        return render(request, 'register.html', {'user_location': location})
+        return redirect('accounts:register')
 
-    # Get location early so we can pass it back on validation errors
+    # Bot guard: skip API + DB work for crawlers that somehow POST
+    device = get_device_info(request.META.get('HTTP_USER_AGENT', ''))
+    if device.get('is_bot'):
+        logger.info("Skipping business registration for detected bot.")
+        return redirect('accounts:register')
+
+    # Location resolved ONLY here, on a real POST
     location = get_location_from_request(request) or {}
 
     try:
         ip_address = get_client_ip(request)
-        device = get_device_info(request.META.get('HTTP_USER_AGENT', ''))
 
         # Get form data
         username = request.POST.get('username', '').strip()
@@ -184,8 +359,6 @@ def business(request):
             email=email,
             password=password,
         )
-
-        time.sleep(1)
 
         # Create business profile
         BusinessProfile.objects.create(
@@ -222,8 +395,7 @@ def business(request):
         logger.error(f"Business registration error: {e}")
         messages.error(request, "An error occurred during registration. Please try again.")
         return redirect('accounts:register')
-
-
+    
 def thankyoupage(request):
     """Thank you page after registration."""
     return render(request, 'thankyou.html')
