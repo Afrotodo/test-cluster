@@ -3521,8 +3521,6 @@ async def execute_full_search(
         seen_uuids = {document_uuid}
 
         # ── Fetch docs that share the same primary_subject_name ──
-        # If the answer doc is about a subject (person, place, concept),
-        # pull more docs that are ALSO about that subject.
         if results and results[0].get('primary_subject_name'):
             subject_name = results[0]['primary_subject_name']
             try:
@@ -3772,14 +3770,38 @@ async def execute_full_search(
         all_results = await fetch_candidates_with_metadata(query, profile)
         times['stage1'] = round((time.time() - t1) * 1000, 2)
 
-        # ── Score + floor ─────────────────────────────────────────────────
-        # The keyword path previously returned the raw Typesense pool with no
-        # scoring, so "mentioned but not about" docs (e.g. an Emmett Till bio
-        # that names Charles Diggs in entity_names) leaked into results for a
-        # "charles diggs" query. We now run the same scorer the semantic path
-        # uses. With no embedding, sem_score is 0 and the blend leans on text
-        # + authority + the subject multiplier. The floor is what actually
-        # REMOVES the demoted docs — a multiplier alone only reorders.
+        # ── Score + subject-aware floor (production, instrumented) ─────────
+        # WHY THE OLD 0.18 FLOOR FAILED
+        #   No embedding on this path → sem_score is 0 for every doc, and
+        #   auth_score is ~0 unless enrichment fields are populated. _resolve_blend
+        #   for 'browse' folds dead authority into semantic, leaving the blend at
+        #   roughly {text:0.40, sem:0.60, auth:0.0}. With sem and auth both 0:
+        #       blended ≈ 0.40 * text_score
+        #   so the ceiling is 0.40 and real matches land ~0.12–0.24. A fixed 0.18
+        #   floor sits in the MIDDLE of the legitimate range and cuts good docs as
+        #   readily as junk — it never discriminated by subject relevance.
+        #
+        # THE FIX
+        #   _compute_subject_multiplier already tags each doc with
+        #   subject_match_reason (primary_high / secondary / no_subject_match_penalty
+        #   / neutral), computed WITHOUT any embedding. We floor on THAT instead of
+        #   the blended number: keep subject matches, drop mention-only docs, and
+        #   let subject-less docs through on a mild text floor.
+        #
+        # ROLLOUT
+        #   KEYWORD_FLOOR_MODE = 'observe' → score + log, cut NOTHING (safe deploy).
+        #   KEYWORD_FLOOR_MODE = 'enforce' → actually apply the floor.
+        #   Deploy in 'observe', run a known-bad query (e.g. "charles diggs"), read
+        #   the diagnostic. If docs_with_primary_subject_name≈0 / reasons mostly
+        #   'neutral', the subject fields are NOT indexed and the real fix is
+        #   upstream in enrichment — no floor will help. Otherwise flip to 'enforce'.
+        KEYWORD_FLOOR_MODE         = 'observe'   # 'observe' | 'enforce'
+        KEYWORD_NEUTRAL_TEXT_FLOOR = 0.08
+
+        _SUBJECT_KEEP = {'primary_high', 'primary_medium', 'primary_low',
+                         'primary_unknown_conf', 'secondary'}
+        _SUBJECT_DROP = {'no_subject_match_penalty'}
+
         if all_results:
             kw_signals = {'query_mode': 'browse'}   # keyword path has no intent detection
             blend      = _resolve_blend('browse', kw_signals, all_results)
@@ -3798,17 +3820,53 @@ async def execute_full_search(
 
             all_results.sort(key=lambda x: -x.get('blended_score', 0))
 
-            # TODO: tune from real scores. Print blended_score for known junk
-            # queries ("charles diggs") and set this in the gap between the
-            # real subject doc and the mention-only docs.
-            KEYWORD_SCORE_FLOOR = 0.18
-            before = len(all_results)
-            all_results = [
-                r for r in all_results
-                if r.get('blended_score', 0) >= KEYWORD_SCORE_FLOOR
-            ]
-            print(f"   🧹 Keyword floor ({KEYWORD_SCORE_FLOOR}): "
-                  f"{before} → {len(all_results)}")
+            # ── DIAGNOSTIC: is the subject signal even alive? ──────────────
+            reason_counts = {}
+            subj_named    = 0
+            for r in all_results:
+                rsn = (r.get('subject_match_reason') or 'MISSING').split('+', 1)[0]
+                reason_counts[rsn] = reason_counts.get(rsn, 0) + 1
+                if r.get('primary_subject_name'):
+                    subj_named += 1
+
+            print(f"   🔬 KEYWORD FLOOR DIAGNOSTIC (mode={KEYWORD_FLOOR_MODE})")
+            print(f"      pool={len(all_results)}  "
+                  f"docs_with_primary_subject_name={subj_named}")
+            print(f"      reasons={reason_counts}")
+            print(f"      top 10 by blended_score:")
+            for r in all_results[:10]:
+                name = (r.get('primary_subject_name')
+                        or r.get('document_title') or r.get('id') or '')[:46]
+                print(f"        {r.get('blended_score', 0):7.4f} "
+                      f"text={r.get('text_score', 0):.3f} "
+                      f"subj_x={r.get('subject_multiplier', 0):.2f} "
+                      f"[{r.get('subject_match_reason', '?'):<22}] {name}")
+
+            # ── Decide keep/drop per doc ───────────────────────────────────
+            kept, would_drop = [], []
+            for r in all_results:
+                reason = (r.get('subject_match_reason') or 'neutral').split('+', 1)[0]
+                if reason in _SUBJECT_DROP:
+                    would_drop.append(r)
+                elif reason in _SUBJECT_KEEP:
+                    kept.append(r)
+                elif r.get('text_score', 0) >= KEYWORD_NEUTRAL_TEXT_FLOOR:
+                    kept.append(r)
+                else:
+                    would_drop.append(r)
+
+            if would_drop:
+                print(f"      would drop {len(would_drop)}: "
+                      f"{[(d.get('document_title') or d.get('id') or '')[:24] for d in would_drop[:8]]}")
+
+            # ── Enforce or observe ─────────────────────────────────────────
+            if KEYWORD_FLOOR_MODE == 'enforce':
+                before      = len(all_results)
+                all_results = kept
+                print(f"   🧹 Keyword floor ENFORCED: {before} → {len(all_results)}")
+            else:
+                print(f"   👀 Keyword floor OBSERVE: pool unchanged "
+                      f"({len(would_drop)} would be cut)")
 
             for i, item in enumerate(all_results):
                 item['rank'] = i
@@ -4191,6 +4249,7 @@ async def execute_full_search(
         'signals': signals,
         'profile': profile,
     }
+    
 
 # ============================================================
 # COMPATIBILITY STUBS — keep views.py imports working
