@@ -2790,6 +2790,687 @@ def detect_query_intent(query: str, pos_tags: List[Tuple] = None) -> str:
     return 'general'
 
 
+# async def execute_full_search(
+#     query: str,
+#     session_id: str = None,
+#     filters: Dict = None,
+#     page: int = 1,
+#     per_page: int = 20,
+#     user_location: Tuple[float, float] = None,
+#     pos_tags: List[Tuple] = None,
+#     safe_search: bool = True,
+#     alt_mode: str = 'y',
+#     answer: str = None,
+#     term_key: str = None, 
+#     answer_type: str = None,
+#     skip_embedding: bool = False,
+#     document_uuid: str = None,
+#     question_id: str = None,   
+#     search_source: str = None
+# ) -> Dict:
+#     """
+#     Main entry point for search. Called by views.py.
+#     Now async — caller must use: result = await execute_full_search(...)
+#     """
+#     times = {}
+#     t0    = time.time()
+#     print(f"DEBUG execute answer={answer!r} answer_type={answer_type!r}")
+
+#     active_data_type = filters.get('data_type') if filters else None
+#     active_category  = filters.get('category')  if filters else None
+#     active_schema    = filters.get('schema')     if filters else None
+
+#     if filters:
+#         active_filters = {k: v for k, v in filters.items() if v}
+#         if active_filters:
+#             print(f"🎛️ Active UI filters: {active_filters}")
+
+   
+    
+#     # =========================================================================
+#     # QUESTION DIRECT PATH
+#     # =========================================================================
+#     if document_uuid and search_source == 'question':
+#         from .question_id import bump_question_score
+#         bump_question_score(query, question_id, session_id)
+
+#         t_fetch = time.time()
+#         results = await fetch_full_documents([document_uuid], query)
+#         times['fetch_docs'] = round((time.time() - t_fetch) * 1000, 2)
+
+#         # Track UUIDs already in results so we don't add duplicates
+#         seen_uuids = {document_uuid}
+
+#         # ── Fetch docs that share the same primary_subject_name ──
+#         # If the answer doc is about a subject (person, place, concept),
+#         # pull more docs that are ALSO about that subject.
+#         if results and results[0].get('primary_subject_name'):
+#             subject_name = results[0]['primary_subject_name']
+#             try:
+#                 subject_docs = await fetch_documents_by_primary_subject_name(
+#                     subject_name,
+#                     exclude_uuid=document_uuid,
+#                     limit=20,
+#                 )
+#                 subject_ids = [
+#                     d['id'] for d in subject_docs
+#                     if d.get('id') and d['id'] not in seen_uuids
+#                 ]
+#                 if subject_ids:
+#                     subject_results = await fetch_full_documents(subject_ids, query)
+#                     results.extend(subject_results)
+#                     seen_uuids.update(subject_ids)
+#                     print(f"   🎯 Subject matches: {len(subject_results)} added "
+#                           f"for primary_subject_name='{subject_name}'")
+#             except Exception as e:
+#                 print(f"⚠️ Subject fetch error: {e}")
+
+#         # ── Fetch cluster siblings (deduped against subject matches) ──
+#         if results and results[0].get('cluster_uuid'):
+#             cluster_uuid = results[0]['cluster_uuid']
+#             try:
+#                 cluster_docs = await fetch_documents_by_cluster_uuid(
+#                     cluster_uuid, exclude_uuid=document_uuid, limit=5
+#                 )
+#                 cluster_ids = [
+#                     d['id'] for d in cluster_docs
+#                     if d.get('id') and d['id'] not in seen_uuids
+#                 ]
+#                 if cluster_ids:
+#                     cluster_results = await fetch_full_documents(cluster_ids, query)
+#                     results.extend(cluster_results)
+#                     seen_uuids.update(cluster_ids)
+#                     print(f"   🔗 Cluster siblings: {len(cluster_results)} added "
+#                           f"from cluster={cluster_uuid[:12]}...")
+#             except Exception as e:
+#                 print(f"⚠️ Cluster fetch error: {e}")
+
+#         # ── AI Overview ──
+#         ai_overview   = None
+#         question_word = None
+#         q_lower       = query.lower().strip()
+#         for word in ('who', 'what', 'where', 'when', 'why', 'how'):
+#             if q_lower.startswith(word):
+#                 question_word = word
+#                 break
+
+#         question_signals = {
+#             'query_mode':          'answer',
+#             'wants_single_result': True,
+#             'question_word':       question_word,
+#         }
+
+#         if results and results[0].get('key_facts'):
+#             ai_overview = _build_ai_overview(question_signals, results, query)
+#             if ai_overview:
+#                 print(f"   💡 AI Overview (question path): {ai_overview[:80]}...")
+#                 results[0]['humanized_summary'] = ai_overview
+
+#         # ── Related questions for all docs in the result set ──
+#         all_doc_uuids = [document_uuid]
+#         for r in results[1:]:
+#             rid = r.get('id')
+#             if rid and rid != document_uuid:
+#                 all_doc_uuids.append(rid)
+
+#         related_questions = await fetch_questions_by_document_uuids(
+#             all_doc_uuids, exclude_query=query, limit=10
+#         )
+
+#         times['total'] = round((time.time() - t0) * 1000, 2)
+
+#         print(f"❓ QUESTION PATH COMPLETE: {len(results)} total docs "
+#               f"(1 answer + {len(results) - 1} related)")
+
+#         return {
+#             'query':             query,
+#             'corrected_query':   query,
+#             'intent':            'answer',
+#             'query_mode':        'answer',
+#             'answer':            answer,
+#             'answer_type':       answer_type or 'UNKNOWN',
+#             'results':           results,
+#             'total':             len(results),
+#             'facet_total':       len(results),
+#             'total_image_count': 0,
+#             'page':              1,
+#             'per_page':          per_page,
+#             'search_time':       round(time.time() - t0, 3),
+#             'session_id':        session_id,
+#             'semantic_enabled':  False,
+#             'search_strategy':   'question_direct',
+#             'alt_mode':          alt_mode,
+#             'skip_embedding':    True,
+#             'search_source':     'question',
+#             'valid_terms':       query.split(),
+#             'unknown_terms':     [],
+#             'data_type_facets':  [],
+#             'category_facets':   [],
+#             'schema_facets':     [],
+#             'related_searches':  related_questions,
+#             'facets':            {},
+#             'word_discovery': {
+#                 'valid_count':   len(query.split()),
+#                 'unknown_count': 0,
+#                 'corrections':   [],
+#                 'filters':       [],
+#                 'locations':     [],
+#                 'sort':          None,
+#                 'total_score':   0,
+#                 'average_score': 0,
+#                 'max_score':     0,
+#             },
+#             'timings':          times,
+#             'filters_applied': {
+#                 'data_type':             None,
+#                 'category':              None,
+#                 'schema':                None,
+#                 'is_local_search':       False,
+#                 'local_search_strength': 'none',
+#             },
+#             'signals': question_signals,
+#             'profile': {},
+#         }
+
+#     # =========================================================================
+#     # FAST PATH — finished cache hit
+#     # =========================================================================
+#     stable_key = _generate_stable_cache_key(session_id, query)
+#     finished   = await _get_cached_results(stable_key)
+
+#     if finished is not None:
+#         print(f"⚡ FAST PATH: '{query}' | page={page} | "
+#               f"filter={active_data_type}/{active_category}/{active_schema}")
+
+#         all_results       = finished['all_results']
+#         all_facets        = finished['all_facets']
+#         facet_total       = finished['facet_total']
+#         ai_overview       = finished.get('ai_overview')
+#         total_image_count = finished.get('total_image_count', 0)
+#         metadata          = finished['metadata']
+#         times['cache']    = 'hit (fast path)'
+
+#         filtered_results           = filter_cached_results(all_results, active_data_type, active_category, active_schema)
+#         page_items, total_filtered = paginate_cached_results(filtered_results, page, per_page)
+
+#         t_fetch = time.time()
+#         results = await fetch_full_documents([item['id'] for item in page_items], query)
+#         times['fetch_docs'] = round((time.time() - t_fetch) * 1000, 2)
+
+#         if results and page == 1 and ai_overview:
+#             results[0]['humanized_summary'] = ai_overview
+
+#         times['total'] = round((time.time() - t0) * 1000, 2)
+#         signals        = metadata.get('signals', {})
+
+#         print(f"⏱️ FAST PATH TIMING: {times}")
+
+#         return {
+#             'query':             query,
+#             'corrected_query':   metadata.get('corrected_query', query),
+#             'intent':            metadata.get('intent', 'general'),
+#             'query_mode':        metadata.get('query_mode', 'keyword'),
+#             'results':           results,
+#             'total':             total_filtered,
+#             'facet_total':       facet_total,
+#             'total_image_count': total_image_count,
+#             'page':              page,
+#             'per_page':          per_page,
+#             'search_time':       round(time.time() - t0, 3),
+#             'session_id':        session_id,
+#             'semantic_enabled':  metadata.get('semantic_enabled', False),
+#             'search_strategy':   metadata.get('search_strategy', 'cached'),
+#             'alt_mode':          alt_mode,
+#             'skip_embedding':    skip_embedding,
+#             'search_source':     search_source,
+#             'valid_terms':       metadata.get('valid_terms', query.split()),
+#             'unknown_terms':     metadata.get('unknown_terms', []),
+#             'data_type_facets':  all_facets.get('data_type', []),
+#             'category_facets':   all_facets.get('category', []),
+#             'schema_facets':     all_facets.get('schema', []),
+#             'related_searches':  [],
+#             'facets':            all_facets,
+#             'word_discovery':    metadata.get('word_discovery', {
+#                 'valid_count': len(query.split()), 'unknown_count': 0,
+#                 'corrections': [], 'filters': [], 'locations': [],
+#                 'sort': None, 'total_score': 0, 'average_score': 0, 'max_score': 0,
+#             }),
+#             'timings':          times,
+#             'filters_applied':  metadata.get('filters_applied', {
+#                 'data_type': active_data_type, 'category': active_category,
+#                 'schema': active_schema, 'is_local_search': False,
+#                 'local_search_strength': 'none',
+#             }),
+#             'signals': signals,
+#             'profile': metadata.get('profile', {}),
+#         }
+
+#     # =========================================================================
+#     # FULL PATH — no cache
+#     # =========================================================================
+#     print(f"🔬 FULL PATH: '{query}' (no cache for key={stable_key[:12]}...)")
+
+#     is_keyword_path = (
+#         alt_mode == 'n' or
+#         search_source in ('dropdown', 'keyword', 'suggestion', 'autocomplete')
+#     )
+
+#     # =========================================================================
+#     # KEYWORD PATH — Stage 1 → 5 → 6 → 7
+#     # =========================================================================
+#     if is_keyword_path:
+#         print(f"⚡ KEYWORD PIPELINE: '{query}'")
+
+#         if term_key:
+#             from .term_rank import bump_term_rank
+#             bump_term_rank(term_key, session_id)
+
+#         intent  = detect_query_intent(query, pos_tags)
+#         profile = {
+#             'search_terms':     query.split(),
+#             'cities':           [],
+#             'states':           [],
+#             'location_terms':   [],
+#             'primary_intent':   intent,
+#             'field_boosts': {
+#                 'primary_subject_name': 100,
+#                 'document_title':       10,
+#                 'entity_names':          8,
+#                 'primary_keywords':      6,
+#                 'secondary_subjects':    5,
+#                 'key_facts':             4,
+#                 'semantic_keywords':     3,
+#             },
+#             'corrections':      [],
+#             'persons':          [],
+#             'organizations':    [],
+#             'keywords':         [],
+#             'media':            [],
+#             'preferred_data_types': ['article'],
+#         }
+
+#         t1 = time.time()
+#         all_results = await fetch_candidates_with_metadata(query, profile)
+#         times['stage1'] = round((time.time() - t1) * 1000, 2)
+
+#         counts = count_all(all_results)
+
+#         await _set_cached_results(stable_key, {
+#             'all_results':       all_results,
+#             'all_facets':        counts['facets'],
+#             'facet_total':       counts['facet_total'],
+#             'total_image_count': counts['total_image_count'],
+#             'ai_overview':       None,
+#             'metadata': {
+#                 'corrected_query':  query,
+#                 'intent':           intent,
+#                 'query_mode':       'keyword',
+#                 'semantic_enabled': False,
+#                 'search_strategy':  'keyword_graph_filter',
+#                 'valid_terms':      query.split(),
+#                 'unknown_terms':    [],
+#                 'signals':          {},
+#                 'profile':          profile,
+#                 'word_discovery': {
+#                     'valid_count': len(query.split()), 'unknown_count': 0,
+#                     'corrections': [], 'filters': [], 'locations': [],
+#                     'sort': None, 'total_score': 0, 'average_score': 0, 'max_score': 0,
+#                 },
+#                 'filters_applied': {
+#                     'data_type': active_data_type, 'category': active_category,
+#                     'schema': active_schema, 'is_local_search': False,
+#                     'local_search_strength': 'none',
+#                 },
+#             },
+#         })
+
+#         filtered_results           = filter_cached_results(all_results, active_data_type, active_category, active_schema)
+#         page_items, total_filtered = paginate_cached_results(filtered_results, page, per_page)
+
+#         t2 = time.time()
+#         results = await fetch_full_documents([item['id'] for item in page_items], query)
+#         times['fetch_docs'] = round((time.time() - t2) * 1000, 2)
+#         times['total']      = round((time.time() - t0) * 1000, 2)
+
+#         print(f"⏱️ KEYWORD TIMING: {times}")
+
+#         return {
+#             'query':             query,
+#             'corrected_query':   query,
+#             'intent':            intent,
+#             'query_mode':        'keyword',
+#             'results':           results,
+#             'total':             total_filtered,
+#             'facet_total':       counts['facet_total'],
+#             'total_image_count': counts['total_image_count'],
+#             'page':              page,
+#             'per_page':          per_page,
+#             'search_time':       round(time.time() - t0, 3),
+#             'session_id':        session_id,
+#             'semantic_enabled':  False,
+#             'search_strategy':   'keyword_graph_filter',
+#             'alt_mode':          alt_mode,
+#             'skip_embedding':    True,
+#             'search_source':     search_source or 'dropdown',
+#             'valid_terms':       query.split(),
+#             'unknown_terms':     [],
+#             'data_type_facets':  counts['facets'].get('data_type', []),
+#             'category_facets':   counts['facets'].get('category', []),
+#             'schema_facets':     counts['facets'].get('schema', []),
+#             'related_searches':  [],
+#             'facets':            counts['facets'],
+#             'word_discovery': {
+#                 'valid_count': len(query.split()), 'unknown_count': 0,
+#                 'corrections': [], 'filters': [], 'locations': [],
+#                 'sort': None, 'total_score': 0, 'average_score': 0, 'max_score': 0,
+#             },
+#             'timings':          times,
+#             'filters_applied': {
+#                 'data_type': active_data_type, 'category': active_category,
+#                 'schema': active_schema, 'is_local_search': False,
+#                 'local_search_strength': 'none',
+#             },
+#             'signals': {},
+#             'profile': profile,
+#         }
+
+#     # =========================================================================
+#     # SEMANTIC PATH — Stage 1 → 2 → 3 → 4 → 5 → 6 → 7
+#     # =========================================================================
+#     print(f"🔬 SEMANTIC PIPELINE: '{query}'")
+
+#     # Stage 0 — Word Discovery + embedding in parallel
+#     t1 = time.time()
+#     discovery, query_embedding = await run_parallel_prep(query, skip_embedding=skip_embedding)
+#     times['parallel_prep'] = round((time.time() - t1) * 1000, 2)
+
+#     # Intent detection
+#     signals = {}
+#     if INTENT_DETECT_AVAILABLE:
+#         try:
+#             discovery = await asyncio.to_thread(detect_intent, discovery)
+#             signals   = discovery.get('signals', {})
+#             print(f"   🎯 Intent: mode={signals.get('query_mode')} "
+#                   f"domain={signals.get('primary_domain')} "
+#                   f"local={signals.get('is_local_search')} "
+#                   f"black_owned={signals.get('has_black_owned')} "
+#                   f"superlative={signals.get('has_superlative')}")
+#         except Exception as e:
+#             print(f"   ⚠️ intent_detect error: {e}")
+
+#     corrected_query  = discovery.get('corrected_query', query)
+#     semantic_enabled = query_embedding is not None
+#     query_mode       = signals.get('query_mode', 'explore')
+
+#     # Read v3 profile
+#     t2      = time.time()
+#     profile = _read_v3_profile(discovery, signals=signals)
+#     times['read_profile'] = round((time.time() - t2) * 1000, 2)
+
+#     # Apply pos_mismatch corrections to search_terms
+#     corrections = discovery.get('corrections', [])
+#     if corrections:
+#         correction_map = {
+#             c['original'].lower(): c['corrected']
+#             for c in corrections
+#             if c.get('original') and c.get('corrected')
+#             and c.get('correction_type') == 'pos_mismatch'
+#         }
+#         if correction_map:
+#             original_terms          = profile['search_terms']
+#             profile['search_terms'] = [
+#                 correction_map.get(t.lower(), t) for t in original_terms
+#             ]
+
+#     intent      = profile['primary_intent']
+#     city_names  = [c['name'] for c in profile['cities']]
+#     state_names = [s['name'] for s in profile['states']]
+
+#     print(f"   Intent: {intent} | Mode: {query_mode}")
+#     print(f"   Cities: {city_names} | States: {state_names}")
+#     print(f"   Search Terms: {profile['search_terms']}")
+
+#     # Stage 1 — candidate UUIDs
+#     t3 = time.time()
+
+#     UNSAFE_CATEGORIES = {
+#         'Food', 'US City', 'US State', 'Country', 'Location',
+#         'City', 'Place', 'Object', 'Animal', 'Color',
+#     }
+#     has_unsafe_corrections = any(
+#         c.get('correction_type') == 'pos_mismatch' or
+#         c.get('category', '') in UNSAFE_CATEGORIES
+#         for c in corrections
+#     )
+#     search_query_for_stage1 = query if has_unsafe_corrections else corrected_query
+
+#     candidate_uuids = await fetch_all_candidate_uuids(
+#         search_query_for_stage1, profile, query_embedding,
+#         signals=signals, discovery=discovery,
+#     )
+#     times['stage1_uuids'] = round((time.time() - t3) * 1000, 2)
+
+#     # Stage 2 + 3 — vector rerank + distance prune
+#     survivor_uuids = candidate_uuids
+#     vector_data    = {}
+
+#     if semantic_enabled and candidate_uuids:
+#         t4       = time.time()
+#         reranked = await semantic_rerank_candidates(candidate_uuids, query_embedding, max_to_rerank=500)
+#         times['stage2_rerank'] = round((time.time() - t4) * 1000, 2)
+
+#         vector_data = {
+#             item['id']: {
+#                 'vector_distance': item.get('vector_distance', 1.0),
+#                 'semantic_rank':   item.get('semantic_rank', 999999),
+#             }
+#             for item in reranked
+#         }
+
+#         DISTANCE_THRESHOLDS = {
+#             'answer':  0.60,
+#             'explore': 0.70,
+#             'compare': 0.65,
+#             'browse':  0.85,
+#             'local':   0.85,
+#             'shop':    0.80,
+#         }
+#         threshold = DISTANCE_THRESHOLDS.get(query_mode, 0.75)
+
+#         before_prune   = len(candidate_uuids)
+#         survivor_uuids = [
+#             uuid for uuid in candidate_uuids
+#             if vector_data.get(uuid, {}).get('vector_distance', 1.0) <= threshold
+#         ]
+#         after_prune = len(survivor_uuids)
+
+#         if before_prune != after_prune:
+#             print(f"   🔪 Stage 3 prune ({query_mode}, threshold={threshold}): "
+#                   f"{before_prune} → {after_prune} "
+#                   f"({before_prune - after_prune} removed)")
+#         times['stage3_prune'] = f"{before_prune} → {after_prune}"
+
+#     else:
+#         print(f"⚠️ Skipping Stages 2-3: semantic={semantic_enabled}, "
+#               f"candidates={len(candidate_uuids)}")
+
+#     # Stage 4 — metadata for survivors
+#     t5          = time.time()
+#     all_results = await fetch_candidate_metadata(survivor_uuids)
+#     times['stage4_metadata'] = round((time.time() - t5) * 1000, 2)
+
+#     # Stage 5 — resolve blend once, score every document (CPU-bound, stays sync)
+#     if all_results:
+#         blend      = _resolve_blend(query_mode, signals, all_results)
+#         pool_size  = len(all_results)
+
+#         for idx, item in enumerate(all_results):
+#             _score_document(
+#                 idx        = idx,
+#                 item       = item,
+#                 profile    = profile,
+#                 signals    = signals,
+#                 blend      = blend,
+#                 pool_size  = pool_size,
+#                 vector_data = vector_data,
+#             )
+
+#         all_results.sort(key=lambda x: -x.get('blended_score', 0))
+#         for i, item in enumerate(all_results):
+#             item['rank'] = i
+
+#     counts = count_all(all_results)
+
+#     # AI Overview preview
+#     ai_overview = None
+#     if all_results:
+#         preview_items, _ = paginate_cached_results(all_results, 1, per_page)
+#         preview_docs     = await fetch_full_documents([item['id'] for item in preview_items], query)
+#         if preview_docs and _should_trigger_ai_overview(signals, preview_docs, query):
+#             ai_overview = _build_ai_overview(signals, preview_docs, query)
+#             if ai_overview:
+#                 print(f"   💡 AI Overview: {ai_overview[:80]}...")
+
+#     valid_terms   = profile['search_terms']
+#     unknown_terms = [t['word'] for t in discovery.get('terms', []) if t.get('status') == 'unknown']
+
+#     locations_block = (
+#         [
+#             {'field': 'location_city',  'values': city_names},
+#             {'field': 'location_state', 'values': state_names},
+#         ]
+#         if city_names or state_names else []
+#     )
+
+#     # Stage 6 — cache the finished package
+#     await _set_cached_results(stable_key, {
+#         'all_results':       all_results,
+#         'all_facets':        counts['facets'],
+#         'facet_total':       counts['facet_total'],
+#         'total_image_count': counts['total_image_count'],
+#         'ai_overview':       ai_overview,
+#         'metadata': {
+#             'corrected_query':  corrected_query,
+#             'intent':           intent,
+#             'query_mode':       query_mode,
+#             'semantic_enabled': semantic_enabled,
+#             'search_strategy':  'staged_semantic' if semantic_enabled else 'keyword_fallback',
+#             'valid_terms':      valid_terms,
+#             'unknown_terms':    unknown_terms,
+#             'signals':          signals,
+#             'city_names':       city_names,
+#             'state_names':      state_names,
+#             'profile':          profile,
+#             'word_discovery': {
+#                 'valid_count':   discovery.get('stats', {}).get('valid_words', 0),
+#                 'unknown_count': discovery.get('stats', {}).get('unknown_words', 0),
+#                 'corrections':   discovery.get('corrections', []),
+#                 'filters':       [],
+#                 'locations':     locations_block,
+#                 'sort':          None,
+#                 'total_score':   0,
+#                 'average_score': 0,
+#                 'max_score':     0,
+#             },
+#             'filters_applied': {
+#                 'data_type':             active_data_type,
+#                 'category':              active_category,
+#                 'schema':                active_schema,
+#                 'is_local_search':       signals.get('is_local_search', False),
+#                 'local_search_strength': signals.get('local_search_strength', 'none'),
+#                 'has_black_owned':       signals.get('has_black_owned', False),
+#                 'graph_filters':         [],
+#                 'graph_locations':       locations_block,
+#                 'graph_sort':            None,
+#             },
+#         },
+#     })
+#     print(f"💾 Cached semantic package: {counts['facet_total']} results, "
+#           f"{counts['total_image_count']} image docs")
+
+#     # Stage 7 — filter → paginate → fetch full docs
+#     filtered_results           = filter_cached_results(all_results, active_data_type, active_category, active_schema)
+#     page_items, total_filtered = paginate_cached_results(filtered_results, page, per_page)
+
+#     t6      = time.time()
+#     results = await fetch_full_documents([item['id'] for item in page_items], query)
+#     times['fetch_docs'] = round((time.time() - t6) * 1000, 2)
+
+#     if results and page == 1 and ai_overview:
+#         results[0]['humanized_summary'] = ai_overview
+
+#     if query_embedding:
+#         try:
+#             await asyncio.to_thread(
+#                 store_query_embedding,
+#                 corrected_query, query_embedding,
+#                 result_count=counts['facet_total']
+#             )
+#         except Exception as e:
+#             print(f"⚠️ store_query_embedding error: {e}")
+
+#     times['total'] = round((time.time() - t0) * 1000, 2)
+#     strategy       = 'staged_semantic' if semantic_enabled else 'keyword_fallback'
+
+#     print(f"⏱️ SEMANTIC TIMING: {times}")
+#     print(f"🔍 {strategy.upper()} ({query_mode}) | "
+#           f"Total: {counts['facet_total']} | "
+#           f"Filtered: {total_filtered} | "
+#           f"Page: {len(results)} | "
+#           f"Images: {counts['total_image_count']}")
+
+#     return {
+#         'query':             query,
+#         'corrected_query':   corrected_query,
+#         'intent':            intent,
+#         'query_mode':        query_mode,
+#         'results':           results,
+#         'total':             total_filtered,
+#         'facet_total':       counts['facet_total'],
+#         'total_image_count': counts['total_image_count'],
+#         'page':              page,
+#         'per_page':          per_page,
+#         'search_time':       round(time.time() - t0, 3),
+#         'session_id':        session_id,
+#         'semantic_enabled':  semantic_enabled,
+#         'search_strategy':   strategy,
+#         'alt_mode':          alt_mode,
+#         'skip_embedding':    skip_embedding,
+#         'search_source':     search_source,
+#         'valid_terms':       valid_terms,
+#         'unknown_terms':     unknown_terms,
+#         'related_searches':  [],
+#         'data_type_facets':  counts['facets'].get('data_type', []),
+#         'category_facets':   counts['facets'].get('category', []),
+#         'schema_facets':     counts['facets'].get('schema', []),
+#         'facets':            counts['facets'],
+#         'word_discovery': {
+#             'valid_count':   discovery.get('stats', {}).get('valid_words', 0),
+#             'unknown_count': discovery.get('stats', {}).get('unknown_words', 0),
+#             'corrections':   discovery.get('corrections', []),
+#             'filters':       [],
+#             'locations':     locations_block,
+#             'sort':          None,
+#             'total_score':   0,
+#             'average_score': 0,
+#             'max_score':     0,
+#         },
+#         'timings': times,
+#         'filters_applied': {
+#             'data_type':             active_data_type,
+#             'category':              active_category,
+#             'schema':                active_schema,
+#             'is_local_search':       signals.get('is_local_search', False),
+#             'local_search_strength': signals.get('local_search_strength', 'none'),
+#             'has_black_owned':       signals.get('has_black_owned', False),
+#             'graph_filters':         [],
+#             'graph_locations':       locations_block,
+#             'graph_sort':            None,
+#         },
+#         'signals': signals,
+#         'profile': profile,
+#     }
+
 async def execute_full_search(
     query: str,
     session_id: str = None,
@@ -2801,11 +3482,11 @@ async def execute_full_search(
     safe_search: bool = True,
     alt_mode: str = 'y',
     answer: str = None,
-    term_key: str = None, 
+    term_key: str = None,
     answer_type: str = None,
     skip_embedding: bool = False,
     document_uuid: str = None,
-    question_id: str = None,   
+    question_id: str = None,
     search_source: str = None
 ) -> Dict:
     """
@@ -2825,8 +3506,6 @@ async def execute_full_search(
         if active_filters:
             print(f"🎛️ Active UI filters: {active_filters}")
 
-   
-    
     # =========================================================================
     # QUESTION DIRECT PATH
     # =========================================================================
@@ -3074,12 +3753,12 @@ async def execute_full_search(
             'primary_intent':   intent,
             'field_boosts': {
                 'primary_subject_name': 100,
-                'document_title':       10,
-                'entity_names':          8,
-                'primary_keywords':      6,
-                'secondary_subjects':    5,
-                'key_facts':             4,
-                'semantic_keywords':     3,
+                'document_title':        50,
+                'entity_names':          30,
+                'primary_keywords':      20,
+                'secondary_subjects':    75,
+                'key_facts':             10,
+                'semantic_keywords':      5,
             },
             'corrections':      [],
             'persons':          [],
@@ -3092,6 +3771,48 @@ async def execute_full_search(
         t1 = time.time()
         all_results = await fetch_candidates_with_metadata(query, profile)
         times['stage1'] = round((time.time() - t1) * 1000, 2)
+
+        # ── Score + floor ─────────────────────────────────────────────────
+        # The keyword path previously returned the raw Typesense pool with no
+        # scoring, so "mentioned but not about" docs (e.g. an Emmett Till bio
+        # that names Charles Diggs in entity_names) leaked into results for a
+        # "charles diggs" query. We now run the same scorer the semantic path
+        # uses. With no embedding, sem_score is 0 and the blend leans on text
+        # + authority + the subject multiplier. The floor is what actually
+        # REMOVES the demoted docs — a multiplier alone only reorders.
+        if all_results:
+            kw_signals = {'query_mode': 'browse'}   # keyword path has no intent detection
+            blend      = _resolve_blend('browse', kw_signals, all_results)
+            pool_size  = len(all_results)
+
+            for idx, item in enumerate(all_results):
+                _score_document(
+                    idx         = idx,
+                    item        = item,
+                    profile     = profile,
+                    signals     = kw_signals,
+                    blend       = blend,
+                    pool_size   = pool_size,
+                    vector_data = {},               # empty → sem_score 0 for all
+                )
+
+            all_results.sort(key=lambda x: -x.get('blended_score', 0))
+
+            # TODO: tune from real scores. Print blended_score for known junk
+            # queries ("charles diggs") and set this in the gap between the
+            # real subject doc and the mention-only docs.
+            KEYWORD_SCORE_FLOOR = 0.18
+            before = len(all_results)
+            all_results = [
+                r for r in all_results
+                if r.get('blended_score', 0) >= KEYWORD_SCORE_FLOOR
+            ]
+            print(f"   🧹 Keyword floor ({KEYWORD_SCORE_FLOOR}): "
+                  f"{before} → {len(all_results)}")
+
+            for i, item in enumerate(all_results):
+                item['rank'] = i
+        # ── End score + floor ─────────────────────────────────────────────
 
         counts = count_all(all_results)
 
@@ -3470,7 +4191,6 @@ async def execute_full_search(
         'signals': signals,
         'profile': profile,
     }
-
 
 # ============================================================
 # COMPATIBILITY STUBS — keep views.py imports working
