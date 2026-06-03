@@ -2894,7 +2894,7 @@ LocationManager.init();
         });
     });
 
-    // ==================== DID YOU KNOW CARD CLICK ====================
+ // ==================== DID YOU KNOW CARD CLICK ====================
     const didYouKnowCard = document.getElementById('did-you-know-card');
     if (didYouKnowCard) {
         didYouKnowCard.addEventListener('click', function(e) {
@@ -2915,6 +2915,27 @@ LocationManager.init();
             submitSearch();
         });
     }
+
+    // ==================== CATEGORY CHIP CLICKS ====================
+    document.querySelectorAll('.category-chip').forEach(chip => {
+        chip.addEventListener('click', function(e) {
+            e.preventDefault();
+            const query = this.dataset.query;
+            if (!query) return;
+
+            searchInput.value = query;
+            SearchState.selectedFromDropdown = true;
+            SearchState.questionUUID = null;
+            SearchState.questionId = null;
+            SearchState.isQuestion = false;
+            SearchState.questionAnswer = null;
+            SearchState.questionAnswerType = null;
+            SearchState.source = 'chip';
+            SearchState.termKey = null;
+
+            submitSearch();
+        });
+    });
 
     // ==================== CYLINDER PLACEHOLDER ====================
     const rollerPhrases = [
