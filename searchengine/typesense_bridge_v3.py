@@ -552,7 +552,7 @@ def build_typesense_params(
     Convert the v3 profile into Typesense search parameters.
 
     Field boost order (v5 — with subject hierarchy):
-        primary_subject_name : 15  (highest — what the doc IS about)
+        primary_subject_name : 100  (highest — what the doc IS about)
         document_title       : 10
         entity_names         :  8
         primary_keywords     :  6
@@ -580,7 +580,7 @@ def build_typesense_params(
     field_boosts = dict(profile.get('field_boosts', {}))
 
     # Subject hierarchy — these always take precedence over v3 boosts.
-    field_boosts['primary_subject_name'] = 50
+    field_boosts['primary_subject_name'] = 100
     field_boosts['document_title']       = max(field_boosts.get('document_title', 0), 10)
     field_boosts['entity_names']         = max(field_boosts.get('entity_names', 0), 8)
     field_boosts['primary_keywords']     = max(field_boosts.get('primary_keywords', 0), 6)
@@ -1580,7 +1580,7 @@ async def fetch_candidate_uuids(
         'q':                     params.get('q', search_query),
         'query_by':              params.get('query_by',
             'primary_subject_name,document_title,entity_names,primary_keywords,secondary_subjects,key_facts,semantic_keywords'),
-        'query_by_weights':      params.get('query_by_weights', '50,10,8,6,5,4,3'),
+        'query_by_weights':      params.get('query_by_weights', '100,10,8,6,5,4,3'),
         'per_page':              max_results,
         'page':                  1,
         'include_fields':        'document_uuid',
@@ -2137,7 +2137,7 @@ async def fetch_candidates_with_metadata(
             'q':                     params.get('q', search_query),
             'query_by':              params.get('query_by',
                 'primary_subject_name,document_title,entity_names,primary_keywords,secondary_subjects,key_facts,semantic_keywords'),
-            'query_by_weights':      params.get('query_by_weights', '50,10,8,6,5,4,3'),
+            'query_by_weights':      params.get('query_by_weights', '100,10,8,6,5,4,3'),
             'per_page':              PAGE_SIZE,
             'page':                  current_page,
             'include_fields':        _METADATA_INCLUDE_FIELDS,
@@ -3073,7 +3073,7 @@ async def execute_full_search(
             'location_terms':   [],
             'primary_intent':   intent,
             'field_boosts': {
-                'primary_subject_name': 50,
+                'primary_subject_name': 100,
                 'document_title':       10,
                 'entity_names':          8,
                 'primary_keywords':      6,
