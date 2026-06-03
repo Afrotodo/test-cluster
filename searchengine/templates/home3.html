@@ -1720,8 +1720,9 @@ margin-top: 30px;
     transform: translateX(2px);
 }
 
-@media (max-width: 480px) {
+@media (max-width: 520px) {
     .knowledge-banner {
+        align-items: flex-start;
         padding: var(--space-sm) var(--space-md);
         gap: var(--space-sm);
     }
@@ -1732,11 +1733,13 @@ margin-top: 30px;
     }
 
     .knowledge-banner-text {
-        font-size: 13px;
+        font-size: 12px;
     }
 
-    .knowledge-banner-label {
-        display: none;
+     .knowledge-banner-content {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 2px;
     }
 }
 
