@@ -3749,21 +3749,44 @@ async def execute_full_search(
     # =========================================================================
     print(f"🔬 FULL PATH: '{query}' (no cache for key={stable_key[:12]}...)")
 
+    # ★ KEYWORD CACHE FIX (restored from the original working solution) ────────
+    # Page 2 / tab clicks lose alt_mode=n from the URL, so alt_mode defaults to
+    # 'y' and the query falls into the SEMANTIC path — a different search, a
+    # smaller result set ("100 on page 1, 4 on page 2").
+    #
+    # Fix: keep a SEPARATE keyword cache entry, keyed independently of the
+    # unified stable_key. Its mere existence means "this query was run as
+    # keyword." Probe it before routing; if present, force the keyword path and
+    # reuse that pool so page 2 is consistent with page 1. One query = one path.
+    keyword_cache_key = hashlib.md5(
+        f"keyword|{session_id or 'nosession'}|{query.strip().lower()}".encode()
+    ).hexdigest()
+    try:
+        keyword_cache_hit = await _get_cached_results(keyword_cache_key)
+    except Exception:
+        keyword_cache_hit = None
+
     is_keyword_path = (
         alt_mode == 'n' or
         search_source in ('dropdown', 'keyword', 'suggestion', 'autocomplete')
     )
 
-   # =========================================================================
+    # ★ If a keyword cache exists for this query, force the keyword path.
+    if keyword_cache_hit is not None:
+        is_keyword_path = True
+        print(f"🔄 Keyword cache exists for '{query}' — forcing keyword path "
+              f"(page={page}, alt_mode={alt_mode})")
+
+    # =========================================================================
     # KEYWORD PATH — Stage 1 → 5 → 6 → 7
     # =========================================================================
     if is_keyword_path:
-        print(f"⚡ KEYWORD PIPELINE: '{query}'")
- 
+        print(f"⚡ KEYWORD PIPELINE: '{query}' page={page} alt_mode={alt_mode}")
+
         if term_key:
             from .term_rank import bump_term_rank
             bump_term_rank(term_key, session_id)
- 
+
         intent  = detect_query_intent(query, pos_tags)
         profile = {
             'search_terms':     query.split(),
@@ -3787,14 +3810,126 @@ async def execute_full_search(
             'media':            [],
             'preferred_data_types': ['article'],
         }
- 
+
         t1 = time.time()
-        all_results = await fetch_candidates_with_metadata(query, profile)
-        times['stage1'] = round((time.time() - t1) * 1000, 2)
- 
+        if keyword_cache_hit is not None:
+            # ★ Reuse the cached keyword pool. Skipping Stage 1 + scoring + floor
+            # here is essential: re-running them on page 2 would re-cut to a
+            # different (smaller) pool and reintroduce the page1≠page2 desync.
+            all_results = keyword_cache_hit['all_results']
+            times['stage1'] = 'cache hit'
+            print(f"   ★ Reusing cached keyword pool: {len(all_results)} docs")
+            _skip_score_floor = True
+        else:
+            all_results = await fetch_candidates_with_metadata(query, profile)
+            times['stage1'] = round((time.time() - t1) * 1000, 2)
+            _skip_score_floor = False
+
+        # ── Score + subject-aware floor (production, instrumented) ─────────
+        # WHY THE OLD 0.18 FLOOR FAILED
+        #   No embedding on this path → sem_score is 0 for every doc, and
+        #   auth_score is ~0 unless enrichment fields are populated. _resolve_blend
+        #   for 'browse' folds dead authority into semantic, leaving the blend at
+        #   roughly {text:0.40, sem:0.60, auth:0.0}. With sem and auth both 0:
+        #       blended ≈ 0.40 * text_score
+        #   so the ceiling is 0.40 and real matches land ~0.12–0.24. A fixed 0.18
+        #   floor sits in the MIDDLE of the legitimate range and cuts good docs as
+        #   readily as junk — it never discriminated by subject relevance.
+        #
+        # THE FIX
+        #   _compute_subject_multiplier already tags each doc with
+        #   subject_match_reason (primary_high / secondary / no_subject_match_penalty
+        #   / neutral), computed WITHOUT any embedding. We floor on THAT instead of
+        #   the blended number: keep subject matches, drop mention-only docs, and
+        #   let subject-less docs through on a mild text floor.
+        #
+        # ROLLOUT
+        #   KEYWORD_FLOOR_MODE = 'observe' → score + log, cut NOTHING (safe deploy).
+        #   KEYWORD_FLOOR_MODE = 'enforce' → actually apply the floor.
+        #   Deploy in 'observe', run a known-bad query (e.g. "charles diggs"), read
+        #   the diagnostic. If docs_with_primary_subject_name≈0 / reasons mostly
+        #   'neutral', the subject fields are NOT indexed and the real fix is
+        #   upstream in enrichment — no floor will help. Otherwise flip to 'enforce'.
+        KEYWORD_FLOOR_MODE         = 'observe'   # 'observe' | 'enforce'
+        KEYWORD_NEUTRAL_TEXT_FLOOR = 0.08
+
+        _SUBJECT_KEEP = {'primary_high', 'primary_medium', 'primary_low',
+                         'primary_unknown_conf', 'secondary'}
+        _SUBJECT_DROP = {'no_subject_match_penalty'}
+
+        if all_results and not _skip_score_floor:
+            kw_signals = {'query_mode': 'browse'}   # keyword path has no intent detection
+            blend      = _resolve_blend('browse', kw_signals, all_results)
+            pool_size  = len(all_results)
+
+            for idx, item in enumerate(all_results):
+                _score_document(
+                    idx         = idx,
+                    item        = item,
+                    profile     = profile,
+                    signals     = kw_signals,
+                    blend       = blend,
+                    pool_size   = pool_size,
+                    vector_data = {},               # empty → sem_score 0 for all
+                )
+
+            all_results.sort(key=lambda x: -x.get('blended_score', 0))
+
+            # ── DIAGNOSTIC: is the subject signal even alive? ──────────────
+            reason_counts = {}
+            subj_named    = 0
+            for r in all_results:
+                rsn = (r.get('subject_match_reason') or 'MISSING').split('+', 1)[0]
+                reason_counts[rsn] = reason_counts.get(rsn, 0) + 1
+                if r.get('primary_subject_name'):
+                    subj_named += 1
+
+            print(f"   🔬 KEYWORD FLOOR DIAGNOSTIC (mode={KEYWORD_FLOOR_MODE})")
+            print(f"      pool={len(all_results)}  "
+                  f"docs_with_primary_subject_name={subj_named}")
+            print(f"      reasons={reason_counts}")
+            print(f"      top 10 by blended_score:")
+            for r in all_results[:10]:
+                name = (r.get('primary_subject_name')
+                        or r.get('document_title') or r.get('id') or '')[:46]
+                print(f"        {r.get('blended_score', 0):7.4f} "
+                      f"text={r.get('text_score', 0):.3f} "
+                      f"subj_x={r.get('subject_multiplier', 0):.2f} "
+                      f"[{r.get('subject_match_reason', '?'):<22}] {name}")
+
+            # ── Decide keep/drop per doc ───────────────────────────────────
+            kept, would_drop = [], []
+            for r in all_results:
+                reason = (r.get('subject_match_reason') or 'neutral').split('+', 1)[0]
+                if reason in _SUBJECT_DROP:
+                    would_drop.append(r)
+                elif reason in _SUBJECT_KEEP:
+                    kept.append(r)
+                elif r.get('text_score', 0) >= KEYWORD_NEUTRAL_TEXT_FLOOR:
+                    kept.append(r)
+                else:
+                    would_drop.append(r)
+
+            if would_drop:
+                print(f"      would drop {len(would_drop)}: "
+                      f"{[(d.get('document_title') or d.get('id') or '')[:24] for d in would_drop[:8]]}")
+
+            # ── Enforce or observe ─────────────────────────────────────────
+            if KEYWORD_FLOOR_MODE == 'enforce':
+                before      = len(all_results)
+                all_results = kept
+                print(f"   🧹 Keyword floor ENFORCED: {before} → {len(all_results)}")
+            else:
+                print(f"   👀 Keyword floor OBSERVE: pool unchanged "
+                      f"({len(would_drop)} would be cut)")
+
+            for i, item in enumerate(all_results):
+                item['rank'] = i
+        # ── End score + floor ─────────────────────────────────────────────
+
         counts = count_all(all_results)
- 
-        await _set_cached_results(stable_key, {
+
+        _keyword_package = {
             'all_results':       all_results,
             'all_facets':        counts['facets'],
             'facet_total':       counts['facet_total'],
@@ -3821,18 +3956,57 @@ async def execute_full_search(
                     'local_search_strength': 'none',
                 },
             },
-        })
- 
-        filtered_results           = filter_cached_results(all_results, active_data_type, active_category, active_schema)
+        }
+
+        # Write the unified key (FAST PATH) AND the separate keyword key. The
+        # keyword key is the durable "this query was keyword" signal that page 2
+        # probes when alt_mode is missing. Only write on a fresh run.
+        if not _skip_score_floor:
+            await _set_cached_results(stable_key, _keyword_package)
+            await _set_cached_results(keyword_cache_key, _keyword_package)
+
+        # ── Filter → paginate (instrumented) ──────────────────────────────
+        # DESYNC GUARD: count_all() above counted the (floored) all_results, so
+        # facet_total reflects that pool. If filter_cached_results then returns
+        # fewer docs, total_filtered and facet_total disagree and pagination on
+        # page 2 slices a pool that doesn't match the advertised count.
+        #
+        # When NO UI filter is active, filtering must be a no-op. If it isn't,
+        # the cached keyword docs are missing the data_type/category/schema the
+        # filter checks (a known recurring bug), and filter_cached_results
+        # silently drops them. We detect that here instead of shipping a desync.
+        has_active_filter = bool(active_data_type or active_category or active_schema)
+
+        if has_active_filter:
+            filtered_results = filter_cached_results(
+                all_results, active_data_type, active_category, active_schema
+            )
+        else:
+            # No filter selected → never drop anything.
+            filtered_results = all_results
+
+        # Diagnostic: surface a silent drop (pool shrank with no filter set, or
+        # docs lack the filtered field).
+        if len(filtered_results) != len(all_results):
+            sample_dts = [r.get('data_type') for r in all_results[:5]]
+            print(f"   ⚠️ FILTER DESYNC: pool={len(all_results)} → "
+                  f"filtered={len(filtered_results)} "
+                  f"(active dt={active_data_type!r} cat={active_category!r} "
+                  f"sch={active_schema!r}); sample data_types={sample_dts}")
+
         page_items, total_filtered = paginate_cached_results(filtered_results, page, per_page)
- 
+
+        # Keep the advertised count aligned with the pool actually being
+        # paginated, so pagination never offers a page that has no docs.
+        facet_total_for_return = len(filtered_results)
+
         t2 = time.time()
         results = await fetch_full_documents([item['id'] for item in page_items], query)
         times['fetch_docs'] = round((time.time() - t2) * 1000, 2)
         times['total']      = round((time.time() - t0) * 1000, 2)
- 
+
         print(f"⏱️ KEYWORD TIMING: {times}")
- 
+
         return {
             'query':             query,
             'corrected_query':   query,
@@ -3840,7 +4014,7 @@ async def execute_full_search(
             'query_mode':        'keyword',
             'results':           results,
             'total':             total_filtered,
-            'facet_total':       counts['facet_total'],
+            'facet_total':       facet_total_for_return,
             'total_image_count': counts['total_image_count'],
             'page':              page,
             'per_page':          per_page,
@@ -3872,6 +4046,7 @@ async def execute_full_search(
             'signals': {},
             'profile': profile,
         }
+
     # =========================================================================
     # SEMANTIC PATH — Stage 1 → 2 → 3 → 4 → 5 → 6 → 7
     # =========================================================================
