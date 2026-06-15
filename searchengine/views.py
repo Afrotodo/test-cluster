@@ -1310,8 +1310,46 @@ from .trending import get_trending_results, cache_trending_result
 
 import random
 
-def get_videos_from_cache():
-    """Fetch videos from Redis, dedupe to one per channel, reshape for template."""
+# def get_videos_from_cache():
+#     """Fetch videos from Redis, dedupe to one per channel, reshape for template."""
+#     try:
+#         r = redis.Redis.from_url(
+#             config('REDIS_ANALYTICS_URL'),
+#             decode_responses=True,
+#             socket_timeout=config('REDIS_SOCKET_TIMEOUT', default=5, cast=int),
+#             socket_connect_timeout=config('REDIS_SOCKET_CONNECT_TIMEOUT', default=5, cast=int),
+#             retry_on_timeout=config('REDIS_RETRY_ON_TIMEOUT', default=True, cast=bool),
+#         )
+#         raw = r.get('videos')
+#         if not raw:
+#             return []
+#         raw_videos = json.loads(raw)
+        
+#         seen_channels = set()
+#         media = []
+#         for v in raw_videos:
+#             channel = v.get('channel', '')
+#             if channel in seen_channels:
+#                 continue
+#             seen_channels.add(channel)
+            
+#             video_id = v.get('video_id', '')
+#             media.append({
+#                 'type': 'watch',
+#                 'title': v.get('title', ''),
+#                 'source': channel,
+#                 'thumbnail': v.get('thumbnail', ''),
+#                 'duration': v.get('duration', ''),
+#                 'url': v.get('url', ''),
+#                 'embed_url': f"https://www.youtube.com/embed/{video_id}" if video_id else '',
+#             })
+#         return media
+#     except (redis.RedisError, json.JSONDecodeError, ValueError) as e:
+#         print(f"Video cache error: {e}")
+#         return []
+
+def get_videos_from_cache(limit=8):
+    """Fetch videos from Redis, dedupe to one per channel, daily-shuffled, reshape for template."""
     try:
         r = redis.Redis.from_url(
             config('REDIS_ANALYTICS_URL'),
@@ -1324,7 +1362,10 @@ def get_videos_from_cache():
         if not raw:
             return []
         raw_videos = json.loads(raw)
-        
+
+        # shuffle BEFORE dedup so which channel "wins" also rotates daily
+        raw_videos = _daily_shuffle(raw_videos, salt="videos")
+
         seen_channels = set()
         media = []
         for v in raw_videos:
@@ -1332,7 +1373,7 @@ def get_videos_from_cache():
             if channel in seen_channels:
                 continue
             seen_channels.add(channel)
-            
+
             video_id = v.get('video_id', '')
             media.append({
                 'type': 'watch',
@@ -1343,7 +1384,7 @@ def get_videos_from_cache():
                 'url': v.get('url', ''),
                 'embed_url': f"https://www.youtube.com/embed/{video_id}" if video_id else '',
             })
-        return media
+        return media[:limit]
     except (redis.RedisError, json.JSONDecodeError, ValueError) as e:
         print(f"Video cache error: {e}")
         return []
