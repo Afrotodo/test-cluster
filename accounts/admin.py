@@ -32,3 +32,15 @@ class SearchPreferencesAdmin(admin.ModelAdmin):
     list_display = ('user', 'default_language', 'safe_search', 'results_per_page')
     list_filter = ('safe_search', 'default_language')
     search_fields = ('user__username',)
+
+
+from django.contrib import admin
+from .models import Subscriber
+
+
+@admin.register(Subscriber)
+class SubscriberAdmin(admin.ModelAdmin):
+    list_display = ('email', 'opted_in', 'created_at', 'updated_at')
+    list_filter = ('opted_in', 'created_at')
+    list_editable = ('opted_in',)
+    search_fields = ('email',)

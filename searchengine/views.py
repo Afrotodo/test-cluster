@@ -23,7 +23,7 @@ from django.http import Http404, HttpResponseBadRequest, JsonResponse
 from django.shortcuts import redirect, render
 from django.utils.html import escape
 from django.views.decorators.http import require_GET, require_http_methods
- 
+from decouple import config
 import redis
 import typesense
 from typesense.exceptions import (
@@ -165,7 +165,18 @@ except ImportError as e:
  
 _debug_executor = ThreadPoolExecutor(max_workers=4)
  
- 
+
+COLLECTION = 'document'
+
+client = typesense.Client({
+    'api_key':  config('TYPESENSE_API_KEY'),
+    'nodes': [{
+        'host':     config('TYPESENSE_HOST'),
+        'port':     config('TYPESENSE_PORT'),
+        'protocol': config('TYPESENSE_PROTOCOL'),
+    }],
+    'connection_timeout_seconds': 5,
+})
 
 
 # =============================================================================
@@ -3008,6 +3019,323 @@ def generic_category_view(request, category_slug: str, city: str):
     return render(request, template, context)
 
 
+
+def _exact(filters, field, value):
+    value = (value or "").strip()
+    if value:
+        filters.append(f"{field}:=`{value}`")
+ 
+
+"""
+Basic search views for Shopping / Eats / Travel.
+
+Assumes these already exist at the top of your views.py (as you have them):
+
+    COLLECTION = 'document'
+    client = typesense.Client({...})
+
+and that these are imported:
+    from django.http import JsonResponse
+    from django.shortcuts import render
+    from django.views.decorators.http import require_GET
+"""
+
+
+def _search(filter_by, query_by="document_title"):
+    """Run a simple category browse and return JSON, or the error."""
+    try:
+        res = client.collections[COLLECTION].documents.search({
+            "q": "*",
+            "query_by": query_by,
+            "filter_by": filter_by,
+            "per_page": 30,
+        })
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=502)
+
+    hits = [h["document"] for h in res.get("hits", [])]
+    return JsonResponse({"found": res.get("found", 0), "hits": hits})
+
+
+# =============================================================================
+# SHOPPING
+# =============================================================================
+
+def shopping_page(request):
+    return render(request, "shopping.html")
+
+
+@require_GET
+def shopping_search(request):
+    g = request.GET
+
+    # --- pagination / sort ---
+    try:
+        page = max(1, int(g.get("page", 1)))
+    except ValueError:
+        page = 1
+
+    sort_map = {
+        "relevance":  None,
+        "rating":     "product_rating:desc",
+        "price_asc":  "product_price:asc",
+        "price_desc": "product_price:desc",
+    }
+    sort_by = sort_map.get(g.get("sort", "relevance"))
+
+    # --- build filter clauses ---
+    filters = ["document_category:=shopping"]
+
+    # exact-match string facets
+    for param, field in [
+        ("category", "product_category"),
+        ("brand",    "product_brand"),
+        ("color",    "product_colors"),
+        ("size",     "product_sizes"),
+    ]:
+        val = g.get(param, "").strip()
+        if val:
+            filters.append(f'{field}:=`{val}`')
+
+    # price range
+    try:
+        if g.get("min_price"):
+            filters.append(f"product_price:>={float(g['min_price'])}")
+        if g.get("max_price"):
+            filters.append(f"product_price:<={float(g['max_price'])}")
+    except ValueError:
+        pass
+
+    # rating
+    try:
+        if g.get("min_rating"):
+            filters.append(f"product_rating:>={float(g['min_rating'])}")
+    except ValueError:
+        pass
+
+    # ownership flags (only constrain when checked)
+    for flag in ["black_owned", "women_owned", "veteran_owned", "minority_owned"]:
+        if g.get(flag) == "true":
+            filters.append(f"{flag}:=true")
+
+    # in-stock
+    if g.get("available") == "true":
+        filters.append("product_availability:=true")
+
+    # --- query ---
+    q = g.get("q", "").strip() or "*"
+
+    search_params = {
+        "q": q,
+        "query_by": "product_name,product_brand,product_category,document_title",
+        "filter_by": " && ".join(filters),
+        "facet_by": "product_category,product_brand,product_colors,product_sizes",
+        "max_facet_values": 50,
+        "per_page": 24,
+        "page": page,
+    }
+    if sort_by:
+        search_params["sort_by"] = sort_by
+
+    try:
+        res = client.collections[COLLECTION].documents.search(search_params)
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=502)
+
+    # --- shape response for the template ---
+    hits = [h["document"] for h in res.get("hits", [])]
+
+    facets = {}
+    for fc in res.get("facet_counts", []):
+        facets[fc["field_name"]] = [
+            {"value": c["value"], "count": c["count"]}
+            for c in fc.get("counts", [])
+        ]
+
+    return JsonResponse({
+        "found":  res.get("found", 0),
+        "hits":   hits,
+        "facets": facets,
+    })
+# =============================================================================
+# EATS
+# =============================================================================
+
+def eats_page(request):
+    return render(request, "eats.html")
+
+
+@require_GET
+def eats_search(request):
+    g = request.GET
+
+    try:
+        page = max(1, int(g.get("page", 1)))
+    except ValueError:
+        page = 1
+
+    sort_map = {
+        "relevance": None,
+        "rating":    "service_rating:desc",
+        "reviews":   "service_review_count:desc",
+    }
+    sort_by = sort_map.get(g.get("sort", "relevance"))
+
+    filters = ["document_category:=eats"]
+
+    # exact-match string facets
+    for param, field in [
+        ("type",      "service_type"),
+        ("specialty", "service_specialties"),
+        ("city",      "location_city"),
+        ("state",     "location_state"),
+    ]:
+        val = g.get(param, "").strip()
+        if val:
+            filters.append(f'{field}:=`{val}`')
+
+    # price range — symbol string ($, $$, $$$, $$$$); no backticks
+    price = g.get("price", "").strip()
+    if price:
+        filters.append(f"service_price_range:={price}")
+
+    # rating
+    try:
+        if g.get("min_rating"):
+            filters.append(f"service_rating:>={float(g['min_rating'])}")
+    except ValueError:
+        pass
+
+    # boolean options
+    if g.get("delivery") == "true":
+        filters.append("service_delivery:=true")
+    if g.get("reservations") == "true":
+        filters.append("service_accepts_reservations:=true")
+
+    # ownership flags
+    for flag in ["black_owned", "women_owned", "veteran_owned", "minority_owned"]:
+        if g.get(flag) == "true":
+            filters.append(f"{flag}:=true")
+
+    q = g.get("q", "").strip() or "*"
+
+    search_params = {
+        "q": q,
+        "query_by": "document_title,service_type,service_specialties,location_city",
+        "filter_by": " && ".join(filters),
+        "facet_by": "service_type,service_specialties",
+        "max_facet_values": 50,
+        "per_page": 24,
+        "page": page,
+    }
+    if sort_by:
+        search_params["sort_by"] = sort_by
+
+    try:
+        res = client.collections[COLLECTION].documents.search(search_params)
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=502)
+
+    hits = [h["document"] for h in res.get("hits", [])]
+
+    facets = {}
+    for fc in res.get("facet_counts", []):
+        facets[fc["field_name"]] = [
+            {"value": c["value"], "count": c["count"]}
+            for c in fc.get("counts", [])
+        ]
+
+    return JsonResponse({
+        "found":  res.get("found", 0),
+        "hits":   hits,
+        "facets": facets,
+    })
+# =============================================================================
+# TRAVEL
+# =============================================================================
+
+def travel_page(request):
+    return render(request, "travel.html")
+
+
+@require_GET
+def travel_search(request):
+    g = request.GET
+
+    try:
+        page = max(1, int(g.get("page", 1)))
+    except ValueError:
+        page = 1
+
+    sort_map = {
+        "relevance": None,
+        "date":      "event_date_start:asc",   # soonest events
+        "newest":    "document_created_at:desc",
+    }
+    sort_by = sort_map.get(g.get("sort", "relevance"))
+
+    filters = ["document_category:=travel"]
+
+    # content-type tab → document_data_type
+    content_type = g.get("content_type", "").strip()
+    if content_type:
+        filters.append(f"document_data_type:=`{content_type}`")
+
+    # exact-match string facets / location
+    for param, field in [
+        ("country",    "location_country"),
+        ("region",     "location_state"),
+        ("city",       "location_city"),
+        ("event_type", "event_type"),
+        ("topic",      "topic_tags"),
+    ]:
+        val = g.get(param, "").strip()
+        if val:
+            filters.append(f'{field}:=`{val}`')
+
+    # free events only
+    if g.get("free") == "true":
+        filters.append("event_free:=true")
+
+    # ownership flags
+    for flag in ["black_owned", "women_owned", "veteran_owned"]:
+        if g.get(flag) == "true":
+            filters.append(f"{flag}:=true")
+
+    q = g.get("q", "").strip() or "*"
+
+    search_params = {
+        "q": q,
+        "query_by": "document_title,event_name,document_summary,location_city,location_country",
+        "filter_by": " && ".join(filters),
+        "facet_by": "location_country,event_type,topic_tags",
+        "max_facet_values": 50,
+        "per_page": 24,
+        "page": page,
+    }
+    if sort_by:
+        search_params["sort_by"] = sort_by
+
+    try:
+        res = client.collections[COLLECTION].documents.search(search_params)
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=502)
+
+    hits = [h["document"] for h in res.get("hits", [])]
+
+    facets = {}
+    for fc in res.get("facet_counts", []):
+        facets[fc["field_name"]] = [
+            {"value": c["value"], "count": c["count"]}
+            for c in fc.get("counts", [])
+        ]
+
+    return JsonResponse({
+        "found":  res.get("found", 0),
+        "hits":   hits,
+        "facets": facets,
+    })
+ 
 # =============================================================================
 # VIEW: BUSINESS CATEGORY
 # =============================================================================
@@ -3380,6 +3708,22 @@ def culture_category(request, city: str = None):
     }
     
     return render(request, 'category_culture.html', context)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 # =============================================================================
@@ -4052,6 +4396,8 @@ def get_category_stats(category: str, city: str) -> Dict[str, str]:
     return redis_manager.safe_hgetall(cache_key)
 
 
+
+
 # =============================================================================
 # VIEW: TRACK CLICK (Analytics)
 # =============================================================================
@@ -4397,6 +4743,26 @@ def term(request):
 
 def contact(request):
     return render(request, 'contact.html')
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 # ============================================================
 # views_debug.py — DEBUG ENDPOINTS (ASYNC-COMPATIBLE)

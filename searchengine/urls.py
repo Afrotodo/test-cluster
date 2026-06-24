@@ -37,10 +37,10 @@ urlpatterns = [
     path('api/submit/', views.form_submit, name='form_submit'),
     
     # Business API
-    path('api/business/search/', views.business_search_api, name='business_search_api'),
+    # path('api/business/search/', views.business_search_api, name='business_search_api'),
     
-    # Community API
-    path('api/community/search/', views.community_search_api, name='community_search_api'),
+    # # Community API
+    # path('api/community/search/', views.community_search_api, name='community_search_api'),
 
 
 
@@ -65,13 +65,13 @@ urlpatterns = [
     
     # ==================== CATEGORY PAGES ====================
     # Generic category router (handles all categories)
-    path('category/<str:category_slug>/', views.category_view, name='category'),
+    # path('category/<str:category_slug>/', views.category_view, name='category'),
     
     # Direct category shortcuts (optional, for cleaner URLs)
-    path('business/', views.business_category, name='business'),
-    path('culture/', views.culture_category, name='culture'),
-    path('health/', views.health_category, name='health'),
-    path('community/', views.community_category, name='community'),
+    # path('business/', views.business_category, name='business'),
+    # path('culture/', views.culture_category, name='culture'),
+    # path('health/', views.health_category, name='health'),
+    # path('community/', views.community_category, name='community'),
     path('api/track-click/', track_click, name='track_click'),
     path('api/facets/', views.facets_api, name='facets_api'),
     path('about',views.about,name="about"),
@@ -80,28 +80,38 @@ urlpatterns = [
     path('contact-us',views.contact,name="contact"),
     # path('search/images-load/', views.load_images, name='load_images'),
 
-
+      # ==================== SHOPPING / EATS / TRAVEL ====================
+    path('shopping/', views.shopping_page, name='shopping'),
+    path('api/shopping/search/', views.shopping_search, name='shopping_search'),
+    path('eats/', views.eats_page, name='eats'),
+    path('api/eats/search/', views.eats_search, name='eats_search'),
+    path('travel/', views.travel_page, name='travel'),
+    path('api/travel/search/', views.travel_search, name='travel_search'),
+ 
  
     # path('api/update-session-activity/', views.update_session_activity, name='update_session_activity'),  # ← Missing?
     path('click/', click_redirect, name='click_redirect'),
     
-    # ==================== DETAIL PAGES ====================
-    # Business detail
-    path('business/<str:business_id>/', views.business_detail, name='business_detail'),
+    # # ==================== DETAIL PAGES ====================
+    # # Business detail
+    # path('business/<str:business_id>/', views.business_detail, name='business_detail'),
     
-    # ==================== CITY-SPECIFIC ROUTES (OPTIONAL) ====================
-    # Community by city (alternative URL pattern)
-    path('community/<str:city_slug>/', views.community_by_city, name='community_by_city'),
+    # # ==================== CITY-SPECIFIC ROUTES (OPTIONAL) ====================
+    # # Community by city (alternative URL pattern)
+    # path('community/<str:city_slug>/', views.community_by_city, name='community_by_city'),
 
 
     #  Testing endpoints 
     # path('debug/search/', views.debug_search_view, name='debug_search'),
     # path('debug/search/', views.debug_search_view, name='debug_search'),
     # path('debug/word-discovery/', views.debug_word_discovery_view, name='debug_word_discovery'),
-    path('debug/keyword/',  views.debug_keyword,  name='debug_keyword'),
-    path('debug/semantic/', views.debug_semantic, name='debug_semantic'),
-    path('debug/question/', views.debug_question, name='debug_question'), 
-    path('api/debug/word-discovery/', views.debug_word_discovery, name='debug_word_discovery'),
+
+    # path('debug/keyword/',  views.debug_keyword,  name='debug_keyword'),
+    # path('debug/semantic/', views.debug_semantic, name='debug_semantic'),
+    # path('debug/question/', views.debug_question, name='debug_question'), 
+    # path('api/debug/word-discovery/', views.debug_word_discovery, name='debug_word_discovery'),
+
+
     # path('debug/business/', views.debug_business_search, name='debug_business'),
     # path('debug/schema/', views.debug_schema, name='debug_schema'),
     # path('debug/stage2/', views.debug_stage2_view, name='debug_stage2'),

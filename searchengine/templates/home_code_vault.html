@@ -5970,3 +5970,948 @@ LocationManager.init();
 
 </body>
 </html>
+
+
+
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+
+    // ==================== SECURITY & TRACKING UTILITIES ====================
+    const SearchSecurity = {
+        generateUUID: function() {
+            if (crypto && crypto.randomUUID) {
+                return crypto.randomUUID();
+            }
+            return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+                const r = Math.random() * 16 | 0;
+                const v = c === 'x' ? r : (r & 0x3 | 0x8);
+                return v.toString(16);
+            });
+        },
+
+        generateNonce: function(length = 16) {
+            const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+            let result = '';
+            const randomValues = new Uint32Array(length);
+            crypto.getRandomValues(randomValues);
+            for (let i = 0; i < length; i++) {
+                result += chars[randomValues[i] % chars.length];
+            }
+            return result;
+        },
+
+        getSessionId: function() {
+            let sessionId = sessionStorage.getItem('search_session_id');
+            if (!sessionId) {
+                sessionId = this.generateUUID();
+                sessionStorage.setItem('search_session_id', sessionId);
+            }
+            return sessionId;
+        },
+
+        getTimestamp: function() {
+            return Date.now();
+        },
+
+        getDeviceType: function() {
+            const ua = navigator.userAgent;
+            if (/tablet|ipad|playbook|silk/i.test(ua)) return 'tablet';
+            if (/mobile|android|iphone|ipod|blackberry|opera mini|iemobile/i.test(ua)) return 'mobile';
+            return 'desktop';
+        },
+
+        getClientFingerprint: function() {
+            const components = [
+                navigator.userAgent,
+                navigator.language,
+                screen.width + 'x' + screen.height,
+                screen.colorDepth,
+                new Date().getTimezoneOffset(),
+                !!window.sessionStorage,
+                !!window.localStorage,
+                navigator.hardwareConcurrency || 'unknown'
+            ];
+            const str = components.join('|');
+            let hash = 0;
+            for (let i = 0; i < str.length; i++) {
+                const char = str.charCodeAt(i);
+                hash = ((hash << 5) - hash) + char;
+                hash = hash & hash;
+            }
+            return Math.abs(hash).toString(16);
+        }
+    };
+
+    // ==================== SEARCH STATE TRACKING ====================
+    const SearchState = {
+        sessionId: SearchSecurity.getSessionId(),
+        requestSequence: 0,
+        typingStartTime: null,
+        selectedFromDropdown: false,
+        resultCount: 0,
+        source: 'home',
+        deviceType: SearchSecurity.getDeviceType(),
+        clientFingerprint: SearchSecurity.getClientFingerprint(),
+
+        questionUUID: null,
+        questionId: null,
+        isQuestion: false,
+        questionAnswer: null,
+        questionAnswerType: null,
+
+        // === NEW: term_key for dropdown rank bumping ===
+        termKey: null,
+
+        reset: function() {
+            this.typingStartTime = null;
+            this.selectedFromDropdown = false;
+            this.resultCount = 0;
+            this.questionUUID = null;
+            this.questionId = null;
+            this.isQuestion = false;
+            this.questionAnswer = null;
+            this.questionAnswerType = null;
+
+            // === NEW: reset termKey ===
+            this.termKey = null;
+        },
+
+        getTypingTime: function() {
+            if (!this.typingStartTime) return 0;
+            return Date.now() - this.typingStartTime;
+        },
+
+        incrementSequence: function() {
+            this.requestSequence++;
+            return this.requestSequence;
+        }
+    };
+
+    // ==================== MOBILE SIDEBAR ====================
+    const mobileMenuToggle = document.getElementById('mobile-menu-toggle');
+    const mobileSidebar = document.getElementById('mobile-sidebar');
+    const mobileSidebarOverlay = document.getElementById('mobile-sidebar-overlay');
+    const mobileSidebarClose = document.getElementById('mobile-sidebar-close');
+
+    function openMobileSidebar() {
+        if (mobileSidebar) mobileSidebar.classList.add('open');
+        if (mobileSidebarOverlay) mobileSidebarOverlay.classList.add('show');
+        document.body.style.overflow = 'hidden';
+    }
+
+    function closeMobileSidebar() {
+        if (mobileSidebar) mobileSidebar.classList.remove('open');
+        if (mobileSidebarOverlay) mobileSidebarOverlay.classList.remove('show');
+        document.body.style.overflow = '';
+    }
+
+    if (mobileMenuToggle) mobileMenuToggle.addEventListener('click', openMobileSidebar);
+    if (mobileSidebarClose) mobileSidebarClose.addEventListener('click', closeMobileSidebar);
+    if (mobileSidebarOverlay) mobileSidebarOverlay.addEventListener('click', closeMobileSidebar);
+
+    document.querySelectorAll('.mobile-nav-item').forEach(item => {
+        item.addEventListener('click', closeMobileSidebar);
+    });
+
+
+    // ==================== SCOPE BUTTONS ====================
+    const scopeButtons = document.querySelectorAll('.scope-btn');
+    const scopeField = document.getElementById('scope-field');
+    let currentScope = 'global';
+
+    scopeButtons.forEach(btn => {
+        btn.addEventListener('click', function() {
+            const newScope = this.dataset.scope;
+
+            // If clicking Local and no location yet, request it
+            if (newScope === 'local' && !LocationManager.lat) {
+                LocationManager.showToast('Location not available. Showing global results.');
+                return;
+            }
+
+            // Update active state
+            scopeButtons.forEach(b => b.classList.remove('active'));
+            this.classList.add('active');
+            currentScope = newScope;
+
+            // Update hidden field
+            if (scopeField) {
+                scopeField.value = currentScope;
+            }
+        });
+    });
+
+
+// ==================== LOCATION (from server-side IP geolocation) ====================
+const LocationManager = {
+    lat: null,
+    lng: null,
+    cityName: null,
+    state: null,
+
+    init: function() {
+        // Read location injected by Django from server-side IP lookup
+        {% if user_location %}
+        this.lat = {{ user_location.lat|default:"null" }};
+        this.lng = {{ user_location.lng|default:"null" }};
+        this.cityName = "{{ user_location.city|default:'' }}";
+        this.state = "{{ user_location.region|default:'' }}";
+
+        if (this.cityName || this.lat) {
+            this.applyLocation();
+        }
+        {% endif %}
+    },
+
+    applyLocation: function() {
+        document.body.classList.add('has-location');
+
+        const nameEl = document.getElementById('location-name');
+        if (nameEl) {
+            const display = this.state
+                ? `${this.cityName}, ${this.state}`
+                : this.cityName;
+            nameEl.textContent = display;
+        }
+
+        const indicator = document.getElementById('location-indicator');
+        if (indicator) {
+            setTimeout(() => indicator.classList.add('visible'), 100);
+        }
+
+        const trendLabel = document.getElementById('trending-location-label');
+        if (trendLabel && this.cityName) {
+            trendLabel.textContent = `in ${this.cityName}`;
+        }
+
+        this.addSearchCoords();
+
+        // Auto-activate Local button when location is available
+        const localBtn = document.getElementById('scope-local');
+        const globalBtn = document.getElementById('scope-global');
+        if (localBtn && globalBtn) {
+            scopeButtons.forEach(b => b.classList.remove('active'));
+            localBtn.classList.add('active');
+            currentScope = 'local';
+            if (scopeField) scopeField.value = 'local';
+        }
+    },
+
+    addSearchCoords: function() {
+        const form = document.getElementById('search-form');
+        if (!form || !this.lat || !this.lng) return;
+
+        let latField = form.querySelector('input[name="lat"]');
+        let lngField = form.querySelector('input[name="lng"]');
+
+        if (!latField) {
+            latField = document.createElement('input');
+            latField.type = 'hidden';
+            latField.name = 'lat';
+            form.appendChild(latField);
+        }
+        if (!lngField) {
+            lngField = document.createElement('input');
+            lngField.type = 'hidden';
+            lngField.name = 'lng';
+            form.appendChild(lngField);
+        }
+
+        latField.value = this.lat;
+        lngField.value = this.lng;
+    },
+
+    showToast: function(message, duration) {
+        duration = duration || 4000;
+        const toast = document.getElementById('location-toast');
+        const msgEl = document.getElementById('location-toast-msg');
+        if (!toast || !msgEl) return;
+        msgEl.textContent = message;
+        toast.classList.add('show');
+        setTimeout(function() {
+            toast.classList.remove('show');
+        }, duration);
+    },
+
+    getStateAbbr: function(state) {
+        const abbrs = {
+            'Alabama':'AL','Alaska':'AK','Arizona':'AZ','Arkansas':'AR',
+            'California':'CA','Colorado':'CO','Connecticut':'CT',
+            'Delaware':'DE','Florida':'FL','Georgia':'GA',
+            'Hawaii':'HI','Idaho':'ID','Illinois':'IL',
+            'Indiana':'IN','Iowa':'IA','Kansas':'KS',
+            'Kentucky':'KY','Louisiana':'LA','Maine':'ME',
+            'Maryland':'MD','Massachusetts':'MA','Michigan':'MI',
+            'Minnesota':'MN','Mississippi':'MS','Missouri':'MO',
+            'Montana':'MT','Nebraska':'NE','Nevada':'NV',
+            'New Hampshire':'NH','New Jersey':'NJ','New Mexico':'NM',
+            'New York':'NY','North Carolina':'NC','North Dakota':'ND',
+            'Ohio':'OH','Oklahoma':'OK','Oregon':'OR',
+            'Pennsylvania':'PA','Rhode Island':'RI','South Carolina':'SC',
+            'South Dakota':'SD','Tennessee':'TN','Texas':'TX',
+            'Utah':'UT','Vermont':'VT','Virginia':'VA',
+            'Washington':'WA','West Virginia':'WV','Wisconsin':'WI',
+            'Wyoming':'WY','District of Columbia':'DC'
+        };
+        return abbrs[state] || state;
+    }
+};
+
+LocationManager.init();
+
+
+    // ==================== SEARCH AUTOCOMPLETE ====================
+    const searchInput = document.getElementById('search-input');
+    const searchResults = document.getElementById('search-results');
+    const searchForm = document.getElementById('search-form');
+
+    if (!searchInput || !searchResults || !searchForm) return;
+
+    let debounceTimer = null;
+    let selectedIndex = -1;
+    let currentSuggestions = [];
+    let isSelectingSuggestion = false;
+
+    searchInput.addEventListener('keydown', function(e) {
+        if (!SearchState.typingStartTime && e.key.length === 1) {
+            SearchState.typingStartTime = Date.now();
+        }
+    });
+
+    searchInput.addEventListener('input', function() {
+        clearTimeout(debounceTimer);
+
+        if (isSelectingSuggestion) {
+            return;
+        }
+
+        const query = this.value.trim();
+        SearchState.selectedFromDropdown = false;
+        SearchState.questionUUID = null;
+        SearchState.questionId = null;
+        SearchState.isQuestion = false;
+        SearchState.questionAnswer = null;
+        SearchState.questionAnswerType = null;
+
+        // === NEW: clear termKey on new typing ===
+        SearchState.termKey = null;
+
+        if (query.length < 2) {
+            hideDropdown();
+            return;
+        }
+
+        debounceTimer = setTimeout(() => fetchSuggestions(query), 150);
+    });
+
+    async function fetchSuggestions(query) {
+        try {
+            const response = await fetch(`/api/search/?q=${encodeURIComponent(query)}`);
+            if (!response.ok) throw new Error('Search failed');
+
+            const data = await response.json();
+            currentSuggestions = data.suggestions || [];
+            SearchState.resultCount = currentSuggestions.length;
+            renderDropdown(currentSuggestions);
+        } catch (error) {
+            console.error('Search error:', error);
+            hideDropdown();
+        }
+    }
+
+    function renderDropdown(suggestions) {
+        if (!suggestions.length) {
+            searchResults.innerHTML = '<div class="suggestion-item no-results">No results found</div>';
+            searchResults.style.display = 'block';
+            selectedIndex = -1;
+            SearchState.resultCount = 0;
+            return;
+        }
+
+        searchResults.innerHTML = suggestions.map((s, i) => {
+            const displayText = escapeHtml(s.display || s.term || '');
+            const isQuestion = s.entity_type === 'question';
+            return `
+                <div class="suggestion-item${isQuestion ? ' suggestion-question' : ''}" data-index="${i}">
+                    <span class="suggestion-display">${displayText}</span>
+                    ${s.description ? `<span class="suggestion-desc">${escapeHtml(s.description)}</span>` : ''}
+                </div>
+            `;
+        }).join('');
+
+        searchResults.style.display = 'block';
+        selectedIndex = -1;
+
+        searchResults.querySelectorAll('.suggestion-item[data-index]').forEach(item => {
+            item.addEventListener('click', () => selectSuggestion(parseInt(item.dataset.index)));
+            item.addEventListener('mouseenter', function() {
+                clearSelection();
+                this.classList.add('selected');
+                selectedIndex = parseInt(this.dataset.index);
+            });
+        });
+    }
+
+    function selectSuggestion(index) {
+        if (index >= 0 && index < currentSuggestions.length) {
+            isSelectingSuggestion = true;
+            SearchState.selectedFromDropdown = true;
+
+            const suggestion = currentSuggestions[index];
+            searchInput.value = suggestion.display || suggestion.term || suggestion.text || '';
+
+            if (suggestion.entity_type === 'question' && suggestion.document_uuid) {
+                SearchState.questionUUID = suggestion.document_uuid;
+                SearchState.questionId = suggestion.question_id || null;
+                SearchState.isQuestion = true;
+                SearchState.questionAnswer = suggestion.answer || '';
+                SearchState.questionAnswerType = suggestion.answer_type || 'UNKNOWN';
+
+                // Not a term — clear termKey
+                SearchState.termKey = null;
+            } else {
+                SearchState.questionUUID = null;
+                SearchState.questionId = null;
+                SearchState.isQuestion = false;
+                SearchState.questionAnswer = null;
+                SearchState.questionAnswerType = null;
+
+                // === NEW: capture term's Redis key for rank bump ===
+                SearchState.termKey = suggestion.id || null;
+            }
+
+            hideDropdown();
+            submitSearch();
+
+            isSelectingSuggestion = false;
+        }
+    }
+
+    searchInput.addEventListener('keydown', function(e) {
+        const items = searchResults.querySelectorAll('.suggestion-item[data-index]');
+
+        if (e.key === 'ArrowDown' && items.length && searchResults.style.display !== 'none') {
+            e.preventDefault();
+            selectedIndex = (selectedIndex + 1) % items.length;
+            updateSelection(items);
+        } else if (e.key === 'ArrowUp' && items.length && searchResults.style.display !== 'none') {
+            e.preventDefault();
+            selectedIndex = selectedIndex <= 0 ? items.length - 1 : selectedIndex - 1;
+            updateSelection(items);
+        } else if (e.key === 'Enter') {
+            e.preventDefault();
+            if (selectedIndex >= 0 && items.length) {
+                selectSuggestion(selectedIndex);
+            } else if (searchInput.value.trim()) {
+                SearchState.selectedFromDropdown = false;
+                submitSearch();
+            }
+        } else if (e.key === 'Escape') {
+            hideDropdown();
+        }
+    });
+
+    function updateSelection(items) {
+        clearSelection();
+        if (items[selectedIndex]) {
+            items[selectedIndex].classList.add('selected');
+            items[selectedIndex].scrollIntoView({ block: 'nearest' });
+        }
+    }
+
+    function clearSelection() {
+        searchResults.querySelectorAll('.suggestion-item').forEach(el => el.classList.remove('selected'));
+    }
+
+    function hideDropdown() {
+        searchResults.style.display = 'none';
+        selectedIndex = -1;
+        currentSuggestions = [];
+    }
+
+    function escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    // ==================== FORM SUBMISSION ====================
+    function addHiddenField(name, value) {
+        let field = searchForm.querySelector(`input[name="${name}"]`);
+        if (!field) {
+            field = document.createElement('input');
+            field.type = 'hidden';
+            field.name = name;
+            searchForm.appendChild(field);
+        }
+        field.value = value;
+    }
+
+    // ==================== SUBMIT SEARCH ====================
+    function submitSearch() {
+        const query = searchInput.value.trim();
+        if (!query) return;
+
+        // Always update scope hidden field before submit
+        if (scopeField) {
+            scopeField.value = currentScope;
+        }
+
+        const params = {
+            session_id: SearchState.sessionId,
+            request_id: SearchSecurity.generateUUID(),
+            timestamp: SearchSecurity.getTimestamp(),
+            nonce: SearchSecurity.generateNonce(),
+            alt_mode: SearchState.selectedFromDropdown ? 'n' : 'y',
+            device_type: SearchState.deviceType,
+            result_count: SearchState.resultCount,
+            typing_time_ms: SearchState.getTypingTime(),
+            client_fp: SearchState.clientFingerprint,
+            req_seq: SearchState.incrementSequence(),
+            scope: currentScope,
+        };
+
+        if (SearchState.isQuestion && SearchState.questionUUID) {
+            params.search_source = 'question';
+            params.document_uuid = SearchState.questionUUID;
+            params.question_id = SearchState.questionId || '';
+            params.answer = SearchState.questionAnswer || '';
+            params.answer_type = SearchState.questionAnswerType || 'UNKNOWN';
+            params.alt_mode = 'n';
+
+            // Not a term — clear term_key on the form
+            params.term_key = '';
+        } else {
+            params.search_source = SearchState.source;
+            addHiddenField('document_uuid', '');
+            addHiddenField('question_id', '');
+            addHiddenField('answer', '');
+            addHiddenField('answer_type', '');
+
+            // === NEW: include term_key for keyword-path bump ===
+            params.term_key = SearchState.termKey || '';
+        }
+
+        Object.entries(params).forEach(([name, value]) => {
+            addHiddenField(name, value);
+        });
+
+        hideDropdown();
+        searchForm.submit();
+    }
+
+    searchForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+
+        const query = searchInput.value.trim();
+        if (!query) return false;
+
+        if (!SearchState.selectedFromDropdown) {
+            SearchState.selectedFromDropdown = false;
+        }
+
+        submitSearch();
+    });
+
+    document.addEventListener('click', function(e) {
+        if (!searchResults.contains(e.target) && e.target !== searchInput) {
+            hideDropdown();
+        }
+    });
+
+    searchInput.addEventListener('focus', function() {
+        SearchState.reset();
+        if (this.value.trim().length >= 2) {
+            fetchSuggestions(this.value.trim());
+        }
+    });
+
+  // ==================== QUESTION CARD CLICKS ====================
+    document.querySelectorAll('.question-card:not(.trending-card)').forEach(card => {
+        card.addEventListener('click', function(e) {
+            e.preventDefault();
+            const query = this.dataset.query;
+            if (query) {
+                searchInput.value = query;
+                SearchState.selectedFromDropdown = false;
+                SearchState.questionUUID = null;
+                SearchState.questionId = null;
+                SearchState.isQuestion = false;
+                SearchState.questionAnswer = null;
+                SearchState.questionAnswerType = null;
+
+                // === NEW: question cards aren't terms ===
+                SearchState.termKey = null;
+
+                submitSearch();
+            }
+        });
+    });
+
+ // ==================== DID YOU KNOW CARD CLICK ====================
+    const didYouKnowCard = document.getElementById('did-you-know-card');
+    if (didYouKnowCard) {
+        didYouKnowCard.addEventListener('click', function(e) {
+            e.preventDefault();
+            const query = this.dataset.query;
+            if (!query) return;
+
+            searchInput.value = query;
+            SearchState.selectedFromDropdown = true;   
+            SearchState.questionUUID = null;
+            SearchState.questionId = null;
+            SearchState.isQuestion = false;
+            SearchState.questionAnswer = null;
+            SearchState.questionAnswerType = null;
+            SearchState.source = 'did_you_know';         
+            SearchState.termKey = this.dataset.termKey || null;
+
+            submitSearch();
+        });
+    }
+
+    // ==================== CATEGORY CHIP CLICKS ====================
+    document.querySelectorAll('.category-chip').forEach(chip => {
+        chip.addEventListener('click', function(e) {
+            e.preventDefault();
+            const query = this.dataset.query;
+            if (!query) return;
+
+            searchInput.value = query;
+            SearchState.selectedFromDropdown = true;
+            SearchState.questionUUID = null;
+            SearchState.questionId = null;
+            SearchState.isQuestion = false;
+            SearchState.questionAnswer = null;
+            SearchState.questionAnswerType = null;
+            SearchState.source = 'chip';
+            SearchState.termKey = null;
+
+            submitSearch();
+        });
+    });
+
+    // ==================== CYLINDER PLACEHOLDER ====================
+    const rollerPhrases = [
+  "Safest countries for Black travelers?",
+  "Protective styles for natural hair",
+  "Where to find Black-owned brands",
+  "Grants for first-gen students",
+  "Trace my family's legacy",
+  "Best edge control that actually holds?",
+  "Black history they didn't teach us",
+  "Skincare for melanin-rich skin",
+  "Who really started Juneteenth?",
+  "Affordable Black hair stylists near me",
+  "The Tuskegee Airmen",
+  "Outfit ideas for a cookout",
+  "How do I find scholarships?",
+  "Wash day routine tips",
+  "Our soldiers in WWII",
+  
+   
+    ];
+
+    let rollerIndex = 0;
+    let rollerTimer = null;
+    let rollerRunning = false;
+
+    const inputWrapper = searchInput.parentElement;
+    inputWrapper.style.position = 'relative';
+
+    const roller = document.createElement('div');
+    roller.id = 'placeholder-roller';
+    roller.style.cssText = `
+        position: absolute; left: 60px; top: 0; right: 60px; height: 100%;
+        display: flex; align-items: center; pointer-events: none;
+        z-index: 1; overflow: hidden;
+    `;
+
+    const track = document.createElement('div');
+    track.style.cssText = 'position: relative; height: 1.8em; overflow: hidden; width: 100%;';
+
+    const inner = document.createElement('div');
+    inner.id = 'roller-inner';
+    inner.style.cssText = 'position: relative;';
+
+    const spanA = document.createElement('span');
+    const spanB = document.createElement('span');
+
+    const spanStyle = `
+        display: block; height: 1.8em; line-height: 1.8em;
+        font-family: var(--font-body); font-size: 17px; 
+        color: var(--gray-500); white-space: nowrap;
+        transition: transform 0.7s cubic-bezier(0.23, 1, 0.32, 1),
+                    opacity 0.7s cubic-bezier(0.23, 1, 0.32, 1);
+    `;
+
+    spanA.style.cssText = spanStyle;
+    spanB.style.cssText = spanStyle + 'position: absolute; top: 0; left: 0; width: 100%;';
+
+    spanA.textContent = rollerPhrases[0];
+    spanB.textContent = rollerPhrases[1];
+    spanB.style.transform = 'translateY(100%)';
+    spanB.style.opacity = '0';
+
+    inner.appendChild(spanA);
+    inner.appendChild(spanB);
+    track.appendChild(inner);
+    roller.appendChild(track);
+    inputWrapper.appendChild(roller);
+
+    searchInput.style.position = 'relative';
+    searchInput.style.zIndex = '2';
+    searchInput.style.background = 'transparent';
+
+    let currentSpan = spanA;
+    let nextSpan = spanB;
+
+    function rollToNext() {
+        if (!rollerRunning) return;
+
+        rollerIndex = (rollerIndex + 1) % rollerPhrases.length;
+
+        nextSpan.textContent = rollerPhrases[rollerIndex];
+        nextSpan.style.transition = 'none';
+        nextSpan.style.transform = 'translateY(100%)';
+        nextSpan.style.opacity = '0';
+
+        nextSpan.offsetHeight;
+
+        nextSpan.style.transition = `
+            transform 0.7s cubic-bezier(0.23, 1, 0.32, 1),
+            opacity 0.7s cubic-bezier(0.23, 1, 0.32, 1)
+        `;
+        currentSpan.style.transform = 'translateY(-100%)';
+        currentSpan.style.opacity = '0';
+        nextSpan.style.transform = 'translateY(0)';
+        nextSpan.style.opacity = '1';
+
+        const temp = currentSpan;
+        currentSpan = nextSpan;
+        nextSpan = temp;
+
+        scheduleNextRoll();
+    }
+
+    function scheduleNextRoll() {
+        if (!rollerRunning) return;
+        rollerTimer = setTimeout(rollToNext, 3200);
+    }
+
+    function startRoller() {
+        if (rollerRunning) return;
+        rollerRunning = true;
+        scheduleNextRoll();
+    }
+
+    function stopRoller() {
+        rollerRunning = false;
+        if (rollerTimer) {
+            clearTimeout(rollerTimer);
+            rollerTimer = null;
+        }
+    }
+
+    function updateRollerVisibility() {
+        if (searchInput.value.length > 0) {
+            roller.style.opacity = '0';
+            roller.style.transition = 'opacity 0.15s ease';
+            stopRoller();
+        } else {
+            roller.style.opacity = '1';
+            roller.style.transition = 'opacity 0.15s ease';
+            startRoller();
+        }
+    }
+
+    searchInput.addEventListener('input', updateRollerVisibility);
+    searchInput.addEventListener('focus', updateRollerVisibility);
+    searchInput.addEventListener('blur', function() {
+        if (searchInput.value.length === 0) {
+            roller.style.opacity = '1';
+            startRoller();
+        }
+    });
+
+    startRoller();
+
+    // ==================== CLEANUP ====================
+    window.addEventListener('beforeunload', function() {
+        clearTimeout(debounceTimer);
+        stopRoller();
+    });
+
+    window._searchDebug = {
+        state: SearchState,
+        security: SearchSecurity
+    };
+});
+
+
+
+// ==================== NEWS SLIDER ====================
+(function() {
+    const track = document.getElementById('news-track');
+    const prevBtn = document.getElementById('news-prev');
+    const nextBtn = document.getElementById('news-next');
+    if (!track || !prevBtn || !nextBtn) return;
+
+    function scrollAmount() {
+        const card = track.querySelector('.news-card');
+        if (!card) return 240;
+        const gap = parseInt(getComputedStyle(track).gap) || 16;
+        return card.offsetWidth + gap;
+    }
+
+    function updateArrows() {
+        const maxScroll = track.scrollWidth - track.clientWidth - 1;
+        prevBtn.disabled = track.scrollLeft <= 0;
+        nextBtn.disabled = track.scrollLeft >= maxScroll;
+    }
+
+    prevBtn.addEventListener('click', () => {
+        track.scrollBy({ left: -scrollAmount() * 2, behavior: 'smooth' });
+    });
+
+    nextBtn.addEventListener('click', () => {
+        track.scrollBy({ left: scrollAmount() * 2, behavior: 'smooth' });
+    });
+
+    track.addEventListener('scroll', updateArrows, { passive: true });
+    window.addEventListener('resize', updateArrows);
+    updateArrows();
+})();
+
+
+// ==================== PRODUCTS SLIDER ====================
+(function() {
+    const track = document.getElementById('products-track');
+    const prevBtn = document.getElementById('products-prev');
+    const nextBtn = document.getElementById('products-next');
+    if (!track || !prevBtn || !nextBtn) return;
+
+    function scrollAmount() {
+        const card = track.querySelector('.product-card');
+        if (!card) return 160;
+        const gap = parseInt(getComputedStyle(track).gap) || 16;
+        return card.offsetWidth + gap;
+    }
+
+    function updateArrows() {
+        const maxScroll = track.scrollWidth - track.clientWidth - 1;
+        prevBtn.disabled = track.scrollLeft <= 0;
+        nextBtn.disabled = track.scrollLeft >= maxScroll;
+    }
+
+    prevBtn.addEventListener('click', () => {
+        track.scrollBy({ left: -scrollAmount() * 2, behavior: 'smooth' });
+    });
+
+    nextBtn.addEventListener('click', () => {
+        track.scrollBy({ left: scrollAmount() * 2, behavior: 'smooth' });
+    });
+
+    track.addEventListener('scroll', updateArrows, { passive: true });
+    window.addEventListener('resize', updateArrows);
+    updateArrows();
+})();
+
+
+
+// ==================== MEDIA SLIDER ====================
+(function() {
+    const track = document.getElementById('media-track');
+    const prevBtn = document.getElementById('media-prev');
+    const nextBtn = document.getElementById('media-next');
+    if (!track || !prevBtn || !nextBtn) return;
+
+    function scrollAmount() {
+        const card = track.querySelector('.media-card');
+        if (!card) return 280;
+        const gap = parseInt(getComputedStyle(track).gap) || 16;
+        return card.offsetWidth + gap;
+    }
+
+    function updateArrows() {
+        const maxScroll = track.scrollWidth - track.clientWidth - 1;
+        prevBtn.disabled = track.scrollLeft <= 0;
+        nextBtn.disabled = track.scrollLeft >= maxScroll;
+    }
+
+    prevBtn.addEventListener('click', () => {
+        track.scrollBy({ left: -scrollAmount() * 2, behavior: 'smooth' });
+    });
+
+    nextBtn.addEventListener('click', () => {
+        track.scrollBy({ left: scrollAmount() * 2, behavior: 'smooth' });
+    });
+
+    track.addEventListener('scroll', updateArrows, { passive: true });
+    window.addEventListener('resize', updateArrows);
+    updateArrows();
+})();
+</script>
+<script>
+document.addEventListener('click', function(e) {
+    const card = e.target.closest('.media-card');
+    if (!card) return;
+
+    // Don't re-trigger if already playing
+    if (card.dataset.playing === 'true') return;
+
+    const embedUrl = card.dataset.embed;
+    const type = card.dataset.type;
+
+    // No embed URL? Fall back to opening original link in new tab.
+    if (!embedUrl) {
+        const fallbackUrl = card.dataset.url;
+        if (fallbackUrl) {
+            window.open(fallbackUrl, '_blank', 'noopener,noreferrer');
+        }
+        return;
+    }
+
+    const imageWrap = card.querySelector('.media-card-image-wrap');
+    if (!imageWrap) return;
+
+    if (type === 'watch') {
+        const separator = embedUrl.includes('?') ? '&' : '?';
+        imageWrap.innerHTML = `
+            <iframe
+                src="${embedUrl}${separator}autoplay=1&rel=0"
+                frameborder="0"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowfullscreen
+                style="width: 100%; height: 100%; border: 0; display: block;"></iframe>
+        `;
+    } else {
+        imageWrap.innerHTML = `
+            <div style="display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; background: #000; padding: 1rem;">
+                <audio controls autoplay src="${embedUrl}" style="width: 100%;">
+                    Your browser does not support audio playback.
+                </audio>
+            </div>
+        `;
+    }
+
+    card.dataset.playing = 'true';
+    card.style.cursor = 'default';
+});
+
+// Keyboard accessibility — Enter and Space trigger playback
+document.addEventListener('keydown', function(e) {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const card = e.target.closest('.media-card');
+    if (card && card.dataset.playing !== 'true') {
+        e.preventDefault();
+        card.click();
+    }
+});
+</script>
+
+
+</body>
+</html>

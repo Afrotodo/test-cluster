@@ -1,7 +1,10 @@
 import re
 import time
 import logging
-
+from django.shortcuts import redirect, get_object_or_404, render
+from django.contrib import messages
+from django.views.decorators.http import require_POST
+from .models import Subscriber
 from django.shortcuts import render, redirect
 from django.http import HttpResponse, JsonResponse
 from django.contrib.auth.models import User
@@ -18,6 +21,38 @@ from searchengine.geolocation import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+
+@require_POST
+def subscribe(request):
+    email = (request.POST.get('email') or '').strip().lower()
+
+    if not email:
+        messages.error(request, "Please enter an email address.")
+        return redirect('searchengine:home')  # <-- your homepage url name
+
+    subscriber, created = Subscriber.objects.get_or_create(email=email)
+
+    # If they previously opted out, re-enable them on re-signup.
+    if not subscriber.opted_in:
+        subscriber.opted_in = True
+        subscriber.save(update_fields=['opted_in'])
+
+    messages.success(request, "You're in — look out for the weekly drop.")
+    return redirect('searchengine:home')  # <-- your homepage url name
+
+
+def unsubscribe(request, token):
+    subscriber = get_object_or_404(Subscriber, token=token)
+
+    if subscriber.opted_in:
+        subscriber.opted_in = False
+        subscriber.save(update_fields=['opted_in'])
+
+    return render(request, 'searchengine/unsubscribe.html', {
+        'email': subscriber.email,
+    })
 
 
 # =============================================================================
