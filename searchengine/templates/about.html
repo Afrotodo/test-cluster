@@ -806,30 +806,7 @@
                 </svg>
                 <span>Home</span>
             </a>
-            <a href="{% url 'searchengine:category' 'business' %}" class="mobile-nav-item">
-                <svg viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M12 7V3H2v18h20V7H12zM6 19H4v-2h2v2zm0-4H4v-2h2v2zm0-4H4V9h2v2zm0-4H4V5h2v2zm4 12H8v-2h2v2zm0-4H8v-2h2v2zm0-4H8V9h2v2zm0-4H8V5h2v2zm10 12h-8v-2h2v-2h-2v-2h2v-2h-2V9h8v10zm-2-8h-2v2h2v-2zm0 4h-2v2h2v-2z"/>
-                </svg>
-                <span>Business</span>
-            </a>
-            <a href="{% url 'searchengine:category' 'culture' %}" class="mobile-nav-item">
-                <svg viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9c0-.46-.04-.92-.1-1.36-.98 1.37-2.58 2.26-4.4 2.26-3.03 0-5.5-2.47-5.5-5.5 0-1.82.89-3.42 2.26-4.4-.44-.06-.9-.1-1.36-.1z"/>
-                </svg>
-                <span>Culture</span>
-            </a>
-            <a href="{% url 'searchengine:category' 'health' %}" class="mobile-nav-item">
-                <svg viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
-                </svg>
-                <span>Health</span>
-            </a>
-            <a href="{% url 'searchengine:category' 'news' %}" class="mobile-nav-item">
-                <svg viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z"/>
-                </svg>
-                <span>News</span>
-            </a>
+   
             <a href="{% url 'searchengine:about' %}" class="mobile-nav-item">
                 <svg viewBox="0 0 24 24" fill="currentColor">
                     <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
@@ -875,12 +852,7 @@
         </div>
         
         <nav class="header-nav">
-            <!-- <a href="{% url 'searchengine:category' 'business' %}" class="nav-link">Business</a>
-            <a href="{% url 'searchengine:category' 'culture' %}" class="nav-link">Culture</a>
-            <a href="{% url 'searchengine:category' 'health' %}" class="nav-link">Health</a>
-            <a href="{% url 'searchengine:category' 'news' %}" class="nav-link">News</a>
-            <a href="{% url 'searchengine:category' 'community' %}" class="nav-link">Community</a> -->
-        </nav>
+            </nav>
 
         <div class="header-right">
             {% if user.is_authenticated %}
@@ -897,11 +869,11 @@
             <!-- Hero Section -->
             <section class="hero-section">
                 <div class="hero-content">
-                    <h1>We're Building the Search Engine for the Black World</h1>
-                    <p class="tagline">
-                        A permanent, searchable, global infrastructure that maps Black excellence, 
-                        preserves Black knowledge, and routes Black dollars back to Black hands.
-                    </p>
+                    <h1>We're Building the Knowledge Engine for the Black World</h1>
+            <p class="tagline" style="color: #ffffff; font-weight: 500; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);">
+    A permanent, searchable, global infrastructure that maps Black excellence, 
+    preserves Black knowledge, and routes Black dollars back to Black hands.
+</p>
                 </div>
             </section>
 
@@ -910,14 +882,14 @@
                 <h2>About AfroTodo</h2>
                 
                 <p>
-                    <strong>AfroTodo ("Afro Everything")</strong> is an AI-powered search engine built for and by the Black community. 
+                    <strong>AfroTodo ("Afro Everything")</strong> is an AI-powered knowledge engine built for and by the Black community. 
                     We're not just connecting you to information—we're building the digital infrastructure for Black economic power.
                 </p>
 
                 <div class="problem-text">
                     <p>
                         Every day, algorithms decide what gets seen and what gets buried. Black businesses appear on page 10. 
-                        Black history gets "fact-checked" into oblivion. Our stories are told by everyone except us. 
+                        Black history gets pushed aside or told by people who weren't there. Our stories are told by everyone except us. 
                         Our data is extracted and sold, but never used to empower us.
                     </p>
                 </div>
@@ -928,7 +900,7 @@
 
                 <div class="mission-highlight">
                     <p>
-                        <strong>Our Mission:</strong> Put data back into the hands of Black communities—where it belongs.
+                        <strong>Our Mission:</strong> To connect the Black diaspora to its own knowledge, businesses, and history—and put that data back in our hands.
                     </p>
                 </div>
 
@@ -938,7 +910,7 @@
                         <li><strong>Find Black-Owned Businesses</strong> — searchable by location, category, and service, anywhere in the world</li>
                         <li><strong>Discover Black Knowledge</strong> — history, culture, health, and news curated for us, by us</li>
                         <li><strong>Preserve What Others Erase</strong> — a permanent record of our contributions that no algorithm can bury</li>
-                        <li><strong>Power Black Business Growth</strong> — data, visibility, and direct access to markets that want to support them</li>
+                        <li><strong>Power Black Business Growth</strong> — data, visibility, and direct access to markets that want to support us</li>
                         <li><strong>Unify the Diaspora</strong> — one searchable network connecting Africa, the Caribbean, America, Europe, and beyond</li>
                     </ul>
                 </div>
@@ -954,7 +926,7 @@
                                 <path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9-4.03-9-9-9zm0 16c-3.86 0-7-3.14-7-7s3.14-7 7-7 7 3.14 7 7-3.14 7-7 7zm1-11h-2v3H8v2h3v3h2v-3h3v-2h-3V8z"/>
                             </svg>
                             <h5>Algorithms Aren't Neutral</h5>
-                            <p>They encode bias. We build different.</p>
+                            <p>They encode bias. We build differently.</p>
                         </div>
                         <div class="value-card">
                             <svg class="value-icon" viewBox="0 0 24 24" fill="currentColor">
@@ -968,7 +940,7 @@
                                 <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z"/>
                             </svg>
                             <h5>Preservation is Resistance</h5>
-                            <p>What they can erase, they can deny.</p>
+                            <p>What can't be erased can't be denied.</p>
                         </div>
                         <div class="value-card">
                             <svg class="value-icon" viewBox="0 0 24 24" fill="currentColor">
@@ -1025,7 +997,7 @@
                 <h2>Join the Movement</h2>
                 <p>This isn't just a platform. It's infrastructure for Black economic power.</p>
                 <div class="cta-buttons">
-                    <a href="{% url 'searchengine:home' %}" class="btn-primary">Find a Business</a>
+                    <a href="{% url 'searchengine:shopping' %}" class="btn-primary">Find a Business</a>
                     <a href="{% url 'accounts:register' %}" class="btn-secondary">List Your Business</a>
                 </div>
             </section>
@@ -1036,12 +1008,7 @@
             <div class="footer-content">
                 <span class="footer-brand">AfroTodo</span>
                 <div class="footer-links">
-                    <a href="{% url 'searchengine:about' %}" class="footer-link">About</a>
-                    <a href="{% url 'accounts:register' %}" class="footer-link">Add Business</a>
-                    <a href="{% url 'searchengine:privacy' %}" class="footer-link">Privacy</a>
-                    <a href="{% url 'searchengine:term' %}" class="footer-link">Terms</a>
-                    <a href="{% url 'searchengine:contact' %}" class="footer-link">Contact</a>
-                </div>
+                         </div>
                 <p class="footer-tagline">Shop Black. Learn Black. Own the future.</p>
             </div>
         </footer>

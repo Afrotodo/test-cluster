@@ -2379,9 +2379,9 @@ margin-top: 30px;
                 <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
                 <path d="M22 6l-10 7L2 6"/>
             </svg>
-            <span class="weekly-drop-title">Get the weekly drop</span>
+            <span class="weekly-drop-title">The community brief</span>
         </div>
-        <p class="weekly-drop-sub">New Black-owned businesses, deals, and history &mdash; every week.</p>
+        <p class="weekly-drop-sub">Black business sales, local events, travel advisories, and news that matters &mdash; straight to your inbox.</p>
     </div>
     <form class="weekly-drop-form" action="{% url 'accounts:subscribe' %}" method="post">
         {% csrf_token %}
@@ -2389,7 +2389,7 @@ margin-top: 30px;
             <input type="email" name="email" class="weekly-drop-input" placeholder="Enter your email" required>
             <button type="submit" class="weekly-drop-btn">Join</button>
         </div>
-        <span class="weekly-drop-note">One email a week. No spam. Unsubscribe anytime.</span>
+        <span class="weekly-drop-note">No spam, just what matters. Unsubscribe anytime.</span>
     </form>
 </section>
     
